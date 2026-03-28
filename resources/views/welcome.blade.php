@@ -1,118 +1,99 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="ja">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ config('app.name', 'Laravel') }}</title>
-    <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-        rel="stylesheet"
-        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
-        crossorigin="anonymous"
-    >
+    <title>業務ポータル — {{ config('app.name') }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
-<body class="bg-light">
-    <nav class="navbar navbar-expand-md navbar-dark bg-dark border-bottom">
-        <div class="container">
-            <a class="navbar-brand fw-semibold" href="{{ route('home') }}">{{ config('app.name', 'Laravel') }}</a>
-            <button
-                class="navbar-toggler"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#welcomeNav"
-                aria-controls="welcomeNav"
-                aria-expanded="false"
-                aria-label="メニューを開く"
-            >
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="welcomeNav">
-                <ul class="navbar-nav ms-auto gap-md-2">
-                    <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" href="{{ route('home') }}">トップ</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ route('timecard.index') }}">タイムカード</a>
-                    </li>
-                    @if (Route::has('login'))
-                        @auth
-                            <li class="nav-item">
-                                <a class="nav-link" href="{{ url('/dashboard') }}">ダッシュボード</a>
-                            </li>
-                        @else
-                            <li class="nav-item">
-                                <a class="nav-link" href="{{ route('login') }}">ログイン</a>
-                            </li>
-                        @endauth
-                    @endif
-                </ul>
-            </div>
-        </div>
-    </nav>
+<body class="bg-light d-flex flex-column min-vh-100">
+    <x-client-nav />
 
-    <main class="container py-4 py-md-5">
-        <div class="mb-4">
+    <main class="container py-4 py-md-5 flex-grow-1" style="max-width: 800px;">
+        <div class="mb-4 text-center text-md-start">
             <h1 class="h3 fw-bold text-dark">業務メニュー</h1>
-            <p class="text-secondary mb-0 small">一覧から機能を開いてください。</p>
+            <p class="text-secondary mb-0 small">担当の業務を選択してください。</p>
         </div>
 
-        <div class="card shadow-sm border">
-            <div class="table-responsive">
-                <table class="table table-striped table-bordered align-middle mb-0">
-                    <thead class="table-dark">
-                        <tr>
-                            <th scope="col" class="text-nowrap">メニュー</th>
-                            <th scope="col">説明</th>
-                            <th scope="col" class="text-end text-nowrap" style="width: 7rem;">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td class="fw-semibold text-dark">タイムカード</td>
-                            <td class="text-secondary small">PIN でランチ・ディナーの出退を記録します（スタッフ向け）。</td>
-                            <td class="text-end">
-                                <a class="btn btn-primary btn-sm" href="{{ route('timecard.index') }}">開く</a>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="fw-semibold text-dark">（予定）ダッシュボード</td>
-                            <td class="text-secondary small">集計などの画面を今後ここに追加します。</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled>準備中</button>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="fw-semibold text-dark">（予定）その他</td>
-                            <td class="text-secondary small">追加機能用の行です。</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled>準備中</button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <div class="row row-cols-1 row-cols-md-2 g-4">
+            <div class="col">
+                <a href="{{ route('timecard.index') }}" class="text-decoration-none">
+                    <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
+                        <div class="card-body text-center p-4">
+                            <div class="display-4 text-primary mb-3"><i class="bi bi-clock-history"></i></div>
+                            <h2 class="h5 fw-bold text-dark mb-2">タイムカード</h2>
+                            <p class="text-secondary small mb-0">出勤・退勤の打刻を行います。</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col">
+                <a href="{{ route('mypage.index') }}" class="text-decoration-none">
+                    <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
+                        <div class="card-body text-center p-4">
+                            <div class="display-4 text-success mb-3"><i class="bi bi-clipboard2-check"></i></div>
+                            <h2 class="h5 fw-bold text-dark mb-2">マイページ</h2>
+                            <p class="text-secondary small mb-0">日々の掃除タスクや棚卸しを入力します。</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col">
+                <a href="{{ route('inventory.index') }}" class="text-decoration-none">
+                    <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
+                        <div class="card-body text-center p-4">
+                            <div class="display-4 text-info mb-3"><i class="bi bi-box-seam"></i></div>
+                            <h2 class="h5 fw-bold text-dark mb-2">棚卸し</h2>
+                            <p class="text-secondary small mb-0">タイミング別の進捗を確認し、入力します。</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col">
+                <a href="{{ route('close-check.index') }}" class="text-decoration-none">
+                    <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
+                        <div class="card-body text-center p-4">
+                            <div class="display-4 text-danger mb-3"><i class="bi bi-lock-fill"></i></div>
+                            <h2 class="h5 fw-bold text-dark mb-2">クローズチェック</h2>
+                            <p class="text-secondary small mb-0">閉店前の最終確認とレジ締めを行います。</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col">
+                <a href="{{ url('/admin') }}" class="text-decoration-none">
+                    <div class="card h-100 shadow-sm border-0 bg-dark text-white hover-shadow transition">
+                        <div class="card-body text-center p-4">
+                            <div class="display-4 text-light mb-3"><i class="bi bi-gear-fill"></i></div>
+                            <h2 class="h5 fw-bold text-white mb-2">本部管理 (Admin)</h2>
+                            <p class="text-white-50 small mb-0">マスターデータの設定や各種記録を確認します。</p>
+                        </div>
+                    </div>
+                </a>
             </div>
         </div>
     </main>
 
-    <footer class="border-top bg-white mt-auto py-4">
+    <footer class="bg-white border-top py-4 mt-auto">
         <div class="container text-center small text-secondary">
-            {{ config('app.name') }}
+            &copy; {{ date('Y') }} {{ config('app.name') }} System.
         </div>
     </footer>
 
-    <a
-        href="{{ url('/admin') }}"
-        class="position-fixed bottom-0 end-0 p-3 small text-secondary text-decoration-none opacity-50"
-        style="font-size: 0.65rem; z-index: 1050;"
-        title="管理者向け"
-    >
-        管理
-    </a>
-
-    <script
-        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
-        crossorigin="anonymous"
-    ></script>
+    <style>
+        .hover-shadow:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+        }
+        .transition {
+            transition: all 0.2s ease-in-out;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 </body>
 </html>

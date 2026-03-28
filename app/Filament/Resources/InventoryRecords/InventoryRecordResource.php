@@ -16,6 +16,8 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Enums\FiltersLayout;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -86,20 +88,35 @@ class InventoryRecordResource extends Resource
             ])
             ->defaultGroup('inventoryItem.category')
             ->columns([
-                TextColumn::make('date')
-                    ->label('日付')
-                    ->date()
-                    ->sortable(),
                 TextColumn::make('inventoryItem.name')
                     ->label('品目')
+                    ->weight('bold')
+                    ->description(fn (InventoryRecord $record): string => '記録: '.(optional($record->recordedByStaff)->name ?? '—'))
                     ->searchable(),
                 TextColumn::make('value')
-                    ->label('値'),
-                TextColumn::make('inventoryItem.unit')
-                    ->label('単位'),
-                TextColumn::make('recordedByStaff.name')
-                    ->label('記録者'),
+                    ->label('残量')
+                    ->size('lg')
+                    ->weight('bold')
+                    ->color('primary')
+                    ->suffix(fn (InventoryRecord $record): string => ($u = optional($record->inventoryItem)->unit) ? ' '.$u : ''),
             ])
+            ->filters([
+                Filter::make('date')
+                    ->schema([
+                        DatePicker::make('record_date')
+                            ->label('📅 日付選択')
+                            ->default(today())
+                            ->native(false),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $raw = $data['record_date'] ?? today();
+                        $date = $raw instanceof \Carbon\CarbonInterface
+                            ? $raw->format('Y-m-d')
+                            : (string) $raw;
+
+                        return $query->whereDate('date', $date);
+                    }),
+            ], layout: FiltersLayout::AboveContent)
             ->defaultSort('date', 'desc');
     }
 

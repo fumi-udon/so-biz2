@@ -5,12 +5,12 @@ namespace App\Filament\Resources\Settings;
 use App\Filament\Resources\Settings\Pages\ManageSettings;
 use App\Models\Setting;
 use App\Support\InventorySettingOptions;
+use App\Support\SettingFormValue;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
@@ -45,46 +45,20 @@ class SettingResource extends Resource
                     ->maxLength(255)
                     ->unique(Setting::class, 'key', ignoreRecord: true)
                     ->live(onBlur: true),
-                TagsInput::make('value')
-                    ->label('値（候補）')
-                    ->placeholder('候補を入力して Enter')
-                    ->helperText('タイミング・カテゴリ・単位の各マスタはここで一覧を編集します。')
-                    ->visible(fn (Get $get): bool => InventorySettingOptions::isListKey($get('key')))
-                    ->dehydrated(fn (Get $get): bool => InventorySettingOptions::isListKey($get('key')))
-                    ->formatStateUsing(function (mixed $state): array {
-                        if ($state === null || $state === '') {
-                            return [];
-                        }
-
-                        if (is_string($state)) {
-                            try {
-                                $decoded = json_decode($state, true, 512, JSON_THROW_ON_ERROR);
-                                $state = $decoded;
-                            } catch (JsonException) {
-                                return [];
-                            }
-                        }
-
-                        if (is_array($state)) {
-                            return array_values(array_filter(
-                                array_map(
-                                    static fn (mixed $item): string => is_string($item) ? trim($item) : '',
-                                    $state,
-                                ),
-                                static fn (string $s): bool => $s !== '',
-                            ));
-                        }
-
-                        return [];
-                    }),
                 Textarea::make('value')
-                    ->label('値 (JSON)')
+                    ->label(fn (Get $get): string => InventorySettingOptions::isListKey($get('key'))
+                        ? '値（カンマ区切りの候補）'
+                        : '値 (JSON)')
                     ->rows(5)
                     ->nullable()
-                    ->helperText('数値・配列・オブジェクトは JSON 形式で入力してください。例: 10 または ["hall","kitchen"]')
-                    ->visible(fn (Get $get): bool => ! InventorySettingOptions::isListKey($get('key')))
-                    ->dehydrated(fn (Get $get): bool => ! InventorySettingOptions::isListKey($get('key')))
-                    ->formatStateUsing(function (mixed $state): string {
+                    ->helperText(fn (Get $get): string => InventorySettingOptions::isListKey($get('key'))
+                        ? '候補をカンマで区切って入力します。例: close, open, lunch, prep（前後の空白は無視されます）'
+                        : '数値・配列・オブジェクトは JSON 形式で入力してください。例: 10 または ["hall","kitchen"]')
+                    ->formatStateUsing(function (mixed $state, Get $get): string {
+                        if (InventorySettingOptions::isListKey($get('key'))) {
+                            return SettingFormValue::arrayToCommaLine($state);
+                        }
+
                         if ($state === null || $state === '') {
                             return '';
                         }
@@ -95,8 +69,12 @@ class SettingResource extends Resource
 
                         return json_encode($state, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
                     })
-                    ->dehydrateStateUsing(function (?string $state): mixed {
-                        if ($state === null || trim($state) === '') {
+                    ->dehydrateStateUsing(function (mixed $state, Get $get): mixed {
+                        if (InventorySettingOptions::isListKey($get('key'))) {
+                            return SettingFormValue::commaLineToArray(is_string($state) ? $state : null);
+                        }
+
+                        if (! is_string($state) || trim($state) === '') {
                             return null;
                         }
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ClientInventoryController;
 use App\Http\Controllers\CloseCheckController;
 use App\Http\Controllers\MyPageController;
 use App\Http\Controllers\TimecardController;
@@ -18,3 +19,9 @@ Route::get('/close-check/success', [CloseCheckController::class, 'success'])->na
 
 Route::get('/mypage', [MyPageController::class, 'index'])->name('mypage.index');
 Route::post('/mypage', [MyPageController::class, 'store'])->name('mypage.store');
+
+Route::prefix('inventory')->name('inventory.')->group(function () {
+    Route::get('/', [ClientInventoryController::class, 'index'])->name('index');
+    Route::get('/input/{timing}/{staff_id}', [ClientInventoryController::class, 'input'])->name('input');
+    Route::post('/store', [ClientInventoryController::class, 'store'])->name('store');
+});

@@ -220,11 +220,19 @@ class TimecardController extends Controller
             $attendance->save();
         });
 
-        if ($recordedLate) {
+        $isClockIn = in_array($validated['action'], ['lunch_in', 'dinner_in'], true);
+
+        if ($isClockIn) {
+            if ($recordedLate) {
+                return redirect()
+                    ->route('mypage.index', ['staff_id' => $staff->id])
+                    ->with('late_modal', true)
+                    ->with('late_minutes', $lateDelta);
+            }
+
             return redirect()
-                ->route('timecard.index')
-                ->with('late_modal', true)
-                ->with('late_minutes', $lateDelta);
+                ->route('mypage.index', ['staff_id' => $staff->id])
+                ->with('success_modal', true);
         }
 
         return redirect()

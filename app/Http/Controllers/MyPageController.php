@@ -2,20 +2,45 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Attendance;
 use App\Models\InventoryItem;
 use App\Models\InventoryRecord;
 use App\Models\RoutineTask;
 use App\Models\RoutineTaskLog;
 use App\Models\Staff;
 use App\Support\BusinessDate;
+use App\Support\InventorySettingOptions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class MyPageController extends Controller
 {
+    /**
+     * @return list<string>
+     */
+    protected function orderInventoryTimingKeys(Collection $keys): array
+    {
+        $master = array_keys(InventorySettingOptions::timingForSelect());
+        $present = $keys->filter(static fn ($k): bool => $k !== null && $k !== '')->unique()->values()->all();
+        $ordered = [];
+        foreach ($master as $k) {
+            if (in_array($k, $present, true)) {
+                $ordered[] = $k;
+            }
+        }
+        foreach ($present as $k) {
+            if (! in_array($k, $ordered, true)) {
+                $ordered[] = $k;
+            }
+        }
+
+        return $ordered;
+    }
+
     public function index(Request $request): View
     {
         $staffList = Staff::query()
@@ -31,9 +56,34 @@ class MyPageController extends Controller
         $routineTasks = collect();
         $inventoryItems = collect();
         $routineLogIds = collect();
-        $inventoryValues = [];
+        $inventoryTimingRows = [];
+        $motivationLevel = 1;
+        $todayClockInLabel = null;
 
         if ($staff) {
+            $completionCount = RoutineTaskLog::query()
+                ->where('completed_by_staff_id', $staff->id)
+                ->count();
+            $motivationLevel = max(1, intdiv($completionCount, 10) + 1);
+
+            $attendance = Attendance::query()
+                ->where('staff_id', $staff->id)
+                ->whereDate('date', $dateString)
+                ->first();
+
+            if ($attendance) {
+                $first = collect([
+                    $attendance->lunch_in_at,
+                    $attendance->dinner_in_at,
+                ])
+                    ->filter()
+                    ->sortBy(fn ($t) => $t->getTimestamp())
+                    ->first();
+                if ($first !== null) {
+                    $todayClockInLabel = $first->format('H:i');
+                }
+            }
+
             $routineTasks = RoutineTask::query()
                 ->where('assigned_staff_id', $staff->id)
                 ->where('shop_id', $staff->shop_id)
@@ -61,10 +111,42 @@ class MyPageController extends Controller
                 ->get()
                 ->keyBy('inventory_item_id');
 
-            foreach ($inventoryItems as $item) {
-                $inventoryValues[$item->id] = $records->get($item->id)?->value;
+            $timingLabels = InventorySettingOptions::timingForSelect();
+            $byTiming = $inventoryItems->groupBy(fn (InventoryItem $item): string => (string) ($item->timing ?? ''));
+
+            foreach ($this->orderInventoryTimingKeys($byTiming->keys()) as $timingKey) {
+                $itemsInTiming = $byTiming->get($timingKey, collect());
+                if ($itemsInTiming->isEmpty()) {
+                    continue;
+                }
+                $total = $itemsInTiming->count();
+                $filled = 0;
+                foreach ($itemsInTiming as $item) {
+                    $v = $records->get($item->id)?->value;
+                    if ($v !== null && $v !== '') {
+                        $filled++;
+                    }
+                }
+                $inventoryTimingRows[] = [
+                    'timing_key' => $timingKey,
+                    'label' => $timingLabels[$timingKey] ?? ($timingKey !== '' ? $timingKey : '—'),
+                    'complete' => $total > 0 && $filled >= $total,
+                    'total' => $total,
+                    'filled' => $filled,
+                    'portal_url' => route('inventory.input', ['timing' => $timingKey, 'staff_id' => $staff->id]),
+                ];
             }
         }
+
+        $routinesPendingCount = 0;
+        if ($staff && $routineTasks->isNotEmpty()) {
+            foreach ($routineTasks as $task) {
+                if (! $routineLogIds->contains($task->id)) {
+                    $routinesPendingCount++;
+                }
+            }
+        }
+        $routinesAllComplete = $staff && ($routineTasks->isEmpty() || $routinesPendingCount === 0);
 
         return view('mypage.index', [
             'staffList' => $staffList,
@@ -73,7 +155,11 @@ class MyPageController extends Controller
             'routineTasks' => $routineTasks,
             'routineLogIds' => $routineLogIds,
             'inventoryItems' => $inventoryItems,
-            'inventoryValues' => $inventoryValues,
+            'inventoryTimingRows' => $inventoryTimingRows,
+            'motivationLevel' => $motivationLevel,
+            'todayClockInLabel' => $todayClockInLabel,
+            'routinesAllComplete' => $routinesAllComplete,
+            'routinesPendingCount' => $routinesPendingCount,
         ]);
     }
 
@@ -123,44 +209,50 @@ class MyPageController extends Controller
             $invInput = [];
         }
 
-        $itemsById = InventoryItem::query()
-            ->where('assigned_staff_id', $staff->id)
-            ->where('shop_id', $staff->shop_id)
-            ->where('is_active', true)
-            ->get()
-            ->keyBy('id');
+        $processInventory = $request->has('inventory_val');
 
-        foreach ($invInput as $itemId => $raw) {
-            $itemId = (int) $itemId;
-            if ($itemId === 0) {
-                continue;
-            }
-            $item = $itemsById->get($itemId);
-            if (! $item) {
-                throw ValidationException::withMessages([
-                    'inventory_val' => '不正な棚卸し品目が含まれています。',
-                ]);
-            }
-            if ($raw === null || $raw === '') {
-                continue;
-            }
-            $type = $item->input_type ?? 'number';
-            if ($type === 'number' && ! is_numeric($raw)) {
-                throw ValidationException::withMessages([
-                    "inventory_val.$itemId" => '数値で入力してください。',
-                ]);
-            }
-            if ($type === 'select') {
-                $opts = $item->options ?? [];
-                if (! is_array($opts) || ! in_array($raw, $opts, true)) {
+        $itemsById = $processInventory
+            ? InventoryItem::query()
+                ->where('assigned_staff_id', $staff->id)
+                ->where('shop_id', $staff->shop_id)
+                ->where('is_active', true)
+                ->get()
+                ->keyBy('id')
+            : collect();
+
+        if ($processInventory) {
+            foreach ($invInput as $itemId => $raw) {
+                $itemId = (int) $itemId;
+                if ($itemId === 0) {
+                    continue;
+                }
+                $item = $itemsById->get($itemId);
+                if (! $item) {
                     throw ValidationException::withMessages([
-                        "inventory_val.$itemId" => '選択肢から選んでください。',
+                        'inventory_val' => '不正な棚卸し品目が含まれています。',
                     ]);
+                }
+                if ($raw === null || $raw === '') {
+                    continue;
+                }
+                $type = $item->input_type ?? 'number';
+                if ($type === 'number' && ! is_numeric($raw)) {
+                    throw ValidationException::withMessages([
+                        "inventory_val.$itemId" => '数値で入力してください。',
+                    ]);
+                }
+                if ($type === 'select') {
+                    $opts = $item->options ?? [];
+                    if (! is_array($opts) || ! in_array($raw, $opts, true)) {
+                        throw ValidationException::withMessages([
+                            "inventory_val.$itemId" => '選択肢から選んでください。',
+                        ]);
+                    }
                 }
             }
         }
 
-        DB::transaction(function () use ($staff, $dateString, $now, $routineInput, $invInput, $itemsById): void {
+        DB::transaction(function () use ($staff, $dateString, $now, $routineInput, $invInput, $itemsById, $processInventory): void {
             $allowedRoutineIds = RoutineTask::query()
                 ->where('assigned_staff_id', $staff->id)
                 ->where('shop_id', $staff->shop_id)
@@ -192,40 +284,42 @@ class MyPageController extends Controller
                 );
             }
 
-            $allowedItemIds = $itemsById->keys()->all();
+            if ($processInventory) {
+                $allowedItemIds = $itemsById->keys()->all();
 
-            foreach ($allowedItemIds as $iid) {
-                $keyPresent = array_key_exists($iid, $invInput) || array_key_exists((string) $iid, $invInput);
-                $raw = $invInput[$iid] ?? $invInput[(string) $iid] ?? null;
+                foreach ($allowedItemIds as $iid) {
+                    $keyPresent = array_key_exists($iid, $invInput) || array_key_exists((string) $iid, $invInput);
+                    $raw = $invInput[$iid] ?? $invInput[(string) $iid] ?? null;
 
-                if (! $keyPresent) {
-                    InventoryRecord::query()
-                        ->where('inventory_item_id', $iid)
-                        ->whereDate('date', $dateString)
-                        ->delete();
+                    if (! $keyPresent) {
+                        InventoryRecord::query()
+                            ->where('inventory_item_id', $iid)
+                            ->whereDate('date', $dateString)
+                            ->delete();
 
-                    continue;
+                        continue;
+                    }
+
+                    if ($raw === null || $raw === '') {
+                        InventoryRecord::query()
+                            ->where('inventory_item_id', $iid)
+                            ->whereDate('date', $dateString)
+                            ->delete();
+
+                        continue;
+                    }
+
+                    InventoryRecord::query()->updateOrCreate(
+                        [
+                            'inventory_item_id' => $iid,
+                            'date' => $dateString,
+                        ],
+                        [
+                            'value' => $raw,
+                            'recorded_by_staff_id' => $staff->id,
+                        ],
+                    );
                 }
-
-                if ($raw === null || $raw === '') {
-                    InventoryRecord::query()
-                        ->where('inventory_item_id', $iid)
-                        ->whereDate('date', $dateString)
-                        ->delete();
-
-                    continue;
-                }
-
-                InventoryRecord::query()->updateOrCreate(
-                    [
-                        'inventory_item_id' => $iid,
-                        'date' => $dateString,
-                    ],
-                    [
-                        'value' => $raw,
-                        'recorded_by_staff_id' => $staff->id,
-                    ],
-                );
             }
         });
 

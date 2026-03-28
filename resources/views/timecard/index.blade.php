@@ -6,9 +6,13 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>タイムカード — {{ config('app.name', 'Laravel') }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 </head>
-<body class="bg-dark text-light min-vh-100">
-    <div class="container py-5 mx-auto" style="max-width: 500px;">
+<body class="bg-dark text-light min-vh-100 d-flex flex-column">
+    <x-client-nav variant="dark" />
+
+
+    <div class="container py-5 mx-auto flex-grow-1" style="max-width: 500px;">
         <header class="text-center mb-4">
             <p class="text-info small text-uppercase mb-1 tracking-wide">タイムカード</p>
             <h1 class="h3 fw-semibold mb-3">打刻</h1>

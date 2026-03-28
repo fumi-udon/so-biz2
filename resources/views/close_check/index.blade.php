@@ -13,6 +13,8 @@
     id="close-check-body"
     data-close-blocked="{{ count($incompleteLines ?? []) > 0 ? '1' : '0' }}"
 >
+    <x-client-nav />
+
     <div class="container py-4 py-md-5">
         <header class="mb-4">
             <h1 class="h2 fw-semibold">クローズチェック</h1>
