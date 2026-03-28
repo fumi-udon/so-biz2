@@ -5,7 +5,9 @@ namespace App\Filament\Resources\InventoryRecords;
 use App\Filament\Resources\InventoryRecords\Pages\CreateInventoryRecord;
 use App\Filament\Resources\InventoryRecords\Pages\EditInventoryRecord;
 use App\Filament\Resources\InventoryRecords\Pages\ListInventoryRecords;
+use App\Models\InventoryItem;
 use App\Models\InventoryRecord;
+use App\Models\Staff;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -41,19 +43,30 @@ class InventoryRecordResource extends Resource
         return $schema
             ->components([
                 Select::make('inventory_item_id')
-                    ->relationship('inventoryItem', 'name', fn (Builder $q) => $q->where('is_active', true))
+                    ->label('品目')
+                    ->options(fn (): array => InventoryItem::query()
+                        ->where('is_active', true)
+                        ->orderBy('category')
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->all())
                     ->required()
                     ->searchable()
                     ->preload(),
                 DatePicker::make('date')
+                    ->label('日付')
                     ->required()
                     ->native(false),
-                TextInput::make('quantity')
-                    ->numeric()
-                    ->required()
-                    ->step(0.01),
+                TextInput::make('value')
+                    ->label('値')
+                    ->maxLength(2000),
                 Select::make('recorded_by_staff_id')
-                    ->relationship('recordedByStaff', 'name', fn (Builder $q) => $q->where('is_active', true))
+                    ->label('記録者')
+                    ->options(fn (): array => Staff::query()
+                        ->where('is_active', true)
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->all())
                     ->required()
                     ->searchable()
                     ->preload(),
@@ -74,13 +87,14 @@ class InventoryRecordResource extends Resource
             ->defaultGroup('inventoryItem.category')
             ->columns([
                 TextColumn::make('date')
+                    ->label('日付')
                     ->date()
                     ->sortable(),
                 TextColumn::make('inventoryItem.name')
                     ->label('品目')
                     ->searchable(),
-                TextColumn::make('quantity')
-                    ->numeric(decimalPlaces: 2),
+                TextColumn::make('value')
+                    ->label('値'),
                 TextColumn::make('inventoryItem.unit')
                     ->label('単位'),
                 TextColumn::make('recordedByStaff.name')

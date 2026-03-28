@@ -137,7 +137,7 @@
             aria-hidden="true"
         >
             <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
+                <div class="modal-content text-dark">
                     <div class="modal-header border-0 pb-0">
                         <h2 class="modal-title fs-5" id="timecardResultModalLabel">
                             @if (session('late_modal'))

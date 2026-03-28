@@ -4,14 +4,17 @@ namespace App\Filament\Resources\Settings;
 
 use App\Filament\Resources\Settings\Pages\ManageSettings;
 use App\Models\Setting;
+use App\Support\InventorySettingOptions;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -40,12 +43,47 @@ class SettingResource extends Resource
                     ->label('キー')
                     ->required()
                     ->maxLength(255)
-                    ->unique(Setting::class, 'key', ignoreRecord: true),
+                    ->unique(Setting::class, 'key', ignoreRecord: true)
+                    ->live(onBlur: true),
+                TagsInput::make('value')
+                    ->label('値（候補）')
+                    ->placeholder('候補を入力して Enter')
+                    ->helperText('タイミング・カテゴリ・単位の各マスタはここで一覧を編集します。')
+                    ->visible(fn (Get $get): bool => InventorySettingOptions::isListKey($get('key')))
+                    ->dehydrated(fn (Get $get): bool => InventorySettingOptions::isListKey($get('key')))
+                    ->formatStateUsing(function (mixed $state): array {
+                        if ($state === null || $state === '') {
+                            return [];
+                        }
+
+                        if (is_string($state)) {
+                            try {
+                                $decoded = json_decode($state, true, 512, JSON_THROW_ON_ERROR);
+                                $state = $decoded;
+                            } catch (JsonException) {
+                                return [];
+                            }
+                        }
+
+                        if (is_array($state)) {
+                            return array_values(array_filter(
+                                array_map(
+                                    static fn (mixed $item): string => is_string($item) ? trim($item) : '',
+                                    $state,
+                                ),
+                                static fn (string $s): bool => $s !== '',
+                            ));
+                        }
+
+                        return [];
+                    }),
                 Textarea::make('value')
                     ->label('値 (JSON)')
                     ->rows(5)
                     ->nullable()
                     ->helperText('数値・配列・オブジェクトは JSON 形式で入力してください。例: 10 または ["hall","kitchen"]')
+                    ->visible(fn (Get $get): bool => ! InventorySettingOptions::isListKey($get('key')))
+                    ->dehydrated(fn (Get $get): bool => ! InventorySettingOptions::isListKey($get('key')))
                     ->formatStateUsing(function (mixed $state): string {
                         if ($state === null || $state === '') {
                             return '';

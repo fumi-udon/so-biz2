@@ -40,6 +40,21 @@ class InventoryItemImporter extends Importer
                 ->rules(['nullable', 'integer', 'exists:staff,id']),
             ImportColumn::make('unit')
                 ->rules(['nullable', 'string', 'max:50']),
+            ImportColumn::make('input_type')
+                ->rules(['nullable', 'string', 'in:number,text,select']),
+            ImportColumn::make('options')
+                ->rules(['nullable', 'string'])
+                ->castStateUsing(function (mixed $state): ?array {
+                    if ($state === null || $state === '') {
+                        return null;
+                    }
+                    if (is_array($state)) {
+                        return $state;
+                    }
+                    $decoded = json_decode((string) $state, true);
+
+                    return is_array($decoded) ? $decoded : null;
+                }),
             ImportColumn::make('is_active')
                 ->rules(['nullable'])
                 ->castStateUsing(function (mixed $originalState, mixed $state): bool {

@@ -11,6 +11,7 @@ use App\Support\BusinessDate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class MyPageController extends Controller
@@ -30,7 +31,7 @@ class MyPageController extends Controller
         $routineTasks = collect();
         $inventoryItems = collect();
         $routineLogIds = collect();
-        $inventoryQuantities = [];
+        $inventoryValues = [];
 
         if ($staff) {
             $routineTasks = RoutineTask::query()
@@ -61,7 +62,7 @@ class MyPageController extends Controller
                 ->keyBy('inventory_item_id');
 
             foreach ($inventoryItems as $item) {
-                $inventoryQuantities[$item->id] = $records->get($item->id)?->quantity;
+                $inventoryValues[$item->id] = $records->get($item->id)?->value;
             }
         }
 
@@ -72,7 +73,7 @@ class MyPageController extends Controller
             'routineTasks' => $routineTasks,
             'routineLogIds' => $routineLogIds,
             'inventoryItems' => $inventoryItems,
-            'inventoryQuantities' => $inventoryQuantities,
+            'inventoryValues' => $inventoryValues,
         ]);
     }
 
@@ -82,8 +83,8 @@ class MyPageController extends Controller
             'staff_id' => ['required', 'integer', 'exists:staff,id'],
             'pin_code' => ['required', 'string', 'digits:4'],
             'routine_task' => ['nullable', 'array'],
-            'inventory_qty' => ['nullable', 'array'],
-            'inventory_qty.*' => ['nullable', 'numeric', 'min:0'],
+            'inventory_val' => ['nullable', 'array'],
+            'inventory_val.*' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $staff = Staff::query()
@@ -114,9 +115,52 @@ class MyPageController extends Controller
         $now = now();
 
         $routineInput = $validated['routine_task'] ?? [];
-        $qtyInput = $validated['inventory_qty'] ?? [];
+        $invInput = $validated['inventory_val'] ?? [];
+        if (! is_array($routineInput)) {
+            $routineInput = [];
+        }
+        if (! is_array($invInput)) {
+            $invInput = [];
+        }
 
-        DB::transaction(function () use ($staff, $dateString, $now, $routineInput, $qtyInput): void {
+        $itemsById = InventoryItem::query()
+            ->where('assigned_staff_id', $staff->id)
+            ->where('shop_id', $staff->shop_id)
+            ->where('is_active', true)
+            ->get()
+            ->keyBy('id');
+
+        foreach ($invInput as $itemId => $raw) {
+            $itemId = (int) $itemId;
+            if ($itemId === 0) {
+                continue;
+            }
+            $item = $itemsById->get($itemId);
+            if (! $item) {
+                throw ValidationException::withMessages([
+                    'inventory_val' => '不正な棚卸し品目が含まれています。',
+                ]);
+            }
+            if ($raw === null || $raw === '') {
+                continue;
+            }
+            $type = $item->input_type ?? 'number';
+            if ($type === 'number' && ! is_numeric($raw)) {
+                throw ValidationException::withMessages([
+                    "inventory_val.$itemId" => '数値で入力してください。',
+                ]);
+            }
+            if ($type === 'select') {
+                $opts = $item->options ?? [];
+                if (! is_array($opts) || ! in_array($raw, $opts, true)) {
+                    throw ValidationException::withMessages([
+                        "inventory_val.$itemId" => '選択肢から選んでください。',
+                    ]);
+                }
+            }
+        }
+
+        DB::transaction(function () use ($staff, $dateString, $now, $routineInput, $invInput, $itemsById): void {
             $allowedRoutineIds = RoutineTask::query()
                 ->where('assigned_staff_id', $staff->id)
                 ->where('shop_id', $staff->shop_id)
@@ -125,7 +169,8 @@ class MyPageController extends Controller
                 ->all();
 
             foreach ($allowedRoutineIds as $rid) {
-                $checked = ! empty($routineInput[$rid]);
+                $routineVal = $routineInput[$rid] ?? $routineInput[(string) $rid] ?? null;
+                $checked = $routineVal !== null && $routineVal !== '' && $routineVal !== false && $routineVal !== '0';
                 if (! $checked) {
                     RoutineTaskLog::query()
                         ->where('routine_task_id', $rid)
@@ -147,19 +192,21 @@ class MyPageController extends Controller
                 );
             }
 
-            $allowedItemIds = InventoryItem::query()
-                ->where('assigned_staff_id', $staff->id)
-                ->where('shop_id', $staff->shop_id)
-                ->where('is_active', true)
-                ->pluck('id')
-                ->all();
+            $allowedItemIds = $itemsById->keys()->all();
 
             foreach ($allowedItemIds as $iid) {
-                if (! array_key_exists($iid, $qtyInput)) {
+                $keyPresent = array_key_exists($iid, $invInput) || array_key_exists((string) $iid, $invInput);
+                $raw = $invInput[$iid] ?? $invInput[(string) $iid] ?? null;
+
+                if (! $keyPresent) {
+                    InventoryRecord::query()
+                        ->where('inventory_item_id', $iid)
+                        ->whereDate('date', $dateString)
+                        ->delete();
+
                     continue;
                 }
 
-                $raw = $qtyInput[$iid];
                 if ($raw === null || $raw === '') {
                     InventoryRecord::query()
                         ->where('inventory_item_id', $iid)
@@ -175,7 +222,7 @@ class MyPageController extends Controller
                         'date' => $dateString,
                     ],
                     [
-                        'quantity' => $raw,
+                        'value' => $raw,
                         'recorded_by_staff_id' => $staff->id,
                     ],
                 );

@@ -18,6 +18,8 @@ class InventoryItem extends Model
         'timing',
         'assigned_staff_id',
         'unit',
+        'input_type',
+        'options',
         'is_active',
     ];
 
@@ -28,6 +30,7 @@ class InventoryItem extends Model
     {
         return [
             'is_active' => 'boolean',
+            'options' => 'array',
         ];
     }
 

@@ -13,7 +13,7 @@ class InventoryRecord extends Model
     protected $fillable = [
         'inventory_item_id',
         'date',
-        'quantity',
+        'value',
         'recorded_by_staff_id',
     ];
 
@@ -24,7 +24,6 @@ class InventoryRecord extends Model
     {
         return [
             'date' => 'date',
-            'quantity' => 'decimal:2',
         ];
     }
 

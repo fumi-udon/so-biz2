@@ -7,6 +7,7 @@ use App\Models\Setting;
 use App\Models\Staff;
 use App\Services\RoutineInventoryCompletionService;
 use App\Support\BusinessDate;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -186,7 +187,7 @@ class TimecardController extends Controller
 
         $recordedLate = false;
 
-        DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $lateDelta, &$recordedLate): void {
+        DB::transaction(function () use ($request, $staff, $dateString, $column, $clockAt, $lateDelta, &$recordedLate): void {
             $attendance = Attendance::query()
                 ->where('staff_id', $staff->id)
                 ->whereDate('date', $dateString)
@@ -200,6 +201,13 @@ class TimecardController extends Controller
                 $attendance->late_minutes = 0;
                 $attendance->is_tip_eligible = false;
                 $attendance->is_edited_by_admin = false;
+            } elseif ($attendance->getAttribute($column) !== null) {
+                throw new HttpResponseException(
+                    redirect()
+                        ->back()
+                        ->withInput($request->except('pin_code'))
+                        ->with('error', '既に打刻済みです。')
+                );
             }
 
             $attendance->{$column} = $clockAt;

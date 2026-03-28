@@ -21,6 +21,15 @@
         @if (session('error'))
             <div class="alert alert-danger small" role="alert">{{ session('error') }}</div>
         @endif
+        @if ($errors->any())
+            <div class="alert alert-danger small" role="alert">
+                <ul class="mb-0 ps-3">
+                    @foreach ($errors->all() as $err)
+                        <li>{{ $err }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
         <form method="get" action="{{ route('mypage.index') }}" class="mb-4">
             <label for="staff_select" class="form-label small fw-medium">スタッフを選択</label>
@@ -74,35 +83,87 @@
                 </div>
 
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header py-3 fw-semibold small">棚卸し（数量）</div>
+                    <div class="card-header py-2 py-md-3 fw-semibold small">棚卸し</div>
                     @if ($inventoryItems->isEmpty())
                         <div class="card-body">
                             <p class="text-secondary small mb-0">割り当てられた棚卸しはありません。</p>
                         </div>
                     @else
-                        <ul class="list-group list-group-flush">
-                            @foreach ($inventoryItems as $item)
-                                <li class="list-group-item">
-                                    <p class="text-secondary mb-1" style="font-size: 0.75rem;">{{ $item->category }} · {{ $item->timing }}</p>
-                                    <p class="fw-medium mb-2">{{ $item->name }}</p>
-                                    <div class="input-group">
-                                        <input
-                                            type="number"
-                                            name="inventory_qty[{{ $item->id }}]"
-                                            id="inv-{{ $item->id }}"
-                                            step="0.01"
-                                            min="0"
-                                            inputmode="decimal"
-                                            value="{{ old('inventory_qty.'.$item->id, $inventoryQuantities[$item->id] ?? '') }}"
-                                            class="form-control text-end"
-                                            placeholder="0"
-                                            aria-label="{{ $item->name }} の数量"
-                                        >
-                                        <span class="input-group-text">{{ $item->unit }}</span>
-                                    </div>
-                                </li>
-                            @endforeach
-                        </ul>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col" class="small text-secondary" style="width: 52%; min-width: 8rem;">品目 / カテゴリ</th>
+                                        <th scope="col" class="small text-secondary" style="width: 48%; min-width: 7rem;">入力</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($inventoryItems as $item)
+                                        @php
+                                            $inputType = $item->input_type ?? 'number';
+                                        @endphp
+                                        <tr>
+                                            <td class="small py-2">
+                                                <div class="fw-semibold text-break">{{ $item->name }}</div>
+                                                <div class="text-secondary" style="font-size: 0.7rem;">{{ $item->category }} · {{ $item->timing }}</div>
+                                                @if ($inputType === 'number')
+                                                    <span class="badge rounded-pill bg-secondary bg-opacity-10 text-dark border small mt-1">{{ $item->unit }}</span>
+                                                @endif
+                                            </td>
+                                            <td class="py-2">
+                                                @if ($inputType === 'select')
+                                                    <select
+                                                        name="inventory_val[{{ $item->id }}]"
+                                                        id="inv-{{ $item->id }}"
+                                                        class="form-select form-select-sm @error('inventory_val.'.$item->id) is-invalid @enderror"
+                                                        aria-label="{{ $item->name }}"
+                                                    >
+                                                        <option value="">選択</option>
+                                                        @foreach ($item->options ?? [] as $opt)
+                                                            <option
+                                                                value="{{ $opt }}"
+                                                                @selected(old('inventory_val.'.$item->id, $inventoryValues[$item->id] ?? '') == $opt)
+                                                            >{{ $opt }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                    @error('inventory_val.'.$item->id)
+                                                        <div class="invalid-feedback d-block small">{{ $message }}</div>
+                                                    @enderror
+                                                @elseif ($inputType === 'text')
+                                                    <input
+                                                        type="text"
+                                                        name="inventory_val[{{ $item->id }}]"
+                                                        id="inv-{{ $item->id }}"
+                                                        value="{{ old('inventory_val.'.$item->id, $inventoryValues[$item->id] ?? '') }}"
+                                                        class="form-control form-control-sm @error('inventory_val.'.$item->id) is-invalid @enderror"
+                                                        aria-label="{{ $item->name }}"
+                                                    >
+                                                    @error('inventory_val.'.$item->id)
+                                                        <div class="invalid-feedback d-block small">{{ $message }}</div>
+                                                    @enderror
+                                                @else
+                                                    <input
+                                                        type="number"
+                                                        name="inventory_val[{{ $item->id }}]"
+                                                        id="inv-{{ $item->id }}"
+                                                        step="0.01"
+                                                        min="0"
+                                                        inputmode="decimal"
+                                                        value="{{ old('inventory_val.'.$item->id, $inventoryValues[$item->id] ?? '') }}"
+                                                        class="form-control form-control-sm text-end @error('inventory_val.'.$item->id) is-invalid @enderror"
+                                                        placeholder="0"
+                                                        aria-label="{{ $item->name }}"
+                                                    >
+                                                    @error('inventory_val.'.$item->id)
+                                                        <div class="invalid-feedback d-block small">{{ $message }}</div>
+                                                    @enderror
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
                     @endif
                 </div>
 
