@@ -170,6 +170,8 @@ class TimecardController extends Controller
         $targetDate = $this->resolveTargetBusinessDate();
         $dateString = $targetDate->toDateString();
 
+        // 前日の未退勤があっても翌営業日の出勤打刻はブロックしない（未対応のブロックはここにない）。
+
         if (in_array($validated['action'], ['lunch_out', 'dinner_out'], true)) {
             $gate = app(RoutineInventoryCompletionService::class);
 

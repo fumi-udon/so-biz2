@@ -37,6 +37,9 @@
                     <a class="nav-link py-1 small" href="{{ route('mypage.index') }}">マイページ</a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link py-1 small" href="{{ route('mypage.attendance') }}">勤怠</a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link py-1 small" href="{{ route('inventory.index') }}">棚卸し</a>
                 </li>
                 <li class="nav-item">

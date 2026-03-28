@@ -26,7 +26,7 @@ class AttendanceResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with('staff');
+        return parent::getEloquentQuery()->with(['staff', 'approvedByManager']);
     }
 
     public static function form(Schema $schema): Schema
@@ -43,6 +43,16 @@ class AttendanceResource extends Resource
     {
         return [
             //
+        ];
+    }
+
+    /**
+     * @return array<class-string<\Filament\Widgets\Widget>>
+     */
+    public static function getWidgets(): array
+    {
+        return [
+            Widgets\TodayAttendanceWidget::class,
         ];
     }
 

@@ -25,6 +25,8 @@ class Staff extends Model
         'role',
         'target_weekly_hours',
         'wage',
+        'hourly_wage',
+        'is_manager',
         'job_level',
         'age',
         'gender',
@@ -44,6 +46,8 @@ class Staff extends Model
             'fixed_shifts' => 'array',
             'extra_profile' => 'array',
             'is_active' => 'boolean',
+            'is_manager' => 'boolean',
+            'hourly_wage' => 'integer',
         ];
     }
 

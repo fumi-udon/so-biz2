@@ -12,6 +12,7 @@ use App\Support\BusinessDate;
 use App\Support\InventorySettingOptions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -326,5 +327,178 @@ class MyPageController extends Controller
         return redirect()
             ->route('mypage.index', ['staff_id' => $staff->id])
             ->with('status', '保存しました。');
+    }
+
+    public function attendance(Request $request): View
+    {
+        $staffList = Staff::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $staffId = $request->integer('staff_id') ?: null;
+        $staff = $staffId ? Staff::query()->where('id', $staffId)->where('is_active', true)->first() : null;
+
+        $monthParam = $request->input('month');
+        $monthStart = Carbon::parse(is_string($monthParam) && preg_match('/^\d{4}-\d{2}$/', $monthParam)
+            ? $monthParam.'-01'
+            : now()->format('Y-m-01'))->startOfMonth();
+
+        $monthAttendances = collect();
+        $weekMinutes = 0;
+        $monthMinutes = 0;
+        $monthLateCount = 0;
+
+        if ($staff) {
+            $monthAttendances = Attendance::query()
+                ->where('staff_id', $staff->id)
+                ->whereYear('date', $monthStart->year)
+                ->whereMonth('date', $monthStart->month)
+                ->orderBy('date')
+                ->get();
+
+            $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
+            $weekEnd = Carbon::now()->copy()->endOfWeek(Carbon::SUNDAY);
+
+            $weekRows = Attendance::query()
+                ->where('staff_id', $staff->id)
+                ->whereBetween('date', [$weekStart->toDateString(), $weekEnd->toDateString()])
+                ->get();
+
+            foreach ($weekRows as $row) {
+                $weekMinutes += $row->calculateTotalMinutes() ?? 0;
+            }
+
+            foreach ($monthAttendances as $row) {
+                $monthMinutes += $row->calculateTotalMinutes() ?? 0;
+                if (($row->late_minutes ?? 0) > 0) {
+                    $monthLateCount++;
+                }
+            }
+        }
+
+        return view('mypage.attendance', [
+            'staffList' => $staffList,
+            'staff' => $staff,
+            'monthStart' => $monthStart,
+            'monthAttendances' => $monthAttendances,
+            'weekMinutes' => $weekMinutes,
+            'monthMinutes' => $monthMinutes,
+            'monthLateCount' => $monthLateCount,
+        ]);
+    }
+
+    public function updateAttendance(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'mode' => ['required', 'in:out,in'],
+            'attendance_id' => ['required', 'integer', 'exists:attendances,id'],
+            'staff_id' => ['required', 'integer', 'exists:staff,id'],
+            'pin_code' => ['required', 'string', 'digits:4'],
+            'lunch_in' => ['nullable', 'date_format:H:i'],
+            'lunch_out' => ['nullable', 'date_format:H:i'],
+            'dinner_in' => ['nullable', 'date_format:H:i'],
+            'dinner_out' => ['nullable', 'date_format:H:i'],
+            'manager_pin' => ['nullable', 'string', 'digits:4'],
+        ]);
+
+        $staff = Staff::query()
+            ->where('id', $validated['staff_id'])
+            ->where('is_active', true)
+            ->first();
+
+        if (! $staff) {
+            return redirect()
+                ->route('mypage.attendance')
+                ->with('error', 'スタッフが見つかりません。');
+        }
+
+        if ($staff->pin_code === null || $staff->pin_code === '') {
+            return redirect()
+                ->route('mypage.attendance', ['staff_id' => $staff->id])
+                ->with('error', 'PIN が設定されていません。');
+        }
+
+        if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
+            return redirect()
+                ->route('mypage.attendance', ['staff_id' => $staff->id])
+                ->withInput($request->except(['pin_code', 'manager_pin']))
+                ->with('error', '本人の PIN が正しくありません。');
+        }
+
+        /** @var Attendance|null $attendance */
+        $attendance = Attendance::query()->whereKey($validated['attendance_id'])->first();
+
+        if (! $attendance || $attendance->staff_id !== $staff->id) {
+            return redirect()
+                ->route('mypage.attendance', ['staff_id' => $staff->id])
+                ->with('error', '勤怠データが不正です。');
+        }
+
+        $date = $attendance->date instanceof Carbon
+            ? $attendance->date->copy()->startOfDay()
+            : Carbon::parse($attendance->date)->startOfDay();
+
+        if ($validated['mode'] === 'out') {
+            $attendance->lunch_out_at = $this->parseNullableTime($validated['lunch_out'] ?? null, $date);
+            $attendance->dinner_out_at = $this->parseNullableTime($validated['dinner_out'] ?? null, $date);
+            $attendance->is_edited_by_admin = false;
+
+            $attendance->save();
+
+            return redirect()
+                ->route('mypage.attendance', [
+                    'staff_id' => $staff->id,
+                    'month' => $date->format('Y-m'),
+                ])
+                ->with('status', '退勤時間を更新しました。');
+        }
+
+        $managerPin = $validated['manager_pin'] ?? null;
+
+        if (blank($managerPin)) {
+            return redirect()
+                ->route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $date->format('Y-m')])
+                ->withInput($request->except(['pin_code', 'manager_pin']))
+                ->with('error', '出勤時間の変更にはマネージャー PIN が必要です。');
+        }
+
+        $manager = Staff::query()
+            ->where('is_manager', true)
+            ->where('is_active', true)
+            ->whereNotNull('pin_code')
+            ->get()
+            ->first(fn (Staff $m): bool => hash_equals((string) $m->pin_code, (string) $managerPin));
+
+        if (! $manager) {
+            return redirect()
+                ->route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $date->format('Y-m')])
+                ->withInput($request->except(['pin_code', 'manager_pin']))
+                ->with('error', 'マネージャー PIN が正しくないか、権限がありません。');
+        }
+
+        $attendance->lunch_in_at = $this->parseNullableTime($validated['lunch_in'] ?? null, $date);
+        $attendance->dinner_in_at = $this->parseNullableTime($validated['dinner_in'] ?? null, $date);
+        $attendance->approved_by_manager_id = $manager->id;
+        $attendance->is_edited_by_admin = false;
+        $attendance->save();
+
+        return redirect()
+            ->route('mypage.attendance', [
+                'staff_id' => $staff->id,
+                'month' => $date->format('Y-m'),
+            ])
+            ->with('status', '出勤時間を更新しました（マネージャー承認済み）。');
+    }
+
+    protected function parseNullableTime(?string $value, Carbon $date): ?Carbon
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        $day = $date->copy()->startOfDay();
+
+        return $day->setTimeFromTimeString($value);
     }
 }

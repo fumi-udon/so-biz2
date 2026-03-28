@@ -19,6 +19,8 @@ Route::get('/close-check/success', [CloseCheckController::class, 'success'])->na
 
 Route::get('/mypage', [MyPageController::class, 'index'])->name('mypage.index');
 Route::post('/mypage', [MyPageController::class, 'store'])->name('mypage.store');
+Route::get('/mypage/attendance', [MyPageController::class, 'attendance'])->name('mypage.attendance');
+Route::post('/mypage/attendance', [MyPageController::class, 'updateAttendance'])->name('mypage.attendance.update');
 
 Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/', [ClientInventoryController::class, 'index'])->name('index');

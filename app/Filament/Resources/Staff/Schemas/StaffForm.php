@@ -97,12 +97,20 @@ class StaffForm
                     ->numeric()
                     ->step(0.01)
                     ->nullable(),
+                TextInput::make('hourly_wage')
+                    ->numeric()
+                    ->label('時給')
+                    ->suffix('円')
+                    ->nullable(),
                 TextInput::make('target_weekly_hours')
                     ->numeric()
                     ->integer()
                     ->nullable(),
                 Toggle::make('is_active')
                     ->default(true),
+                Toggle::make('is_manager')
+                    ->label('マネージャー権限')
+                    ->helperText('クライアント側で出勤時間の修正を承認できます。'),
                 Section::make('Horaires hebdomadaires (fixed_shifts)')
                     ->description('Horaires théoriques par jour (détection de retard au pointage : tolérance 10 minutes).')
                     ->schema([

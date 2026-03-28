@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\Attendances\Pages;
 
 use App\Filament\Resources\Attendances\AttendanceResource;
+use App\Filament\Resources\Attendances\Widgets\TodayAttendanceWidget;
 use App\Models\Attendance;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
@@ -22,12 +22,19 @@ class ListAttendances extends ListRecords
         ]));
     }
 
-    protected function getHeaderActions(): array
+    /**
+     * @return array<class-string<\Filament\Widgets\Widget> | \Filament\Widgets\WidgetConfiguration>
+     */
+    protected function getHeaderWidgets(): array
     {
         return [
-            CreateAction::make()
-                ->slideOver(),
+            TodayAttendanceWidget::class,
         ];
+    }
+
+    public function getHeaderWidgetsColumns(): int | array
+    {
+        return 1;
     }
 
     /**

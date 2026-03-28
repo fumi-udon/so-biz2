@@ -12,6 +12,7 @@ class Attendance extends Model
      */
     protected $fillable = [
         'staff_id',
+        'approved_by_manager_id',
         'date',
         'shift_type',
         'status',
@@ -43,6 +44,14 @@ class Attendance extends Model
             'is_tip_eligible' => 'boolean',
             'is_edited_by_admin' => 'boolean',
         ];
+    }
+
+    /**
+     * 1日の合計労働時間（分）。ランチ・ディナー2区間のうち、出退勤が揃っている区間のみ合算。
+     */
+    public function calculateTotalMinutes(): ?int
+    {
+        return $this->workMinutes();
     }
 
     /**
@@ -114,5 +123,19 @@ class Attendance extends Model
     public function staff(): BelongsTo
     {
         return $this->belongsTo(Staff::class);
+    }
+
+    /**
+     * @return BelongsTo<Staff, $this>
+     */
+    public function approvedByManager(): BelongsTo
+    {
+        return $this->belongsTo(Staff::class, 'approved_by_manager_id');
+    }
+
+    public function hasMissingClockOut(): bool
+    {
+        return ($this->lunch_in_at !== null && $this->lunch_out_at === null)
+            || ($this->dinner_in_at !== null && $this->dinner_out_at === null);
     }
 }
