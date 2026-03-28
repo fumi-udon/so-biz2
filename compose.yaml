@@ -50,6 +50,28 @@ services:
                 - '-p${DB_PASSWORD}'
             retries: 3
             timeout: 5s
+    phpmyadmin:
+        # 公式 phpmyadmin イメージは環境によって arm64 が取れず amd64 のみ → exit 127 や platform エラーになりやすい
+        # LinuxServer 版はマルチアーキ（arm64 / amd64）でマニフェストが安定
+        image: 'lscr.io/linuxserver/phpmyadmin:latest'
+        restart: unless-stopped
+        ports:
+            - '${FORWARD_PHPMYADMIN_PORT:-8080}:80'
+        environment:
+            PUID: 1000
+            PGID: 1000
+            TZ: UTC
+            PMA_HOST: mysql
+            PMA_PORT: 3306
+            PMA_USER: '${DB_USERNAME}'
+            PMA_PASSWORD: '${DB_PASSWORD}'
+            PMA_ABSOLUTE_URI: 'http://localhost:${FORWARD_PHPMYADMIN_PORT:-8080}/'
+            UPLOAD_LIMIT: 64M
+        networks:
+            - sail
+        depends_on:
+            mysql:
+                condition: service_healthy
     redis:
         image: 'redis:alpine'
         ports:

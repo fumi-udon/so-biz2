@@ -28,6 +28,8 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            // エクスポート完了時の「ダウンロード」リンクは DB 通知（ベルアイコン）に表示される
+            ->databaseNotifications()
             ->colors([
                 'primary' => Color::Amber,
             ])

@@ -1,0 +1,118 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Attendance extends Model
+{
+    /**
+     * @var list<string>
+     */
+    protected $fillable = [
+        'staff_id',
+        'date',
+        'shift_type',
+        'status',
+        'scheduled_in_at',
+        'lunch_in_at',
+        'lunch_out_at',
+        'dinner_in_at',
+        'dinner_out_at',
+        'late_minutes',
+        'is_tip_eligible',
+        'is_edited_by_admin',
+        'admin_note',
+        'in_note',
+        'out_note',
+    ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'date' => 'date',
+            'scheduled_in_at' => 'datetime',
+            'lunch_in_at' => 'datetime',
+            'lunch_out_at' => 'datetime',
+            'dinner_in_at' => 'datetime',
+            'dinner_out_at' => 'datetime',
+            'is_tip_eligible' => 'boolean',
+            'is_edited_by_admin' => 'boolean',
+        ];
+    }
+
+    /**
+     * ランチ・ディナー2区間の合計勤務時間（分）。打刻が揃っていない区間は無視。
+     */
+    public function workMinutes(): ?int
+    {
+        $total = 0;
+
+        if ($this->lunch_in_at && $this->lunch_out_at) {
+            $m = $this->lunch_in_at->diffInMinutes($this->lunch_out_at);
+            if ($m > 0) {
+                $total += $m;
+            }
+        }
+
+        if ($this->dinner_in_at && $this->dinner_out_at) {
+            $m = $this->dinner_in_at->diffInMinutes($this->dinner_out_at);
+            if ($m > 0) {
+                $total += $m;
+            }
+        }
+
+        return $total > 0 ? $total : null;
+    }
+
+    /**
+     * 給与計算用：時間（小数・2桁）。例: 7.50
+     */
+    public function workHoursDecimal(): ?float
+    {
+        $m = $this->workMinutes();
+
+        if ($m === null) {
+            return null;
+        }
+
+        return round($m / 60, 2);
+    }
+
+    /**
+     * 表示用（例: 7.50 h）
+     */
+    public function formatWorkDuration(): ?string
+    {
+        $m = $this->workMinutes();
+
+        if ($m === null) {
+            return null;
+        }
+
+        $h = intdiv($m, 60);
+        $min = $m % 60;
+
+        return sprintf('%d:%02d', $h, $min);
+    }
+
+    /**
+     * その日に遅刻が記録されているか（1行につき1回までカウント）
+     */
+    public function hasLateOccurrence(): bool
+    {
+        return ($this->late_minutes ?? 0) > 0;
+    }
+
+    /**
+     * @return BelongsTo<Staff, $this>
+     */
+    public function staff(): BelongsTo
+    {
+        return $this->belongsTo(Staff::class);
+    }
+}
