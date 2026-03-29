@@ -16,7 +16,7 @@ Route::get('/hello_ws', function () {
     $adminUsers = User::all();
 
     Notification::make()
-        ->title('テスト通信大成功！')
+        ->title('ほいほーーい')
         ->body('これは /hello_ws から送られたリアルタイム通知です。')
         ->danger()
         ->sendToDatabase($adminUsers)
