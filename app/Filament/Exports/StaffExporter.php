@@ -13,14 +13,6 @@ class StaffExporter extends Exporter
 {
     protected static ?string $model = Staff::class;
 
-    /**
-     * 同一リクエスト内でエクスポートを完了させ、完了モーダルでダウンロード URL を表示できるようにする。
-     */
-    public function getJobConnection(): ?string
-    {
-        return 'sync';
-    }
-
     public static function getColumns(): array
     {
         $base = [

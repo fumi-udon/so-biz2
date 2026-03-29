@@ -66,28 +66,69 @@ class RoutineInventoryCompletionService
 
     /**
      * 全店・全スタッフの未完了を人間可読な行の配列で返す（クローズチェック用）。
+     * バルクロード＋メモリ集計（スタッフごとの N+1 クエリなし）。
      *
      * @return list<string>
      */
     public function globalIncompleteSummaries(?string $dateString = null): array
     {
         $dateString ??= BusinessDate::toDateString();
+
+        $staffById = Staff::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->keyBy('id');
+
+        if ($staffById->isEmpty()) {
+            return [];
+        }
+
+        $routineTasks = RoutineTask::query()
+            ->where('is_active', true)
+            ->get();
+
+        $staffRoutineTasks = $routineTasks->groupBy(
+            fn (RoutineTask $t): int => (int) $t->assigned_staff_id
+        );
+
+        $loggedRoutineTaskIds = RoutineTaskLog::query()
+            ->whereDate('date', $dateString)
+            ->pluck('routine_task_id')
+            ->all();
+        $loggedRoutineSet = array_fill_keys($loggedRoutineTaskIds, true);
+
+        $inventoryItems = InventoryItem::query()
+            ->where('is_active', true)
+            ->get();
+
+        $staffInventoryItems = $inventoryItems->groupBy(
+            fn (InventoryItem $i): int => (int) $i->assigned_staff_id
+        );
+
+        $recordedInventoryItemIds = InventoryRecord::query()
+            ->whereDate('date', $dateString)
+            ->pluck('inventory_item_id')
+            ->all();
+        $recordedInventorySet = array_fill_keys($recordedInventoryItemIds, true);
+
         $lines = [];
 
-        $staffIds = Staff::query()->where('is_active', true)->pluck('id');
+        foreach ($staffById as $staff) {
+            $sid = (int) $staff->id;
 
-        foreach ($staffIds as $sid) {
-            $staff = Staff::query()->find($sid);
-            if (! $staff) {
-                continue;
+            $tasksForStaff = $staffRoutineTasks->get($sid, collect());
+            foreach ($tasksForStaff as $task) {
+                if (! isset($loggedRoutineSet[$task->id])) {
+                    $lines[] = $staff->name.'（'.$task->category.'：'.$task->name.'）';
+                }
             }
 
-            foreach ($this->incompleteRoutineTasksForStaff($staff, $dateString) as $task) {
-                $lines[] = $staff->name.'（'.$task->category.'：'.$task->name.'）';
-            }
-
-            foreach ($this->incompleteInventoryItemsForStaff($staff, $dateString) as $item) {
-                $lines[] = $staff->name.'（棚卸し：'.$item->category.' '.$item->name.'）';
+            $itemsForStaff = $staffInventoryItems->get($sid, collect());
+            foreach ($itemsForStaff as $item) {
+                if (! isset($recordedInventorySet[$item->id])) {
+                    $lines[] = $staff->name.'（棚卸し：'.$item->category.' '.$item->name.'）';
+                }
             }
         }
 

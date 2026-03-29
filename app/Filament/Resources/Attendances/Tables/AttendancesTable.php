@@ -15,12 +15,13 @@ use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Filament\Support\Enums\Width;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
 class AttendancesTable
 {
-    protected static function timeInputColumn(string $attribute, string $label): TextInputColumn
+    protected static function clockInInputColumn(string $attribute, string $label): TextInputColumn
     {
         return TextInputColumn::make($attribute)
             ->label($label)
@@ -38,34 +39,82 @@ class AttendancesTable
                     ? $record->date->copy()->startOfDay()
                     : Carbon::parse($record->date)->startOfDay();
 
-                $record->{$attribute} = $date->setTimeFromTimeString($state);
+                $record->{$attribute} = $date->setTimeFromTimeString(trim($state));
                 $record->is_edited_by_admin = true;
                 $record->save();
 
                 return $state;
-            });
+            })
+            ->width('130px')
+            ->extraHeaderAttributes(['style' => 'min-width: 130px;'])
+            ->extraCellAttributes(['style' => 'min-width: 130px; vertical-align: middle;']);
     }
 
     protected static function clockOutInputColumn(string $attribute, string $label): TextInputColumn
     {
-        return self::timeInputColumn($attribute, $label)
+        return TextInputColumn::make($attribute)
+            ->label($label)
+            ->type('time')
+            ->updateStateUsing(function (?string $state, Attendance $record) use ($attribute): ?string {
+                if (blank($state)) {
+                    $record->{$attribute} = null;
+                    $record->is_edited_by_admin = true;
+                    $record->save();
+
+                    return null;
+                }
+
+                $date = $record->date instanceof Carbon
+                    ? $record->date->copy()->startOfDay()
+                    : Carbon::parse($record->date)->startOfDay();
+
+                $inAttr = match ($attribute) {
+                    'lunch_out_at' => 'lunch_in_at',
+                    'dinner_out_at' => 'dinner_in_at',
+                    default => null,
+                };
+
+                $out = $date->copy()->setTimeFromTimeString(trim($state));
+                $inAt = $inAttr !== null ? $record->{$inAttr} : null;
+
+                if ($inAt instanceof Carbon && $out->lessThan($inAt)) {
+                    $out->addDay();
+                }
+
+                $record->{$attribute} = $out;
+                $record->is_edited_by_admin = true;
+                $record->save();
+
+                return $state;
+            })
+            ->width('130px')
+            ->extraHeaderAttributes(['style' => 'min-width: 130px;'])
             ->extraCellAttributes(function (Attendance $record) use ($attribute): array {
+                $base = ['style' => 'min-width: 130px; vertical-align: middle;'];
                 $incomplete = match ($attribute) {
                     'lunch_out_at' => $record->lunch_in_at && ! $record->lunch_out_at,
                     'dinner_out_at' => $record->dinner_in_at && ! $record->dinner_out_at,
                     default => false,
                 };
 
-                return $incomplete
-                    ? ['class' => '!bg-danger-50 dark:!bg-danger-950/40 ring-1 ring-danger-500/40']
-                    : [];
+                if ($incomplete) {
+                    $base['class'] = '!bg-danger-50 dark:!bg-danger-950/40 ring-1 ring-danger-500/40';
+                }
+
+                return $base;
             });
+    }
+
+    protected static function timeInputColumn(string $attribute, string $label): TextInputColumn
+    {
+        return self::clockInInputColumn($attribute, $label);
     }
 
     public static function configure(Table $table): Table
     {
         return $table
             ->striped()
+            ->stackedOnMobile(false)
             ->paginated(false)
             ->defaultSort('date', 'asc')
             ->filters([
@@ -94,6 +143,8 @@ class AttendancesTable
                         $query->whereYear('date', $d->year)->whereMonth('date', $d->month);
                     }),
             ], layout: FiltersLayout::AboveContent)
+            ->filtersFormColumns(2)
+            ->filtersFormWidth(Width::FourExtraLarge)
             ->headerActions([
                 CreateAction::make()
                     ->label('＋ 新規打刻追加')
@@ -103,13 +154,16 @@ class AttendancesTable
                 TextColumn::make('date')
                     ->label('日付')
                     ->date('m/d (D)')
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap(false),
                 TextColumn::make('staff.name')
                     ->label('スタッフ')
-                    ->searchable(),
+                    ->searchable()
+                    ->wrap(false),
                 TextColumn::make('day_salary')
                     ->label('日給(参考)')
                     ->alignEnd()
+                    ->wrap(false)
                     ->formatStateUsing(function (Attendance $record): string {
                         $minutes = $record->calculateTotalMinutes();
                         $wage = $record->staff?->hourly_wage;
@@ -121,13 +175,14 @@ class AttendancesTable
 
                         return number_format($yen).' 円';
                     }),
-                self::timeInputColumn('lunch_in_at', 'L-In'),
+                self::clockInInputColumn('lunch_in_at', 'L-In'),
                 self::clockOutInputColumn('lunch_out_at', 'L-Out'),
-                self::timeInputColumn('dinner_in_at', 'D-In'),
+                self::clockInInputColumn('dinner_in_at', 'D-In'),
                 self::clockOutInputColumn('dinner_out_at', 'D-Out'),
                 TextColumn::make('id')
                     ->label('備考')
                     ->sortable(false)
+                    ->wrap(false)
                     ->formatStateUsing(function ($state, Attendance $record): string {
                         $parts = [];
                         if ($record->hasMissingClockOut()) {
@@ -141,7 +196,10 @@ class AttendancesTable
                     })
                     ->color(fn (Attendance $record): ?string => $record->hasMissingClockOut() ? 'danger' : null),
                 TextInputColumn::make('admin_note')
-                    ->label('メモ'),
+                    ->label('メモ')
+                    ->width('280px')
+                    ->extraHeaderAttributes(['style' => 'min-width: 250px;'])
+                    ->extraCellAttributes(['style' => 'min-width: 250px; vertical-align: middle;']),
             ])
             ->recordActions([
                 DeleteAction::make()

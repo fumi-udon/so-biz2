@@ -14,14 +14,6 @@ class StaffImporter extends Importer
 {
     protected static ?string $model = Staff::class;
 
-    /**
-     * キューをまたがず同一リクエストで処理し、ワーカー未起動でも反映されるようにする。
-     */
-    public function getJobConnection(): ?string
-    {
-        return 'sync';
-    }
-
     public static function getColumns(): array
     {
         $columns = [

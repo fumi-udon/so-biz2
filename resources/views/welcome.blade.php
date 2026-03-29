@@ -10,13 +10,16 @@
 <body class="bg-light d-flex flex-column min-vh-100">
     <x-client-nav />
 
-    <main class="container py-4 py-md-5 flex-grow-1" style="max-width: 800px;">
-        <div class="mb-4 text-center text-md-start">
+    <main class="container py-3 py-md-5 flex-grow-1" style="max-width: 800px;">
+        @if (session('error'))
+            <div class="alert alert-danger shadow-sm rounded-4 py-2 small mb-3" role="alert">{{ session('error') }}</div>
+        @endif
+        <div class="mb-3 mb-md-4 text-center text-md-start">
             <h1 class="h3 fw-bold text-dark">業務メニュー</h1>
             <p class="text-secondary mb-0 small">担当の業務を選択してください。</p>
         </div>
 
-        <div class="row row-cols-1 row-cols-md-2 g-4">
+        <div class="row row-cols-1 row-cols-md-2 g-3 g-md-4">
             <div class="col">
                 <a href="{{ route('timecard.index') }}" class="text-decoration-none">
                     <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
@@ -30,15 +33,20 @@
             </div>
 
             <div class="col">
-                <a href="{{ route('mypage.index') }}" class="text-decoration-none">
-                    <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
-                        <div class="card-body text-center p-4">
-                            <div class="display-4 text-success mb-3"><i class="bi bi-clipboard2-check"></i></div>
-                            <h2 class="h5 fw-bold text-dark mb-2">マイページ</h2>
-                            <p class="text-secondary small mb-0">日々の掃除タスクや棚卸しを入力します。</p>
+                <button
+                    type="button"
+                    class="w-100 text-start border-0 bg-transparent p-0 rounded-3 hover-shadow transition"
+                    data-bs-toggle="modal"
+                    data-bs-target="#mypagePinModal"
+                >
+                    <div class="card h-100 shadow-sm border-0 bg-white">
+                        <div class="card-body text-center p-3 p-md-4">
+                            <div class="display-4 text-success mb-2 mb-md-3"><i class="bi bi-clipboard2-check"></i></div>
+                            <h2 class="h5 fw-bold text-dark mb-1 mb-md-2">マイページ</h2>
+                            <p class="text-secondary small mb-0">名前とPIN · タスク・棚卸し</p>
                         </div>
                     </div>
-                </a>
+                </button>
             </div>
 
             <div class="col">

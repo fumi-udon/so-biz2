@@ -7,11 +7,13 @@ use App\Models\Setting;
 use App\Models\Staff;
 use App\Services\RoutineInventoryCompletionService;
 use App\Support\BusinessDate;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\View\View;
 
 class TimecardController extends Controller
@@ -59,9 +61,11 @@ class TimecardController extends Controller
 
         $second = isset($m[3]) ? (int) $m[3] : 0;
 
-        return $clockAt->copy()
-            ->startOfDay()
-            ->setTime((int) $m[1], (int) $m[2], $second);
+        $hour = (int) $m[1];
+
+        $base = $clockAt->copy()->startOfDay();
+
+        return $base->setTime($hour, (int) $m[2], $second);
     }
 
     /**
@@ -81,7 +85,7 @@ class TimecardController extends Controller
             return null;
         }
 
-        $dayKey = $this->englishDayKey($clockAt);
+        $dayKey = $this->englishDayKey($this->resolveTargetBusinessDate());
         $dayShifts = $shifts[$dayKey] ?? null;
 
         if (! is_array($dayShifts)) {
@@ -160,19 +164,32 @@ class TimecardController extends Controller
                 ->with('error', 'Aucun code PIN défini. Contactez un responsable.');
         }
 
+        $pinKey = 'pin-attempt:'.$staff->id;
+
+        if (RateLimiter::tooManyAttempts($pinKey, 5)) {
+            return redirect()
+                ->back()
+                ->withInput($request->except('pin_code'))
+                ->with('error', 'PINの入力を複数回間違えました。1分間お待ちください。');
+        }
+
         if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
+            RateLimiter::hit($pinKey, 60);
+
             return redirect()
                 ->back()
                 ->withInput($request->except('pin_code'))
                 ->with('error', 'Code PIN incorrect.');
         }
 
+        RateLimiter::clear($pinKey);
+
         $targetDate = $this->resolveTargetBusinessDate();
         $dateString = $targetDate->toDateString();
 
         // 前日の未退勤があっても翌営業日の出勤打刻はブロックしない（未対応のブロックはここにない）。
 
-        if (in_array($validated['action'], ['lunch_out', 'dinner_out'], true)) {
+        if ($validated['action'] === 'dinner_out') {
             $gate = app(RoutineInventoryCompletionService::class);
 
             if (! $gate->staffHasAllRoutineAndInventoryDone($staff, $dateString)) {
@@ -189,38 +206,49 @@ class TimecardController extends Controller
 
         $recordedLate = false;
 
-        DB::transaction(function () use ($request, $staff, $dateString, $column, $clockAt, $lateDelta, &$recordedLate): void {
-            $attendance = Attendance::query()
-                ->where('staff_id', $staff->id)
-                ->whereDate('date', $dateString)
-                ->lockForUpdate()
-                ->first();
+        try {
+            DB::transaction(function () use ($request, $staff, $dateString, $column, $clockAt, $lateDelta, &$recordedLate): void {
+                $attendance = Attendance::query()
+                    ->where('staff_id', $staff->id)
+                    ->whereDate('date', $dateString)
+                    ->lockForUpdate()
+                    ->first();
 
-            if (! $attendance) {
-                $attendance = new Attendance;
-                $attendance->staff_id = $staff->id;
-                $attendance->date = $dateString;
-                $attendance->late_minutes = 0;
-                $attendance->is_tip_eligible = false;
-                $attendance->is_edited_by_admin = false;
-            } elseif ($attendance->getAttribute($column) !== null) {
-                throw new HttpResponseException(
-                    redirect()
-                        ->back()
-                        ->withInput($request->except('pin_code'))
-                        ->with('error', '既に打刻済みです。')
-                );
+                if (! $attendance) {
+                    $attendance = new Attendance;
+                    $attendance->staff_id = $staff->id;
+                    $attendance->date = $dateString;
+                    $attendance->late_minutes = 0;
+                    $attendance->is_tip_eligible = false;
+                    $attendance->is_edited_by_admin = false;
+                } elseif ($attendance->getAttribute($column) !== null) {
+                    throw new HttpResponseException(
+                        redirect()
+                            ->back()
+                            ->withInput($request->except('pin_code'))
+                            ->with('error', '既に打刻済みです。')
+                    );
+                }
+
+                $attendance->{$column} = $clockAt;
+
+                if ($lateDelta !== null && $lateDelta > 0) {
+                    $attendance->late_minutes = (int) ($attendance->late_minutes ?? 0) + $lateDelta;
+                    $recordedLate = true;
+                }
+
+                $attendance->save();
+            });
+        } catch (QueryException $e) {
+            if ($this->isAttendanceDuplicateKeyException($e)) {
+                return redirect()
+                    ->back()
+                    ->withInput($request->except('pin_code'))
+                    ->with('error', '既に打刻済みです。');
             }
 
-            $attendance->{$column} = $clockAt;
-
-            if ($lateDelta !== null && $lateDelta > 0) {
-                $attendance->late_minutes = (int) ($attendance->late_minutes ?? 0) + $lateDelta;
-                $recordedLate = true;
-            }
-
-            $attendance->save();
-        });
+            throw $e;
+        }
 
         $isClockIn = in_array($validated['action'], ['lunch_in', 'dinner_in'], true);
 
@@ -240,5 +268,22 @@ class TimecardController extends Controller
         return redirect()
             ->route('timecard.index')
             ->with('success_modal', true);
+    }
+
+    protected function isAttendanceDuplicateKeyException(QueryException $e): bool
+    {
+        if (($e->errorInfo[0] ?? null) === '23505') {
+            return true;
+        }
+
+        if (isset($e->errorInfo[1]) && (int) $e->errorInfo[1] === 1062) {
+            return true;
+        }
+
+        $msg = $e->getMessage();
+
+        return str_contains($msg, 'Duplicate entry')
+            || str_contains($msg, 'UNIQUE constraint failed')
+            || str_contains($msg, 'duplicate key value violates unique constraint');
     }
 }

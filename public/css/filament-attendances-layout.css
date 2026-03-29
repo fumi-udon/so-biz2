@@ -1,0 +1,35 @@
+/**
+ * Loaded only on filament.admin.resources.attendances.index — keeps the data table
+ * tabular on narrow viewports and enables horizontal scroll.
+ */
+.fi-resource-list-records-page .fi-ta-content-ctn {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.fi-resource-list-records-page .fi-ta-table {
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
+}
+
+.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile {
+    display: table !important;
+}
+
+.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > thead {
+    display: table-header-group !important;
+}
+
+.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > tbody {
+    display: table-row-group !important;
+}
+
+.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > tbody > tr {
+    display: table-row !important;
+}
+
+.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell,
+.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > thead > tr > .fi-ta-header-cell {
+    display: table-cell !important;
+}

@@ -35,6 +35,11 @@ class CloseCheckController extends Controller
 
     public function process(Request $request): RedirectResponse
     {
+        $incomplete = app(RoutineInventoryCompletionService::class)->globalIncompleteSummaries();
+        if (! empty($incomplete)) {
+            abort(403, '未完了のタスクまたは棚卸しが残っているため、クローズ処理を実行できません。');
+        }
+
         $validated = $request->validate([
             'staff_id' => ['required', 'integer', 'exists:staff,id'],
             'pin_code' => ['required', 'string', 'digits:4'],

@@ -156,6 +156,10 @@ class ClientInventoryController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        if (count($request->all()) >= (int) (ini_get('max_input_vars') ?: 1000) - 20) {
+            abort(400, 'データ量がサーバーの上限を超過しました。システム管理者に連絡してください。');
+        }
+
         $validated = $request->validate([
             'staff_id' => ['required', 'integer', 'exists:staff,id'],
             'timing' => ['required', 'string', 'max:255'],

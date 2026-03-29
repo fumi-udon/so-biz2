@@ -34,7 +34,12 @@
                     <a class="nav-link py-1 small" href="{{ route('timecard.index') }}">タイムカード</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link py-1 small" href="{{ route('mypage.index') }}">マイページ</a>
+                    <a
+                        class="nav-link py-1 small"
+                        href="#mypagePinModal"
+                        data-bs-toggle="modal"
+                        data-bs-target="#mypagePinModal"
+                    >マイページ</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link py-1 small" href="{{ route('mypage.attendance') }}">勤怠</a>
@@ -49,3 +54,5 @@
         </div>
     </div>
 </nav>
+
+<x-mypage-entry-modal />

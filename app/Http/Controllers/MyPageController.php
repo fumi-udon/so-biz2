@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -162,6 +163,43 @@ class MyPageController extends Controller
             'routinesAllComplete' => $routinesAllComplete,
             'routinesPendingCount' => $routinesPendingCount,
         ]);
+    }
+
+    public function openByPin(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'staff_id' => ['required', 'integer', 'exists:staff,id'],
+            'pin_code' => ['required', 'string', 'digits:4'],
+        ]);
+
+        $staff = Staff::query()
+            ->where('id', $validated['staff_id'])
+            ->where('is_active', true)
+            ->first();
+
+        if (! $staff) {
+            return back()->with('error', 'スタッフが見つかりません。');
+        }
+
+        if ($staff->pin_code === null || $staff->pin_code === '') {
+            return back()->with('error', 'このスタッフの PIN が未設定です。');
+        }
+
+        $pinKey = 'pin-attempt:'.$staff->id;
+
+        if (RateLimiter::tooManyAttempts($pinKey, 5)) {
+            return back()->with('error', 'PINの入力を複数回間違えました。1分間お待ちください。');
+        }
+
+        if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
+            RateLimiter::hit($pinKey, 60);
+
+            return back()->with('error', 'PIN が正しくありません。');
+        }
+
+        RateLimiter::clear($pinKey);
+
+        return redirect()->route('mypage.index', ['staff_id' => $staff->id]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -419,12 +457,24 @@ class MyPageController extends Controller
                 ->with('error', 'PIN が設定されていません。');
         }
 
+        $pinKey = 'pin-attempt:'.$staff->id;
+
+        if (RateLimiter::tooManyAttempts($pinKey, 5)) {
+            return redirect()
+                ->route('mypage.attendance', ['staff_id' => $staff->id])
+                ->with('error', 'PINの入力を複数回間違えました。1分間お待ちください。');
+        }
+
         if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
+            RateLimiter::hit($pinKey, 60);
+
             return redirect()
                 ->route('mypage.attendance', ['staff_id' => $staff->id])
                 ->withInput($request->except(['pin_code', 'manager_pin']))
                 ->with('error', '本人の PIN が正しくありません。');
         }
+
+        RateLimiter::clear($pinKey);
 
         /** @var Attendance|null $attendance */
         $attendance = Attendance::query()->whereKey($validated['attendance_id'])->first();
@@ -440,8 +490,8 @@ class MyPageController extends Controller
             : Carbon::parse($attendance->date)->startOfDay();
 
         if ($validated['mode'] === 'out') {
-            $attendance->lunch_out_at = $this->parseNullableTime($validated['lunch_out'] ?? null, $date);
-            $attendance->dinner_out_at = $this->parseNullableTime($validated['dinner_out'] ?? null, $date);
+            $attendance->lunch_out_at = $this->parseShiftOutTime($validated['lunch_out'] ?? null, $date, $attendance->lunch_in_at);
+            $attendance->dinner_out_at = $this->parseShiftOutTime($validated['dinner_out'] ?? null, $date, $attendance->dinner_in_at);
             $attendance->is_edited_by_admin = false;
 
             $attendance->save();
@@ -477,8 +527,8 @@ class MyPageController extends Controller
                 ->with('error', 'マネージャー PIN が正しくないか、権限がありません。');
         }
 
-        $attendance->lunch_in_at = $this->parseNullableTime($validated['lunch_in'] ?? null, $date);
-        $attendance->dinner_in_at = $this->parseNullableTime($validated['dinner_in'] ?? null, $date);
+        $attendance->lunch_in_at = $this->parseShiftInTime($validated['lunch_in'] ?? null, $date);
+        $attendance->dinner_in_at = $this->parseShiftInTime($validated['dinner_in'] ?? null, $date);
         $attendance->approved_by_manager_id = $manager->id;
         $attendance->is_edited_by_admin = false;
         $attendance->save();
@@ -491,7 +541,7 @@ class MyPageController extends Controller
             ->with('status', '出勤時間を更新しました（マネージャー承認済み）。');
     }
 
-    protected function parseNullableTime(?string $value, Carbon $date): ?Carbon
+    protected function parseShiftInTime(?string $value, Carbon $date): ?Carbon
     {
         if ($value === null || trim($value) === '') {
             return null;
@@ -499,6 +549,24 @@ class MyPageController extends Controller
 
         $day = $date->copy()->startOfDay();
 
-        return $day->setTimeFromTimeString($value);
+        return $day->setTimeFromTimeString(trim($value));
+    }
+
+    /**
+     * 退勤時刻: 出勤が存在し、かつ同日付上で退勤が出勤より過去に見える場合のみ翌日に繰り上げ（夜越え）。
+     */
+    protected function parseShiftOutTime(?string $value, Carbon $businessDate, ?Carbon $inAt): ?Carbon
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        $out = $businessDate->copy()->startOfDay()->setTimeFromTimeString(trim($value));
+
+        if ($inAt !== null && $out->lessThan($inAt)) {
+            $out->addDay();
+        }
+
+        return $out;
     }
 }

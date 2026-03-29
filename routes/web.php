@@ -18,6 +18,7 @@ Route::post('/close-check/process', [CloseCheckController::class, 'process'])->n
 Route::get('/close-check/success', [CloseCheckController::class, 'success'])->name('close-check.success');
 
 Route::get('/mypage', [MyPageController::class, 'index'])->name('mypage.index');
+Route::post('/mypage/open', [MyPageController::class, 'openByPin'])->name('mypage.open');
 Route::post('/mypage', [MyPageController::class, 'store'])->name('mypage.store');
 Route::get('/mypage/attendance', [MyPageController::class, 'attendance'])->name('mypage.attendance');
 Route::post('/mypage/attendance', [MyPageController::class, 'updateAttendance'])->name('mypage.attendance.update');

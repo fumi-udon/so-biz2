@@ -13,11 +13,6 @@ class InventoryItemImporter extends Importer
 {
     protected static ?string $model = InventoryItem::class;
 
-    public function getJobConnection(): ?string
-    {
-        return 'sync';
-    }
-
     public static function getColumns(): array
     {
         return [
