@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Attendance;
 use App\Models\InventoryItem;
 use App\Models\InventoryRecord;
 use App\Models\RoutineTask;
@@ -74,7 +75,13 @@ class RoutineInventoryCompletionService
     {
         $dateString ??= BusinessDate::toDateString();
 
+        $attendanceStaffIds = Attendance::query()
+            ->whereDate('date', $dateString)
+            ->pluck('staff_id')
+            ->all();
+
         $staffById = Staff::query()
+            ->whereIn('id', $attendanceStaffIds)
             ->where('is_active', true)
             ->orderBy('name')
             ->get()

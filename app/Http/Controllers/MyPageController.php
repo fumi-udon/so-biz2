@@ -543,30 +543,12 @@ class MyPageController extends Controller
 
     protected function parseShiftInTime(?string $value, Carbon $date): ?Carbon
     {
-        if ($value === null || trim($value) === '') {
-            return null;
-        }
-
-        $day = $date->copy()->startOfDay();
-
-        return $day->setTimeFromTimeString(trim($value));
+        return \App\Support\BusinessDate::parseTimeForBusinessDate($value, $date);
     }
 
-    /**
-     * 退勤時刻: 出勤が存在し、かつ同日付上で退勤が出勤より過去に見える場合のみ翌日に繰り上げ（夜越え）。
-     */
-    protected function parseShiftOutTime(?string $value, Carbon $businessDate, ?Carbon $inAt): ?Carbon
+    protected function parseShiftOutTime(?string $value, Carbon $date, ?Carbon $inAt): ?Carbon
     {
-        if ($value === null || trim($value) === '') {
-            return null;
-        }
-
-        $out = $businessDate->copy()->startOfDay()->setTimeFromTimeString(trim($value));
-
-        if ($inAt !== null && $out->lessThan($inAt)) {
-            $out->addDay();
-        }
-
-        return $out;
+        return \App\Support\BusinessDate::parseTimeForBusinessDate($value, $date);
     }
+
 }

@@ -62,14 +62,14 @@ class Attendance extends Model
         $total = 0;
 
         if ($this->lunch_in_at && $this->lunch_out_at) {
-            $m = $this->lunch_in_at->diffInMinutes($this->lunch_out_at);
+            $m = $this->lunch_in_at->diffInMinutes($this->lunch_out_at, false);
             if ($m > 0) {
                 $total += $m;
             }
         }
 
         if ($this->dinner_in_at && $this->dinner_out_at) {
-            $m = $this->dinner_in_at->diffInMinutes($this->dinner_out_at);
+            $m = $this->dinner_in_at->diffInMinutes($this->dinner_out_at, false);
             if ($m > 0) {
                 $total += $m;
             }

@@ -49,23 +49,11 @@ class TimecardController extends Controller
     }
 
     /**
-     * Interprète une heure planifiée (ex. "11:30", "11:30:00") pour le jour calendaire du pointage.
+     * Interprète une heure planifiée（fixed_shifts）を、打刻時刻の日付アンカーで解釈する。
      */
     protected function scheduledDateTimeToday(string $timeString, Carbon $clockAt): ?Carbon
     {
-        $timeString = trim($timeString);
-
-        if (! preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $timeString, $m)) {
-            return null;
-        }
-
-        $second = isset($m[3]) ? (int) $m[3] : 0;
-
-        $hour = (int) $m[1];
-
-        $base = $clockAt->copy()->startOfDay();
-
-        return $base->setTime($hour, (int) $m[2], $second);
+        return \App\Support\BusinessDate::parseTimeForBusinessDate($timeString, $clockAt);
     }
 
     /**

@@ -39,7 +39,7 @@ class AttendancesTable
                     ? $record->date->copy()->startOfDay()
                     : Carbon::parse($record->date)->startOfDay();
 
-                $record->{$attribute} = $date->setTimeFromTimeString(trim($state));
+                $record->{$attribute} = \App\Support\BusinessDate::parseTimeForBusinessDate($state, $date);
                 $record->is_edited_by_admin = true;
                 $record->save();
 
@@ -68,20 +68,7 @@ class AttendancesTable
                     ? $record->date->copy()->startOfDay()
                     : Carbon::parse($record->date)->startOfDay();
 
-                $inAttr = match ($attribute) {
-                    'lunch_out_at' => 'lunch_in_at',
-                    'dinner_out_at' => 'dinner_in_at',
-                    default => null,
-                };
-
-                $out = $date->copy()->setTimeFromTimeString(trim($state));
-                $inAt = $inAttr !== null ? $record->{$inAttr} : null;
-
-                if ($inAt instanceof Carbon && $out->lessThan($inAt)) {
-                    $out->addDay();
-                }
-
-                $record->{$attribute} = $out;
+                $record->{$attribute} = \App\Support\BusinessDate::parseTimeForBusinessDate($state, $date);
                 $record->is_edited_by_admin = true;
                 $record->save();
 
