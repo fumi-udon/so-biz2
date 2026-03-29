@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Attendance;
 use App\Models\Setting;
 use App\Models\Staff;
+use App\Models\User;
+use Filament\Notifications\Notification;
 use App\Services\RoutineInventoryCompletionService;
 use App\Support\BusinessDate;
 use Illuminate\Database\QueryException;
@@ -247,6 +249,23 @@ class TimecardController extends Controller
 
             throw $e;
         }
+
+        // --- リアルタイム通知の送信 ---
+        $actionLabel = match ($validated['action']) {
+            'lunch_in' => 'ランチ出勤',
+            'lunch_out' => 'ランチ退勤',
+            'dinner_in' => 'ディナー出勤',
+            'dinner_out' => 'ディナー退勤',
+            default => '打刻',
+        };
+
+        $adminUsers = User::all();
+        Notification::make()
+            ->title("{$staff->name} さんが{$actionLabel}しました")
+            ->success()
+            ->sendToDatabase($adminUsers)
+            ->broadcast($adminUsers);
+        // ------------------------------
 
         $isClockIn = in_array($validated['action'], ['lunch_in', 'dinner_in'], true);
 

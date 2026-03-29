@@ -1,0 +1,94 @@
+<?php
+
+namespace App\Filament\Widgets;
+
+use App\Models\Attendance;
+use App\Models\RoutineTask;
+use App\Models\RoutineTaskLog;
+use App\Support\BusinessDate;
+use Filament\Support\Icons\Heroicon;
+use Filament\Widgets\StatsOverviewWidget;
+use Filament\Widgets\StatsOverviewWidget\Stat;
+use Illuminate\Support\Number;
+
+class HeadquartersStatsWidget extends StatsOverviewWidget
+{
+    protected static ?int $sort = -10;
+
+    protected ?string $heading = '本日の本部サマリー';
+
+    protected ?string $description = '営業日基準（BusinessDate）';
+
+    /**
+     * @return array<Stat>
+     */
+    protected function getStats(): array
+    {
+        $dateString = BusinessDate::toDateString();
+
+        $attendances = Attendance::query()
+            ->whereDate('date', $dateString)
+            ->with(['staff' => fn ($q) => $q->withTrashed()])
+            ->get();
+
+        $laborCost = 0.0;
+        foreach ($attendances as $attendance) {
+            $minutes = $attendance->workMinutes();
+            $wage = $attendance->staff?->hourly_wage;
+            if ($minutes !== null && $minutes > 0 && $wage !== null && (int) $wage > 0) {
+                $laborCost += ($minutes / 60) * (int) $wage;
+            }
+        }
+
+        $attendanceCount = $attendances->count();
+
+        $attendanceStaffIds = $attendances->pluck('staff_id')->unique()->values()->all();
+
+        $totalTasks = 0;
+        $completedCount = 0;
+
+        if ($attendanceStaffIds !== []) {
+            $taskIds = RoutineTask::query()
+                ->whereIn('assigned_staff_id', $attendanceStaffIds)
+                ->where('is_active', true)
+                ->pluck('id');
+
+            $totalTasks = $taskIds->count();
+
+            if ($totalTasks > 0) {
+                $completedCount = RoutineTaskLog::query()
+                    ->whereDate('date', $dateString)
+                    ->whereIn('routine_task_id', $taskIds->all())
+                    ->count();
+            }
+        }
+
+        $taskRateLabel = $totalTasks > 0
+            ? Number::percentage((float) round(100 * $completedCount / $totalTasks, 1), 1, 1, 'fr_TN')
+            : '—';
+
+        return [
+            Stat::make(
+                '本日のリアルタイム人件費',
+                Number::currency($laborCost, 'TND', 'fr_TN', 0),
+            )
+                ->description('確定済み勤務区間 × 時給の合計')
+                ->icon(Heroicon::OutlinedBanknotes)
+                ->color('success'),
+            Stat::make(
+                '本日の出勤人数',
+                (string) $attendanceCount,
+            )
+                ->description('Attendance レコード数')
+                ->icon(Heroicon::OutlinedUsers)
+                ->color('info'),
+            Stat::make(
+                '本日のタスク完了率',
+                $taskRateLabel,
+            )
+                ->description($totalTasks > 0 ? "完了 {$completedCount} / 全 {$totalTasks} 件" : '出勤者に割当のタスクなし')
+                ->icon(Heroicon::OutlinedCheckCircle)
+                ->color('warning'),
+        ];
+    }
+}
