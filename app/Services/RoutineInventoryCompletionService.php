@@ -101,6 +101,7 @@ class RoutineInventoryCompletionService
 
         $loggedRoutineTaskIds = RoutineTaskLog::query()
             ->whereDate('date', $dateString)
+            ->whereIn('completed_by_staff_id', $attendanceStaffIds)
             ->pluck('routine_task_id')
             ->all();
         $loggedRoutineSet = array_fill_keys($loggedRoutineTaskIds, true);
@@ -115,6 +116,7 @@ class RoutineInventoryCompletionService
 
         $recordedInventoryItemIds = InventoryRecord::query()
             ->whereDate('date', $dateString)
+            ->whereIn('recorded_by_staff_id', $attendanceStaffIds)
             ->pluck('inventory_item_id')
             ->all();
         $recordedInventorySet = array_fill_keys($recordedInventoryItemIds, true);

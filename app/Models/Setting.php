@@ -7,11 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class Setting extends Model
 {
     /**
-     * @var array<string, mixed>
-     */
-    protected static array $cache = [];
-
-    /**
      * @var list<string>
      */
     protected $fillable = [
@@ -32,13 +27,17 @@ class Setting extends Model
 
     public static function getValue(string $key, mixed $default = null): mixed
     {
-        if (array_key_exists($key, static::$cache)) {
-            return static::$cache[$key];
+        $cacheKey = 'setting_cache_'.$key;
+
+        if (app()->has($cacheKey)) {
+            return app()->make($cacheKey);
         }
 
         $row = static::query()->where('key', $key)->first();
-        static::$cache[$key] = ($row !== null && $row->value !== null) ? $row->value : $default;
+        $val = ($row !== null && $row->value !== null) ? $row->value : $default;
 
-        return static::$cache[$key];
+        app()->instance($cacheKey, $val);
+
+        return $val;
     }
 }

@@ -490,8 +490,20 @@ class MyPageController extends Controller
             : Carbon::parse($attendance->date)->startOfDay();
 
         if ($validated['mode'] === 'out') {
-            $attendance->lunch_out_at = $this->parseShiftOutTime($validated['lunch_out'] ?? null, $date, $attendance->lunch_in_at);
-            $attendance->dinner_out_at = $this->parseShiftOutTime($validated['dinner_out'] ?? null, $date, $attendance->dinner_in_at);
+            $lunchOut = $this->parseShiftOutTime($validated['lunch_out'] ?? null, $date, $attendance->lunch_in_at);
+            $dinnerOut = $this->parseShiftOutTime($validated['dinner_out'] ?? null, $date, $attendance->dinner_in_at);
+
+            foreach ([$lunchOut, $dinnerOut] as $parsedTime) {
+                if ($parsedTime && $parsedTime->isFuture()) {
+                    return redirect()
+                        ->back()
+                        ->withInput($request->except(['pin_code', 'manager_pin']))
+                        ->with('error', '未来の時間は入力できません。');
+                }
+            }
+
+            $attendance->lunch_out_at = $lunchOut;
+            $attendance->dinner_out_at = $dinnerOut;
             $attendance->is_edited_by_admin = false;
 
             $attendance->save();
@@ -527,8 +539,20 @@ class MyPageController extends Controller
                 ->with('error', 'マネージャー PIN が正しくないか、権限がありません。');
         }
 
-        $attendance->lunch_in_at = $this->parseShiftInTime($validated['lunch_in'] ?? null, $date);
-        $attendance->dinner_in_at = $this->parseShiftInTime($validated['dinner_in'] ?? null, $date);
+        $lunchIn = $this->parseShiftInTime($validated['lunch_in'] ?? null, $date);
+        $dinnerIn = $this->parseShiftInTime($validated['dinner_in'] ?? null, $date);
+
+        foreach ([$lunchIn, $dinnerIn] as $parsedTime) {
+            if ($parsedTime && $parsedTime->isFuture()) {
+                return redirect()
+                    ->back()
+                    ->withInput($request->except(['pin_code', 'manager_pin']))
+                    ->with('error', '未来の時間は入力できません。');
+            }
+        }
+
+        $attendance->lunch_in_at = $lunchIn;
+        $attendance->dinner_in_at = $dinnerIn;
         $attendance->approved_by_manager_id = $manager->id;
         $attendance->is_edited_by_admin = false;
         $attendance->save();

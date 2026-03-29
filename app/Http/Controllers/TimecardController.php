@@ -196,20 +196,30 @@ class TimecardController extends Controller
 
         try {
             DB::transaction(function () use ($request, $staff, $dateString, $column, $clockAt, $lateDelta, &$recordedLate): void {
-                $attendance = Attendance::query()
-                    ->where('staff_id', $staff->id)
-                    ->whereDate('date', $dateString)
-                    ->lockForUpdate()
-                    ->first();
+                $attendance = Attendance::query()->firstOrCreate(
+                    [
+                        'staff_id' => $staff->id,
+                        'date' => $dateString,
+                    ],
+                    [
+                        'late_minutes' => 0,
+                        'is_tip_eligible' => false,
+                        'is_edited_by_admin' => false,
+                    ],
+                );
 
-                if (! $attendance) {
-                    $attendance = new Attendance;
-                    $attendance->staff_id = $staff->id;
-                    $attendance->date = $dateString;
-                    $attendance->late_minutes = 0;
-                    $attendance->is_tip_eligible = false;
-                    $attendance->is_edited_by_admin = false;
-                } elseif ($attendance->getAttribute($column) !== null) {
+                $attendance = Attendance::query()->whereKey($attendance->id)->lockForUpdate()->first();
+
+                if ($attendance === null) {
+                    throw new HttpResponseException(
+                        redirect()
+                            ->back()
+                            ->withInput($request->except('pin_code'))
+                            ->with('error', '打刻を処理できませんでした。もう一度お試しください。')
+                    );
+                }
+
+                if ($attendance->getAttribute($column) !== null) {
                     throw new HttpResponseException(
                         redirect()
                             ->back()
