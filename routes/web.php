@@ -4,6 +4,7 @@ use App\Http\Controllers\ClientInventoryController;
 use App\Http\Controllers\CloseCheckController;
 use App\Http\Controllers\MyPageController;
 use App\Http\Controllers\TimecardController;
+use App\Livewire\ClientOrderForm;
 use App\Models\User;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\Route;
@@ -12,18 +13,8 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
-Route::get('/hello_ws', function () {
-    $adminUsers = User::all();
+Route::get('/order/{table_number}', ClientOrderForm::class)->name('order.table');
 
-    Notification::make()
-        ->title('ほいほーーい')
-        ->body('これは /hello_ws から送られたリアルタイム通知です。')
-        ->danger()
-        ->sendToDatabase($adminUsers)
-        ->broadcast($adminUsers);
-
-    return '送信完了！急いで管理画面を見てください。';
-});
 
 Route::get('/timecard', [TimecardController::class, 'index'])->name('timecard.index');
 Route::post('/timecard/process', [TimecardController::class, 'process'])->name('timecard.process');

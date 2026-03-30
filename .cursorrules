@@ -14,3 +14,12 @@
 - AIは、`composer.json` や `compose.yaml` のバージョン番号をユーザーの明示的な許可なく1ミリも変更してはならない。
 - 実在しないバージョンを「最新のはずだ」とハルシネーション（幻覚）で生成することを禁ずる。
 - 新機能実装時、既存の「勤怠・在庫管理」の型定義（`?string $navigationGroup`等）を破壊してはならない。
+
+# 未コミットの変更をすべて破棄し、タグの状態に強制リセット
+git reset --hard stable-base
+git clean -fd
+
+# 念のためDockerを再起動・キャッシュクリア
+./vendor/bin/sail down
+./vendor/bin/sail up -d
+./vendor/bin/sail artisan optimize:clear
