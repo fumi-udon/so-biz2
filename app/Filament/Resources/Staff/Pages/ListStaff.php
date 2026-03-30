@@ -13,7 +13,7 @@ use Filament\Actions\Exports\Models\Export;
 use Filament\Actions\ImportAction;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\ListRecords;
-use Filament\Support\Enums\Width;
+use Filament\Support\Enums\MaxWidth;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\HtmlString;
@@ -60,7 +60,7 @@ class ListStaff extends ListRecords
                 ->hidden()
                 ->modalHeading('エクスポート完了')
                 ->modalDescription('CSVの準備ができました。下のボタンから保存してください。')
-                ->modalWidth(Width::Medium)
+                ->modalWidth(MaxWidth::Medium)
                 ->modalSubmitAction(false)
                 ->modalCancelActionLabel('閉じる')
                 ->modalContent(fn (ListStaff $livewire): HtmlString => new HtmlString(

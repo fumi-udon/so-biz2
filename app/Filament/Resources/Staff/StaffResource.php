@@ -2,36 +2,33 @@
 
 namespace App\Filament\Resources\Staff;
 
+use App\Filament\Resources\Staff\Forms\StaffForm;
 use App\Filament\Resources\Staff\Pages\CreateStaff;
 use App\Filament\Resources\Staff\Pages\EditStaff;
 use App\Filament\Resources\Staff\Pages\ListStaff;
-use App\Filament\Resources\Staff\Schemas\StaffForm;
 use App\Filament\Resources\Staff\Tables\StaffTable;
 use App\Models\Staff;
-use BackedEnum;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 class StaffResource extends Resource
 {
     protected static ?string $model = Staff::class;
 
-    protected static string|UnitEnum|null $navigationGroup = '店舗・勤怠管理';
+    protected static ?string $navigationGroup = '店舗・勤怠管理';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->with('shop');
     }
 
-    public static function form(Schema $schema): Schema
+    public static function form(Form $form): Form
     {
-        return StaffForm::configure($schema);
+        return StaffForm::configure($form);
     }
 
     public static function table(Table $table): Table

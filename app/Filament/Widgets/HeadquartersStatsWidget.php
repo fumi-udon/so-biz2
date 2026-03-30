@@ -6,7 +6,6 @@ use App\Models\Attendance;
 use App\Models\RoutineTask;
 use App\Models\RoutineTaskLog;
 use App\Support\BusinessDate;
-use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Support\Number;
@@ -73,21 +72,21 @@ class HeadquartersStatsWidget extends StatsOverviewWidget
                 Number::currency($laborCost, 'TND', 'fr_TN', 0),
             )
                 ->description('確定済み勤務区間 × 時給の合計')
-                ->icon(Heroicon::OutlinedBanknotes)
+                ->icon('heroicon-o-banknotes')
                 ->color('success'),
             Stat::make(
                 '本日の出勤人数',
                 (string) $attendanceCount,
             )
                 ->description('Attendance レコード数')
-                ->icon(Heroicon::OutlinedUsers)
+                ->icon('heroicon-o-users')
                 ->color('info'),
             Stat::make(
                 '本日のタスク完了率',
                 $taskRateLabel,
             )
                 ->description($totalTasks > 0 ? "完了 {$completedCount} / 全 {$totalTasks} 件" : '出勤者に割当のタスクなし')
-                ->icon(Heroicon::OutlinedCheckCircle)
+                ->icon('heroicon-o-check-circle')
                 ->color('warning'),
         ];
     }

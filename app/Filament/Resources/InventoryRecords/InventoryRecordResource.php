@@ -8,42 +8,39 @@ use App\Filament\Resources\InventoryRecords\Pages\ListInventoryRecords;
 use App\Models\InventoryItem;
 use App\Models\InventoryRecord;
 use App\Models\Staff;
-use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 class InventoryRecordResource extends Resource
 {
     protected static ?string $model = InventoryRecord::class;
 
-    protected static string|UnitEnum|null $navigationGroup = '本部・在庫';
+    protected static ?string $navigationGroup = '本部・在庫';
 
     protected static ?string $modelLabel = '棚卸し記録';
 
     protected static ?string $pluralModelLabel = '棚卸し記録';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
+    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
 
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->with(['inventoryItem', 'recordedByStaff']);
     }
 
-    public static function form(Schema $schema): Schema
+    public static function form(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Select::make('inventory_item_id')
                     ->label('品目')
                     ->options(fn (): array => InventoryItem::query()
@@ -102,7 +99,7 @@ class InventoryRecordResource extends Resource
             ])
             ->filters([
                 Filter::make('date')
-                    ->schema([
+                    ->form([
                         DatePicker::make('record_date')
                             ->label('📅 日付選択')
                             ->default(today())

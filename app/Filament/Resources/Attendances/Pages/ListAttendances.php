@@ -17,9 +17,10 @@ class ListAttendances extends ListRecords
 
     public function table(Table $table): Table
     {
-        return $table->header(fn (): View => view('filament.resources.attendances.components.summary-banner', [
-            'stats' => $this->buildAttendanceSummaryStats(),
-        ]));
+        return parent::table($table)
+            ->header(fn (): View => view('filament.resources.attendances.components.summary-banner', [
+                'stats' => $this->buildAttendanceSummaryStats(),
+            ]));
     }
 
     /**

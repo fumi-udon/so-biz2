@@ -10,7 +10,7 @@ use Illuminate\Support\Collection;
 
 class TodayAttendanceWidget extends Widget
 {
-    protected string $view = 'filament.resources.attendances.widgets.today-attendance';
+    protected static string $view = 'filament.resources.attendances.widgets.today-attendance';
 
     protected static ?int $sort = -9;
 

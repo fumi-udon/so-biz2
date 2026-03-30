@@ -6,39 +6,36 @@ use App\Filament\Resources\CloseTask\Pages\CreateCloseTask;
 use App\Filament\Resources\CloseTask\Pages\EditCloseTask;
 use App\Filament\Resources\CloseTask\Pages\ListCloseTasks;
 use App\Models\CloseTask;
-use BackedEnum;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Actions\BulkActionGroup;
+use Filament\Tables\Actions\DeleteBulkAction;
+use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use UnitEnum;
 
 class CloseTaskResource extends Resource
 {
     protected static ?string $model = CloseTask::class;
 
-    protected static string|UnitEnum|null $navigationGroup = '店舗・勤怠管理';
+    protected static ?string $navigationGroup = '店舗・勤怠管理';
 
     protected static ?string $modelLabel = 'クローズチェック項目';
 
     protected static ?string $pluralModelLabel = 'クローズチェック項目';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentCheck;
+    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
 
-    public static function form(Schema $schema): Schema
+    public static function form(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 TextInput::make('title')
                     ->required(),
                 Textarea::make('description'),
@@ -69,10 +66,10 @@ class CloseTaskResource extends Resource
             ->filters([
                 //
             ])
-            ->recordActions([
+            ->actions([
                 EditAction::make(),
             ])
-            ->toolbarActions([
+            ->bulkActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),

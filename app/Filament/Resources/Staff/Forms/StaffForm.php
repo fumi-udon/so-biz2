@@ -1,16 +1,16 @@
 <?php
 
-namespace App\Filament\Resources\Staff\Schemas;
+namespace App\Filament\Resources\Staff\Forms;
 
 use App\Models\Setting;
+use Filament\Forms\Components\Fieldset;
+use Filament\Forms\Components\Group;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
-use Filament\Schemas\Components\Fieldset;
-use Filament\Schemas\Components\Group;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Schema;
+use Filament\Forms\Form;
 
 class StaffForm
 {
@@ -53,10 +53,10 @@ class StaffForm
         return $fieldsets;
     }
 
-    public static function configure(Schema $schema): Schema
+    public static function configure(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Select::make('shop_id')
                     ->relationship('shop', 'name')
                     ->required()

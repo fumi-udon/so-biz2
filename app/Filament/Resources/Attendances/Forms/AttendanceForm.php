@@ -1,20 +1,20 @@
 <?php
 
-namespace App\Filament\Resources\Attendances\Schemas;
+namespace App\Filament\Resources\Attendances\Forms;
 
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Schema;
+use Filament\Forms\Form;
 
 class AttendanceForm
 {
-    public static function configure(Schema $schema): Schema
+    public static function configure(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Select::make('staff_id')
                     ->relationship('staff', 'name')
                     ->required()

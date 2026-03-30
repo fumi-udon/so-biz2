@@ -9,42 +9,39 @@ use App\Models\InventoryItem;
 use App\Models\Shop;
 use App\Models\Staff;
 use App\Support\InventorySettingOptions;
-use BackedEnum;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\Utilities\Get;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 class InventoryItemResource extends Resource
 {
     protected static ?string $model = InventoryItem::class;
 
-    protected static string|UnitEnum|null $navigationGroup = '本部・在庫';
+    protected static ?string $navigationGroup = '本部・在庫';
 
     protected static ?string $modelLabel = '棚卸し品目';
 
     protected static ?string $pluralModelLabel = '棚卸し品目';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCube;
+    protected static ?string $navigationIcon = 'heroicon-o-cube';
 
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->with(['shop', 'assignedStaff']);
     }
 
-    public static function form(Schema $schema): Schema
+    public static function form(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Select::make('shop_id')
                     ->label('店舗')
                     ->options(fn (): array => Shop::query()

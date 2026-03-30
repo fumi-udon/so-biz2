@@ -4,18 +4,18 @@ namespace App\Filament\Resources\Attendances\Tables;
 
 use App\Models\Attendance;
 use App\Models\Staff;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\CreateAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Support\Enums\MaxWidth;
+use Filament\Tables\Actions\BulkActionGroup;
+use Filament\Tables\Actions\CreateAction;
+use Filament\Tables\Actions\DeleteAction;
+use Filament\Tables\Actions\DeleteBulkAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\TextInputColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
-use Filament\Support\Enums\Width;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
@@ -92,16 +92,10 @@ class AttendancesTable
             });
     }
 
-    protected static function timeInputColumn(string $attribute, string $label): TextInputColumn
-    {
-        return self::clockInInputColumn($attribute, $label);
-    }
-
     public static function configure(Table $table): Table
     {
         return $table
             ->striped()
-            ->stackedOnMobile(false)
             ->paginated(false)
             ->defaultSort('date', 'asc')
             ->filters([
@@ -115,7 +109,7 @@ class AttendancesTable
                     ->searchable()
                     ->preload(),
                 Filter::make('month')
-                    ->schema([
+                    ->form([
                         DatePicker::make('month_filter')
                             ->label('📅 表示月')
                             ->native(false)
@@ -131,7 +125,7 @@ class AttendancesTable
                     }),
             ], layout: FiltersLayout::AboveContent)
             ->filtersFormColumns(2)
-            ->filtersFormWidth(Width::FourExtraLarge)
+            ->filtersFormWidth(MaxWidth::FourExtraLarge)
             ->headerActions([
                 CreateAction::make()
                     ->label('＋ 新規打刻追加')
@@ -188,11 +182,11 @@ class AttendancesTable
                     ->extraHeaderAttributes(['style' => 'min-width: 250px;'])
                     ->extraCellAttributes(['style' => 'min-width: 250px; vertical-align: middle;']),
             ])
-            ->recordActions([
+            ->actions([
                 DeleteAction::make()
                     ->iconButton(),
             ])
-            ->toolbarActions([
+            ->bulkActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),

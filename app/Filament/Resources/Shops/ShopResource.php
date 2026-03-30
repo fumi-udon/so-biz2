@@ -2,30 +2,27 @@
 
 namespace App\Filament\Resources\Shops;
 
+use App\Filament\Resources\Shops\Forms\ShopForm;
 use App\Filament\Resources\Shops\Pages\CreateShop;
 use App\Filament\Resources\Shops\Pages\EditShop;
 use App\Filament\Resources\Shops\Pages\ListShops;
-use App\Filament\Resources\Shops\Schemas\ShopForm;
 use App\Filament\Resources\Shops\Tables\ShopsTable;
 use App\Models\Shop;
-use BackedEnum;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
-use UnitEnum;
 
 class ShopResource extends Resource
 {
     protected static ?string $model = Shop::class;
 
-    protected static string|UnitEnum|null $navigationGroup = '店舗・勤怠管理';
+    protected static ?string $navigationGroup = '店舗・勤怠管理';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
-    public static function form(Schema $schema): Schema
+    public static function form(Form $form): Form
     {
-        return ShopForm::configure($schema);
+        return ShopForm::configure($form);
     }
 
     public static function table(Table $table): Table
