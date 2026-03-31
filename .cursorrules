@@ -1,25 +1,26 @@
-# 🚨 プロジェクトの厳格な制約 (STRICT CONSTRAINTS)
-このプロジェクトは商用環境（OVHサーバー）で稼働しており、以下のバージョン構成を絶対に変更してはなりません。
+## [CRITICAL] Version Constraints — DO NOT MODIFY
+- PHP: 8.4.18 (FORBIDDEN: upgrade to 8.5+)
+- Laravel: 11.51.0 (FORBIDDEN: major update)
+- Filament: 3.3.49 (FORBIDDEN: v4 API or Schema patterns)
+- composer.json: NEVER change versions without explicit user approval
+- Sail runtime path: ./vendor/laravel/sail/runtimes/8.4 (fixed, do not alter)
+- compose.yaml: preserve structure and indentation exactly
 
-## 1. 動作環境 (Runtime Versions)
-- **PHP**: 8.4.18 (STRICT) - 8.5などの未リリース版の使用・提案を厳禁とする。
-- **Laravel**: 11.51.0 (STRICT) - メジャーアップデート禁止。
-- **Filament**: v3.3.49 (STRICT) - v4以上のAPI（Schema等）の使用や提案を厳禁とする。
+## [RULE] Filament v3 Frontend
+- USE: x-filament::* and x-filament-tables::* official Blade components
+- FORBIDDEN: custom <div>/<table> layouts, inline styles, <style> tags
+- CSS: Tailwind utility classes only
+- DO NOT break Filament-generated class structures (fi-section, fi-input-wrp, etc.)
 
-## 2. インフラ設定
-- **Docker/Sail**: コンテキストパスは常に `./vendor/laravel/sail/runtimes/8.4` を使用すること。
-- **Compose**: 設定ファイルは `compose.yaml` を正体とし、インデントと構造を破壊しないこと。
+## [RULE] Compact UI
+- Reduce default spacing by one step (e.g. gap-y-4 → gap-y-2)
+- Remove empty fi-section-header via header(null)
+- Prefer table layout over card layout for list views
+- Use grid for horizontal input layout; avoid tall vertical pages
+- Responsive grid: grid-cols-1 md:grid-cols-2 lg:grid-cols-3
 
-## 3. 開発ポリシー
-- AIは、`composer.json` や `compose.yaml` のバージョン番号をユーザーの明示的な許可なく1ミリも変更してはならない。
-- 実在しないバージョンを「最新のはずだ」とハルシネーション（幻覚）で生成することを禁ずる。
-- 新機能実装時、既存の「勤怠・在庫管理」の型定義（`?string $navigationGroup`等）を破壊してはならない。
-
-# 未コミットの変更をすべて破棄し、タグの状態に強制リセット
-git reset --hard stable-base
-git clean -fd
-
-# 念のためDockerを再起動・キャッシュクリア
-./vendor/bin/sail down
-./vendor/bin/sail up -d
-./vendor/bin/sail artisan optimize:clear
+## [RULE] Robustness
+- Live inputs: wire:model.live.debounce.500ms required
+- Numeric inputs: numeric + step="0.001"
+- Images/large elements: aspect-video + overflow-hidden
+- On layout issues: replace custom implementation with standard Filament components first

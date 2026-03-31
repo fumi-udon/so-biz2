@@ -42,12 +42,12 @@ class StaffTable
                     ->modalSubmitActionLabel('複製して作成')
                     ->successNotificationTitle('コピーしました')
                     ->excludeAttributes([
-                        'name',
                         'pin_code',
                     ])
                     ->mutateRecordDataUsing(function (array $data): array {
-                        $data['name'] = '';
+                        $data['name'] = ($data['name'] ?? '') . ' - コピー';
                         $data['pin_code'] = null;
+                        $data['is_active'] = false;
 
                         return $data;
                     }),

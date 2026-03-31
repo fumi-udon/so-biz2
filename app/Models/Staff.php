@@ -30,7 +30,7 @@ class Staff extends Model
         'wage',
         'hourly_wage',
         'is_manager',
-        'job_level',
+        'job_level_id',
         'age',
         'gender',
         'origin',
@@ -63,6 +63,14 @@ class Staff extends Model
     }
 
     /**
+     * @return BelongsTo<JobLevel, $this>
+     */
+    public function jobLevel(): BelongsTo
+    {
+        return $this->belongsTo(JobLevel::class);
+    }
+
+    /**
      * @return HasMany<Attendance, $this>
      */
     public function attendances(): HasMany
@@ -84,5 +92,44 @@ class Staff extends Model
     public function assignedInventoryItems(): HasMany
     {
         return $this->hasMany(InventoryItem::class, 'assigned_staff_id');
+    }
+
+    /**
+     * 給与計算用の基本給（スタブ）。
+     * 固定給カラムが未確定のため、現状は wage を返す。
+     */
+    public function calculateMonthlyBaseSalary(int $year, int $month): int
+    {
+        return (int) ($this->wage ?? 0);
+    }
+
+    /**
+     * 月間遅刻ペナルティ額を計算する。
+     */
+    public function calculateMonthlyPenalty(int $year, int $month): int
+    {
+        $lateMinutes = (int) Attendance::query()
+            ->where('staff_id', $this->id)
+            ->whereYear('date', $year)
+            ->whereMonth('date', $month)
+            ->sum('late_minutes');
+
+        $penaltyPerMinute = (int) config('payroll.late_penalty_per_minute', 10);
+
+        return $lateMinutes * max($penaltyPerMinute, 0);
+    }
+
+    /**
+     * 月間チップ分配総額を計算する。
+     */
+    public function calculateMonthlyTotalTips(int $year, int $month): float
+    {
+        return (float) StaffTip::query()
+            ->where('staff_id', $this->id)
+            ->whereHas('dailyTip', function ($query) use ($year, $month): void {
+                $query->whereYear('business_date', $year)
+                    ->whereMonth('business_date', $month);
+            })
+            ->sum('amount');
     }
 }

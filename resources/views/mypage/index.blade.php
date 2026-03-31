@@ -4,286 +4,294 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>マイページ（タスク・棚卸し） — {{ config('app.name') }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <title>マイページ — {{ config('app.name') }}</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <link rel="stylesheet" href="{{ asset('css/mypage.css') }}">
 </head>
-<body class="bg-light">
-    <x-client-nav />
+<body
+    class="mypage-body min-h-screen bg-linear-to-br from-pink-100 via-yellow-100 to-cyan-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950"
+    data-auto-logout-url="{{ route('mypage.auto-logout') }}"
+    data-timecard-url="{{ route('timecard.index') }}"
+>
+    @php
+        $roleChipClass = match($roleColor ?? 'gray') {
+            'red' => 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200',
+            'green' => 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-200',
+            default => 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200',
+        };
 
-    <div class="container py-2 py-md-3 mx-auto" style="max-width: 28rem;">
-        <nav class="mb-2" aria-label="breadcrumb">
-            <ol class="breadcrumb small mb-0 py-1">
-                <li class="breadcrumb-item">
-                    <a href="{{ route('home') }}" class="text-decoration-none">
-                        <i class="bi bi-house-door-fill me-1" aria-hidden="true"></i>トップ
-                    </a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">マイページ</li>
-            </ol>
-        </nav>
+        $fmtShift = function (?string $planned, string $status, ?string $actual) use ($statusResolver): string {
+            if ($status === 'none') {
+                return '—';
+            }
 
+            $p = $planned ?: '-';
+            $icon = $statusResolver->icon($status);
+
+            return match ($status) {
+                'late' => "{$p} ▶ {$icon} 未出勤",
+                'future' => "{$p} ▶ {$icon}",
+                default => "{$p} ▶ {$icon} ".($actual ?: '--:--'),
+            };
+        };
+
+        $inventoryIncomplete = collect($inventoryTimingRows)->contains(fn ($r): bool => ! ($r['complete'] ?? false));
+        $levelIcon = match (true) {
+            $motivationLevel >= 9 => '👑',
+            $motivationLevel >= 7 => '🦄',
+            $motivationLevel >= 5 => '🐉',
+            $motivationLevel >= 4 => '🔥',
+            $motivationLevel >= 3 => '⚡',
+            $motivationLevel >= 2 => '🔰',
+            default => '🌱',
+        };
+        $roleIcon = match ($roleColor ?? 'gray') {
+            'red' => '🍳',
+            'green' => '🛎️',
+            default => '🧩',
+        };
+        $isLateAny = ($lunchStatus ?? 'none') === 'late' || ($dinnerStatus ?? 'none') === 'late';
+    @endphp
+
+    <nav class="mypage-nav">
+        <a href="{{ url('/') }}" class="mypage-nav-link">TOP</a>
+        <a href="{{ route('timecard.index') }}" class="mypage-nav-link">Timecard</a>
+        <a href="{{ route('mypage.index', ['staff_id' => $staff?->id]) }}" class="mypage-nav-link is-current">MyPage</a>
+        <a href="{{ route('timecard.index') }}" class="mypage-nav-link is-logout">Logout</a>
+    </nav>
+
+    <main class="mypage-shell mx-auto w-full max-w-3xl px-2 py-2 sm:px-3">
         @if (session('status'))
-            <div class="alert alert-success shadow-sm rounded-4" role="alert">{{ session('status') }}</div>
+            <div class="mb-2 rounded-xl border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 dark:border-emerald-600/30 dark:bg-emerald-900/20 dark:text-emerald-300">{{ session('status') }}</div>
         @endif
         @if (session('error'))
-            <div class="alert alert-danger shadow-sm rounded-4" role="alert">{{ session('error') }}</div>
+            <div class="mb-2 rounded-xl border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-600/30 dark:bg-rose-900/20 dark:text-rose-300">{{ session('error') }}</div>
         @endif
         @if ($errors->any())
-            <div class="alert alert-danger shadow-sm rounded-4" role="alert">
-                <ul class="mb-0 ps-3">
-                    @foreach ($errors->all() as $err)
-                        <li>{{ $err }}</li>
-                    @endforeach
-                </ul>
-            </div>
+            <div class="mb-2 rounded-xl border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-600/30 dark:bg-rose-900/20 dark:text-rose-300">{{ $errors->first() }}</div>
         @endif
 
-        <div class="mb-2">
-            <form method="get" action="{{ route('mypage.index') }}" class="d-flex flex-wrap align-items-center gap-2">
-                <label for="staff_select" class="small text-secondary mb-0">切替</label>
-                <select name="staff_id" id="staff_select" class="form-select form-select-sm rounded-3 flex-grow-1" style="max-width: 14rem;" onchange="this.form.submit()">
-                    <option value="">— 選択 —</option>
-                    @foreach ($staffList as $s)
-                        <option value="{{ $s->id }}" @selected($staff && $staff->id === $s->id)>{{ $s->name }}</option>
-                    @endforeach
-                </select>
-                <button
-                    type="button"
-                    class="btn btn-sm btn-outline-secondary rounded-3"
-                    data-bs-toggle="modal"
-                    data-bs-target="#mypagePinModal"
-                    title="名前を選んでからPINで開く"
-                >
-                    PIN
-                </button>
-            </form>
-        </div>
-
-        @if (! $staff)
-            <div class="border border-2 border-dashed rounded-3 p-3 text-center text-secondary bg-white shadow-sm small">
-                <i class="bi bi-keyboard d-block mb-1 opacity-50 fs-4" aria-hidden="true"></i>
-                <p class="mb-2">トップの「マイページ」で<strong>名前を選んでからPIN</strong>を入力するか、共有端末では上の「切替」でスタッフを選んでください。</p>
-                <p class="mb-0 text-muted" style="font-size: 0.75rem;">PINの確認が必要なときは「PIN」ボタンから入力できます。</p>
-            </div>
-        @else
-            <p class="small text-secondary mb-2 pb-2 border-bottom lh-sm">
-                <span class="text-dark fw-semibold">{{ $staff->name }}</span>
-                <span class="text-muted">·</span> Lv.{{ $motivationLevel }}
-                <span class="text-muted">·</span> 出勤: {{ $todayClockInLabel ?? '未打刻' }}
-                <span class="text-muted">·</span> 営業日 <span class="font-monospace text-body">{{ $dateString }}</span>
-            </p>
-
-            <form method="post" action="{{ route('mypage.store') }}" id="mypage-routine-form" class="pb-4" style="padding-bottom: 5.5rem;">
-                @csrf
-                <input type="hidden" name="staff_id" value="{{ $staff->id }}">
-
-                @php
-                    $routineCardClass = $routineTasks->isEmpty()
-                        ? 'border-secondary border-2 bg-light'
-                        : ($routinesAllComplete
-                            ? 'border-success border-2 bg-success-subtle'
-                            : 'border-danger border-2 bg-danger-subtle');
-                @endphp
-                <section class="card shadow-sm rounded-3 mb-3 {{ $routineCardClass }}" aria-labelledby="routine-heading">
-                    <div class="card-body p-3">
-                        <h2 id="routine-heading" class="h6 fw-bold mb-2">
-                            <i class="bi bi-check2-square me-1" aria-hidden="true"></i>ルーティン
-                        </h2>
-
-                        @if ($routineTasks->isEmpty())
-                            <p class="text-secondary small mb-0">
-                                <i class="bi bi-info-circle me-1" aria-hidden="true"></i>割り当てはありません。
-                            </p>
-                        @elseif ($routinesAllComplete)
-                            <p class="fw-bold text-success small mb-3 d-flex align-items-center gap-1">
-                                <i class="bi bi-stars" aria-hidden="true"></i>
-                                <span>全タスク完了</span>
-                            </p>
-                            <ul class="list-unstyled mb-0">
-                                @foreach ($routineTasks as $task)
-                                    <li class="mb-2 pb-2 border-bottom border-success border-opacity-25">
-                                        <div class="form-check d-flex align-items-start gap-2">
-                                            <input
-                                                class="form-check-input fs-5 flex-shrink-0 mt-1"
-                                                type="checkbox"
-                                                name="routine_task[{{ $task->id }}]"
-                                                value="1"
-                                                id="routine-{{ $task->id }}"
-                                                @checked(old('routine_task.'.$task->id, $routineLogIds->contains($task->id)))
-                                            >
-                                            <label class="form-check-label small" for="routine-{{ $task->id }}">
-                                                <span class="d-block text-secondary" style="font-size: 0.7rem;">{{ $task->category }} · {{ $task->timing }}</span>
-                                                <span class="fw-semibold">{{ $task->name }}</span>
-                                            </label>
-                                        </div>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        @else
-                            <p class="fw-bold text-danger small mb-3 d-flex align-items-center gap-1">
-                                <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
-                                <span>未完了あり</span>
-                            </p>
-                            <ul class="list-unstyled mb-0">
-                                @foreach ($routineTasks as $task)
-                                    <li class="mb-2 pb-2 border-bottom border-danger border-opacity-25">
-                                        <div class="form-check d-flex align-items-start gap-2">
-                                            <input
-                                                class="form-check-input fs-5 flex-shrink-0 mt-1"
-                                                type="checkbox"
-                                                name="routine_task[{{ $task->id }}]"
-                                                value="1"
-                                                id="routine-{{ $task->id }}"
-                                                @checked(old('routine_task.'.$task->id, $routineLogIds->contains($task->id)))
-                                            >
-                                            <label class="form-check-label small" for="routine-{{ $task->id }}">
-                                                <span class="d-block text-secondary" style="font-size: 0.7rem;">{{ $task->category }} · {{ $task->timing }}</span>
-                                                <span class="fw-semibold">{{ $task->name }}</span>
-                                            </label>
-                                        </div>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        @endif
-
-                        @if ($routineTasks->isNotEmpty())
-                            <div class="mt-3">
-                                <label for="pin_code_routine" class="form-label small fw-semibold mb-1">保存 PIN（4桁）</label>
-                                <input
-                                    type="password"
-                                    name="pin_code"
-                                    id="pin_code_routine"
-                                    inputmode="numeric"
-                                    maxlength="4"
-                                    required
-                                    class="form-control form-control font-monospace text-center rounded-3 py-2"
-                                    placeholder="••••"
-                                    autocomplete="one-time-code"
-                                >
-                            </div>
-                        @endif
-                    </div>
-                </section>
-
-                <section class="mb-1" aria-labelledby="inventory-heading">
-                    <h2 id="inventory-heading" class="h6 fw-bold mb-2 px-0">
-                        <i class="bi bi-box-seam me-1" aria-hidden="true"></i>棚卸し
-                    </h2>
-
-                    @if (empty($inventoryTimingRows))
-                        <div class="card border-secondary border-2 bg-light rounded-3 shadow-sm">
-                            <div class="card-body p-3 text-center text-secondary small">
-                                <i class="bi bi-inbox d-block mb-1 opacity-50 fs-4" aria-hidden="true"></i>
-                                割り当てなし
-                            </div>
+        <section class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <article class="mypage-card profile-card rounded-2xl border border-fuchsia-300/80 bg-linear-to-br from-violet-100 via-fuchsia-100 to-sky-100 p-2 text-gray-900 shadow-sm shadow-fuchsia-200/60 dark:border-fuchsia-500/30 dark:from-gray-900 dark:via-purple-950/60 dark:to-slate-900 dark:text-gray-100">
+                <div class="mb-1 flex items-center justify-between">
+                    <h1 class="text-sm font-bold text-violet-700 dark:text-violet-200">👑 Profile</h1>
+                    <span class="text-[10px] font-semibold text-violet-700 dark:text-violet-200">本日: {{ $businessDate->format('Y-m-d') }}</span>
+                    <span class="inline-flex items-center gap-1 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 ring-1 ring-violet-300/70 dark:bg-white/10 dark:text-violet-200 dark:ring-violet-400/30">
+                        <span class="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+                        <span id="idle-timer">180s</span>
+                    </span>
+                </div>
+                @if ($staff)
+                    <div class="mx-1 rounded-xl border border-violet-300/70 bg-white/70 p-2 backdrop-blur-sm dark:border-violet-400/30 dark:bg-white/5">
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-extrabold {{ $roleChipClass }}">
+                                <span>{{ $roleIcon }}</span>
+                                <span>{{ \Illuminate\Support\Str::limit($roleLabel ?? 'Other', 5, '') }}</span>
+                            </span>
+                            <span class="truncate text-base font-extrabold tracking-wide text-violet-800 dark:text-violet-100">{{ $staff->name }}</span>
+                            <span class="inline-flex items-center gap-1 rounded-full bg-linear-to-r from-amber-300 via-orange-300 to-pink-300 px-2 py-0.5 text-[11px] font-extrabold text-gray-900 ring-1 ring-amber-200/70 animate-pulse">
+                                <span class="animate-bounce">{{ $levelIcon }}</span>
+                                <span>Lv.{{ $motivationLevel }}</span>
+                            </span>
                         </div>
-                    @else
-                        @foreach ($inventoryTimingRows as $row)
-                            @if ($row['complete'])
-                                <div class="card border-success border-2 bg-success-subtle rounded-3 shadow-sm mb-2">
-                                    <div class="card-body p-3">
-                                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-2">
-                                            <div>
-                                                <span class="badge bg-success small rounded-pill">完了</span>
-                                                <h3 class="small fw-bold mt-1 mb-0">{{ $row['label'] }}</h3>
-                                                <p class="text-secondary small mb-0" style="font-size: 0.7rem;"><span class="font-monospace">{{ $row['timing_key'] }}</span></p>
-                                            </div>
-                                        </div>
-                                        <a href="{{ $row['portal_url'] }}" class="btn btn-outline-success btn-sm w-100 py-2 rounded-3">
-                                            確認・修正
-                                        </a>
-                                    </div>
-                                </div>
-                            @else
-                                <div class="card border-danger border-2 bg-danger-subtle rounded-3 shadow-sm mb-2">
-                                    <div class="card-body p-3">
-                                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-2">
-                                            <div>
-                                                <span class="badge bg-danger small rounded-pill">未実施</span>
-                                                <h3 class="small fw-bold mt-1 mb-0">{{ $row['label'] }}</h3>
-                                                <p class="text-secondary small mb-0" style="font-size: 0.7rem;">
-                                                    <span class="font-monospace">{{ $row['timing_key'] }}</span>
-                                                    · {{ $row['filled'] }}/{{ $row['total'] }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <a href="{{ $row['portal_url'] }}" class="btn btn-danger btn-sm w-100 py-2 rounded-3">
-                                            棚卸しへ
-                                        </a>
-                                        <a href="{{ route('inventory.index') }}" class="btn btn-link w-100 py-1 text-secondary" style="font-size: 0.75rem;">
-                                            一覧
-                                        </a>
-                                    </div>
+                    </div>
+                    <div class="attendance-card mt-1 rounded-lg border border-emerald-300/70 bg-white/70 p-1.5 dark:border-emerald-400/20 dark:bg-white/5">
+                        <div class="mb-1 text-[10px] font-extrabold text-emerald-700 dark:text-emerald-200">⏰ Attendance</div>
+                        <div class="space-y-1 text-[10px] leading-tight">
+                            <span class="incident-trigger block rounded border border-amber-300 bg-amber-100 px-1.5 py-1 font-extrabold text-amber-800 dark:border-amber-500/30 dark:bg-amber-900/30 dark:text-amber-200">
+                                当月の遅刻: {{ (int) ($monthLateCount ?? 0) }}回
+                                <span class="incident-tooltip" role="tooltip">
+                                    <strong>今月の遅刻日</strong>
+                                    @forelse (($monthLateDates ?? collect()) as $line)
+                                        <span>{{ $line }}</span>
+                                    @empty
+                                        <span>発生なし</span>
+                                    @endforelse
+                                </span>
+                            </span>
+                            <span class="incident-trigger block rounded border border-slate-300 bg-slate-100 px-1.5 py-1 font-extrabold text-slate-700 dark:border-slate-500/30 dark:bg-slate-800/40 dark:text-slate-200">
+                                当月の欠勤: {{ (int) ($monthAbsentCount ?? 0) }}回
+                                <span class="incident-tooltip" role="tooltip">
+                                    <strong>今月の欠勤日</strong>
+                                    @forelse (($monthAbsentDates ?? collect()) as $line)
+                                        <span>{{ $line }}</span>
+                                    @empty
+                                        <span>発生なし</span>
+                                    @endforelse
+                                </span>
+                            </span>
+                            @if (($monthLateCount ?? 0) === 0 && ($monthAbsentCount ?? 0) === 0)
+                                <div class="rounded-md border border-emerald-300 bg-linear-to-r from-emerald-100 via-lime-100 to-cyan-100 px-1.5 py-1 text-[10px] font-extrabold text-emerald-700 animate-pulse dark:border-emerald-500/30 dark:from-emerald-900/30 dark:via-lime-900/20 dark:to-cyan-900/30 dark:text-emerald-200">
+                                    🏅 勤怠優秀 Bravo!
                                 </div>
                             @endif
-                        @endforeach
-                    @endif
-                </section>
-            </form>
+                        </div>
+                    </div>
+                    <div class="tip-history-panel mt-1 rounded-lg border border-violet-300/70 bg-white/70 p-1 dark:border-violet-400/20 dark:bg-white/5">
+                        <div class="tip-history-title mb-1 text-[10px] font-extrabold text-violet-700 dark:text-violet-200">
+                            <span>💠</span>
+                            <span>過去チップ</span>
+                            <span class="tip-history-sub">Last 3</span>
+                        </div>
+                        <table class="tip-history-table w-full text-[10px]">
+                            <thead>
+                                <tr class="border-b border-violet-200/80 dark:border-violet-500/20">
+                                    <th class="px-1 py-0.5 text-left font-semibold">📅 日付</th>
+                                    <th class="px-1 py-0.5 text-right font-semibold">☀️ Lunch</th>
+                                    <th class="px-1 py-0.5 text-right font-semibold">🌙 Dinner</th>
+                                    <th class="px-1 py-0.5 text-right font-semibold">💎 Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse (($tipRecentNonZero3 ?? collect()) as $d)
+                                    <tr class="tip-row border-b border-violet-100/90 dark:border-violet-500/10 last:border-b-0">
+                                        <td class="px-1 py-0.5 font-mono">{{ $d['date'] }}</td>
+                                        <td class="px-1 py-0.5 text-right font-mono">{{ number_format((float) ($d['lunch'] ?? 0), 1) }}</td>
+                                        <td class="px-1 py-0.5 text-right font-mono">{{ number_format((float) ($d['dinner'] ?? 0), 1) }}</td>
+                                        <td class="px-1 py-0.5 text-right font-mono font-extrabold">{{ number_format((float) ($d['total'] ?? 0), 1) }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="4" class="px-1 py-1 text-center font-semibold text-violet-700/80 dark:text-violet-200/80">non</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-1 flex items-center justify-end text-[10px]">
+                        <a href="{{ route('timecard.index') }}" class="rounded bg-white/80 px-2 py-1 font-semibold text-violet-700 ring-1 ring-violet-300/60 dark:bg-white/10 dark:text-violet-200">戻る</a>
+                    </div>
+                @else
+                    <p class="text-xs text-gray-600 dark:text-gray-300">PIN認証が必要です。トップから再度マイページを開いてください。</p>
+                @endif
+            </article>
 
-            @if ($routineTasks->isNotEmpty())
-                <div class="position-fixed bottom-0 start-0 end-0 bg-white border-top shadow-sm py-2 px-2" style="z-index: 1020;">
-                    <div class="mx-auto" style="max-width: 28rem;">
-                        <button type="submit" form="mypage-routine-form" class="btn btn-dark w-100 py-2 rounded-3 fw-semibold">
-                            <i class="bi bi-cloud-check-fill me-1" aria-hidden="true"></i>保存
-                        </button>
-                    </div>
-                </div>
-            @endif
-        @endif
-    </div>
+            <article class="mypage-card task-card sm:col-span-2 rounded-2xl border border-rose-300/80 bg-linear-to-br from-rose-100 via-orange-100 to-indigo-100 p-3 text-gray-900 shadow-sm shadow-rose-200/40 dark:border-rose-500/30 dark:from-gray-900 dark:via-rose-950/40 dark:to-indigo-950/40 dark:text-gray-100">
+                <h2 class="mb-2 text-sm font-bold text-rose-700 dark:text-rose-200">📋 Task（最重要）</h2>
+                @if ($staff)
+                    <div class="task-table-wrap overflow-x-auto rounded-lg border-2 border-rose-300/80 bg-rose-50/80 ring-2 ring-rose-300/50 dark:border-rose-500/30 dark:bg-rose-950/20 dark:ring-rose-500/20">
+                        <table class="task-table w-full min-w-[16rem] text-[10px]">
+                            <thead>
+                                <tr class="border-b border-rose-200 bg-rose-100/80 dark:border-rose-500/20 dark:bg-rose-900/30">
+                                    <th class="px-1.5 py-0.5 text-left font-semibold">種別</th>
+                                    <th class="px-1.5 py-0.5 text-left font-semibold">項目</th>
+                                    <th class="px-1.5 py-0.5 text-center font-semibold">進捗</th>
+                                    <th class="px-1.5 py-0.5 text-center font-semibold">状態</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($routineTasks as $task)
+                                    @php $done = $routineLogIds->contains($task->id); @endphp
+                                    <tr class="border-b border-rose-100 dark:border-rose-500/10">
+                                        <td class="px-1.5 py-0.5">📌 Routine</td>
+                                        <td class="px-1.5 py-0.5 truncate max-w-36">{{ $task->name }}</td>
+                                        <td class="px-1.5 py-0.5 text-center">{{ $done ? '1/1' : '0/1' }}</td>
+                                        <td class="px-1.5 py-0.5 text-center">
+                                            <span class="{{ $done ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300 animate-pulse font-extrabold' }}">{{ $done ? '完了' : '未完了' }}</span>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="4" class="px-1.5 py-1 text-center text-gray-600 dark:text-gray-300">ルーティン割り当てなし</td></tr>
+                                @endforelse
 
-    @if (session('success_modal') || session('late_modal'))
-        <div
-            class="modal fade"
-            id="mypageTimecardModal"
-            tabindex="-1"
-            aria-labelledby="mypageTimecardModalLabel"
-            aria-hidden="true"
-        >
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content text-dark rounded-4 shadow">
-                    <div class="modal-header border-0 pb-0">
-                        <h2 class="modal-title fs-5" id="mypageTimecardModalLabel">
-                            @if (session('late_modal'))
-                                遅刻として記録されました
-                            @else
-                                打刻が完了しました
-                            @endif
-                        </h2>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                                @forelse ($inventoryTimingRows as $row)
+                                    <tr class="border-b border-rose-100 dark:border-rose-500/10 last:border-b-0">
+                                        <td class="px-1.5 py-0.5">📦 Inventory</td>
+                                        <td class="px-1.5 py-0.5 truncate max-w-36">{{ $row['label'] }}</td>
+                                        <td class="px-1.5 py-0.5 text-center">{{ $row['filled'] }}/{{ $row['total'] }}</td>
+                                        <td class="px-1.5 py-0.5 text-center">
+                                            <span class="{{ $row['complete'] ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-500 animate-pulse font-extrabold' }}">{{ $row['complete'] ? '完了' : '未実施' }}</span>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="4" class="px-1.5 py-1 text-center text-gray-600 dark:text-gray-300">棚卸し割り当てなし</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
                     </div>
-                    <div class="modal-body pt-2">
-                        @if (session('late_modal'))
-                            <p class="text-secondary small mb-2">予定時刻（10分の猶予を除く）より遅い打刻として記録されています。</p>
-                            @if (session('late_minutes'))
-                                <p class="mb-0 fw-medium">
-                                    遅刻: <span class="font-monospace">{{ session('late_minutes') }}</span> 分
-                                </p>
-                            @endif
-                        @else
-                            <p class="text-secondary small mb-0">出勤打刻を保存しました。今日のタスクを進めましょう。</p>
-                        @endif
+                    <div class="mt-1 grid grid-cols-2 gap-1 text-[10px]">
+                        <span class="{{ $routinesPendingCount > 0 ? 'text-rose-600 dark:text-rose-300 animate-pulse' : 'text-emerald-600 dark:text-emerald-300' }}">
+                            ルーティン: {{ $routinesPendingCount > 0 ? '未完了あり' : '全完了' }}
+                        </span>
+                        <span class="{{ $inventoryIncomplete ? 'text-rose-500 animate-pulse' : 'text-emerald-600 dark:text-emerald-300' }}">
+                            棚卸し: {{ $inventoryIncomplete ? '未実施あり' : '完了' }}
+                        </span>
                     </div>
-                    <div class="modal-footer border-0 pt-0">
-                        <button type="button" class="btn btn-primary w-100 py-3 rounded-4" data-bs-dismiss="modal">OK</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    @endif
+                @else
+                    <p class="text-[10px] text-gray-600 dark:text-gray-300">スタッフを選択すると業務一覧を表示します。</p>
+                @endif
+            </article>
+        </section>
+    </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
-    @if (session('success_modal') || session('late_modal'))
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                var el = document.getElementById('mypageTimecardModal');
-                if (el && typeof bootstrap !== 'undefined') {
-                    bootstrap.Modal.getOrCreateInstance(el).show();
+    <script>
+        (() => {
+            const limitSeconds = 180;
+            const timerEl = document.getElementById('idle-timer');
+            const body = document.body;
+            const autoLogoutUrl = body?.dataset?.autoLogoutUrl || '/mypage/auto-logout';
+            const timecardUrl = body?.dataset?.timecardUrl || '/timecard';
+            let remain = limitSeconds;
+            let ticking = null;
+
+            const reset = () => {
+                remain = limitSeconds;
+                if (timerEl) timerEl.textContent = `${remain}s`;
+            };
+
+            const forceRedirect = () => {
+                window.location.href = timecardUrl;
+            };
+
+            const applyTipRowVisibility = () => {
+                const compact = window.innerHeight < 700;
+                const rows = document.querySelectorAll('.tip-row');
+                rows.forEach((row, index) => {
+                    row.style.display = (!compact || index < 6) ? '' : 'none';
+                });
+            };
+
+            const logout = async () => {
+                try {
+                    const response = await fetch(autoLogoutUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                            'Accept': 'application/json',
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ reason: 'idle-timeout' }),
+                    });
+                    if (!response.ok) {
+                        forceRedirect();
+                        return;
+                    }
+                } catch (e) {
+                    forceRedirect();
+                    return;
                 }
+                forceRedirect();
+            };
+
+            const tick = () => {
+                remain -= 1;
+                if (timerEl) timerEl.textContent = `${Math.max(remain, 0)}s`;
+                if (remain <= 0) {
+                    clearInterval(ticking);
+                    logout();
+                }
+            };
+
+            ['click', 'touchstart', 'keydown', 'scroll'].forEach((evt) => {
+                window.addEventListener(evt, reset, { passive: true });
             });
-        </script>
-    @endif
+            window.addEventListener('resize', applyTipRowVisibility, { passive: true });
+
+            reset();
+            applyTipRowVisibility();
+            ticking = setInterval(tick, 1000);
+        })();
+    </script>
 </body>
 </html>

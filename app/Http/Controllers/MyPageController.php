@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Models\DailyTipDistribution;
 use App\Models\InventoryItem;
 use App\Models\InventoryRecord;
 use App\Models\RoutineTask;
 use App\Models\RoutineTaskLog;
 use App\Models\Staff;
+use App\Models\StaffTip;
+use App\Services\AttendanceStatusResolver;
 use App\Support\BusinessDate;
 use App\Support\InventorySettingOptions;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -21,6 +25,12 @@ use Illuminate\View\View;
 
 class MyPageController extends Controller
 {
+    private const ROLE_ORDER = [
+        'kitchen' => 0,
+        'hall' => 1,
+        'other' => 2,
+    ];
+
     /**
      * @return list<string>
      */
@@ -43,17 +53,27 @@ class MyPageController extends Controller
         return $ordered;
     }
 
-    public function index(Request $request): View
+    public function index(Request $request, AttendanceStatusResolver $statusResolver): View
     {
         $staffList = Staff::query()
             ->where('is_active', true)
-            ->orderBy('name')
             ->get();
+        $staffList = $staffList->sort(function (Staff $a, Staff $b): int {
+            $ca = self::ROLE_ORDER[$this->roleCategory((string) ($a->role ?? ''))] ?? 2;
+            $cb = self::ROLE_ORDER[$this->roleCategory((string) ($b->role ?? ''))] ?? 2;
+            if ($ca !== $cb) {
+                return $ca <=> $cb;
+            }
+
+            return strcasecmp((string) $a->name, (string) $b->name);
+        })->values();
 
         $staffId = $request->integer('staff_id') ?: null;
         $staff = $staffId ? Staff::query()->where('id', $staffId)->where('is_active', true)->first() : null;
 
-        $dateString = BusinessDate::toDateString();
+        $businessDate = BusinessDate::current();
+        $dateString = $businessDate->toDateString();
+        $dayKey = strtolower($businessDate->englishDayOfWeek);
 
         $routineTasks = collect();
         $inventoryItems = collect();
@@ -61,6 +81,27 @@ class MyPageController extends Controller
         $inventoryTimingRows = [];
         $motivationLevel = 1;
         $todayClockInLabel = null;
+        $todayAttendance = null;
+        $roleLabel = null;
+        $roleColor = 'gray';
+        $lunchScheduledStart = null;
+        $dinnerScheduledStart = null;
+        $lunchStatus = 'none';
+        $dinnerStatus = 'none';
+        $lunchInTime = null;
+        $dinnerInTime = null;
+        $totalTipAmount = 0.0;
+        $recentTips = collect();
+        $tipHistory = collect();
+        $todayTipAmount = 0.0;
+        $last5Tips = collect();
+        $tipDailyBreakdown = collect();
+        $tipRecent3Total = 0.0;
+        $tipRecentNonZero3 = collect();
+        $monthLateCount = 0;
+        $monthAbsentCount = 0;
+        $monthLateDates = collect();
+        $monthAbsentDates = collect();
 
         if ($staff) {
             $completionCount = RoutineTaskLog::query()
@@ -72,6 +113,26 @@ class MyPageController extends Controller
                 ->where('staff_id', $staff->id)
                 ->whereDate('date', $dateString)
                 ->first();
+            $todayAttendance = $attendance;
+
+            $lunchScheduledStart = $this->scheduledStartFromFixedShifts($staff, $dayKey, 'lunch');
+            $dinnerScheduledStart = $this->scheduledStartFromFixedShifts($staff, $dayKey, 'dinner');
+            $lunchStatus = $statusResolver->resolveMealStatus($businessDate, $lunchScheduledStart, $attendance?->lunch_in_at);
+            $dinnerStatus = $statusResolver->resolveMealStatus($businessDate, $dinnerScheduledStart, $attendance?->dinner_in_at);
+            $lunchInTime = $attendance?->lunch_in_at?->format('H:i');
+            $dinnerInTime = $attendance?->dinner_in_at?->format('H:i');
+
+            $roleCategory = $this->roleCategory((string) ($staff->role ?? ''));
+            $roleLabel = match ($roleCategory) {
+                'kitchen' => 'Kitchen',
+                'hall' => 'Hall',
+                default => 'Other',
+            };
+            $roleColor = match ($roleCategory) {
+                'kitchen' => 'red',
+                'hall' => 'green',
+                default => 'gray',
+            };
 
             if ($attendance) {
                 $first = collect([
@@ -138,6 +199,204 @@ class MyPageController extends Controller
                     'portal_url' => route('inventory.input', ['timing' => $timingKey, 'staff_id' => $staff->id]),
                 ];
             }
+
+            $totalTipAmount = (float) StaffTip::query()
+                ->where('staff_id', $staff->id)
+                ->sum('amount');
+
+            $recentTips = StaffTip::query()
+                ->where('staff_id', $staff->id)
+                ->with('dailyTip')
+                ->orderByDesc('id')
+                ->limit(3)
+                ->get();
+
+            $tipHistoryRaw = StaffTip::query()
+                ->where('staff_id', $staff->id)
+                ->with('dailyTip')
+                ->get()
+                ->sort(function (StaffTip $a, StaffTip $b): int {
+                    $ad = optional($a->dailyTip?->business_date)?->getTimestamp() ?? 0;
+                    $bd = optional($b->dailyTip?->business_date)?->getTimestamp() ?? 0;
+                    if ($ad !== $bd) {
+                        return $bd <=> $ad;
+                    }
+
+                    return $b->id <=> $a->id;
+                })
+                ->take(10)
+                ->values();
+
+            $previous = null;
+            $tipHistory = $tipHistoryRaw->map(function (StaffTip $tip, int $index) use (&$previous): array {
+                $amount = (float) $tip->amount;
+                $delta = $previous === null ? 0.0 : ($amount - $previous);
+                $previous = $amount;
+
+                return [
+                    'date' => optional($tip->dailyTip?->business_date)?->format('m/d') ?? '—',
+                    'amount' => $amount,
+                    'note' => (string) ($tip->note ?? ''),
+                    'is_new' => $index === 0,
+                    'delta' => $delta,
+                ];
+            });
+
+            $last5Tips = StaffTip::query()
+                ->where('staff_id', $staff->id)
+                ->with('dailyTip')
+                ->whereHas('dailyTip', function ($q) use ($businessDate): void {
+                    $q->whereBetween('business_date', [
+                        $businessDate->copy()->subDays(4)->toDateString(),
+                        $businessDate->toDateString(),
+                    ]);
+                })
+                ->get()
+                ->groupBy(function (StaffTip $tip): string {
+                    return optional($tip->dailyTip?->business_date)?->toDateString() ?? '';
+                })
+                ->filter(fn ($rows, $date): bool => $date !== '')
+                ->map(function (Collection $rows, string $date): array {
+                    /** @var StaffTip $latest */
+                    $latest = $rows->sortByDesc('id')->first();
+
+                    return [
+                        'date_key' => $date,
+                        'date' => Carbon::parse($date)->format('m/d'),
+                        'amount' => (float) $rows->sum('amount'),
+                        'note' => (string) ($latest?->note ?? ''),
+                    ];
+                })
+                ->sortByDesc(fn (array $row): string => (string) ($row['date_key'] ?? ''))
+                ->map(function (array $row): array {
+                    unset($row['date_key']);
+
+                    return $row;
+                })
+                ->values();
+
+            $tipDailyRawByDate = StaffTip::query()
+                ->where('staff_id', $staff->id)
+                ->with('dailyTip')
+                ->whereHas('dailyTip')
+                ->get()
+                ->groupBy(function (StaffTip $tip): string {
+                    return optional($tip->dailyTip?->business_date)?->toDateString() ?? '';
+                })
+                ->filter(fn ($rows, $date): bool => $date !== '');
+
+            $tipDailyBreakdown = collect(range(0, 2))->map(function (int $offset) use ($businessDate, $tipDailyRawByDate): array {
+                $date = $businessDate->copy()->subDays($offset)->toDateString();
+                /** @var Collection<int, StaffTip> $rows */
+                $rows = $tipDailyRawByDate->get($date, collect());
+
+                $lunch = (float) $rows
+                    ->filter(function (StaffTip $tip): bool {
+                        $shift = strtolower((string) ($tip->dailyTip?->shift ?? ''));
+
+                        return str_contains($shift, 'lunch');
+                    })
+                    ->sum('amount');
+
+                $dinner = (float) $rows
+                    ->filter(function (StaffTip $tip): bool {
+                        $shift = strtolower((string) ($tip->dailyTip?->shift ?? ''));
+
+                        return str_contains($shift, 'dinner');
+                    })
+                    ->sum('amount');
+
+                $total = (float) ($lunch + $dinner);
+
+                return [
+                    'date_key' => $date,
+                    'date' => Carbon::parse($date)->format('m/d'),
+                    'lunch' => $lunch,
+                    'dinner' => $dinner,
+                    'total' => $total,
+                ];
+            })->values();
+
+            $tipRecent3Total = (float) $tipDailyBreakdown->sum('total');
+            $todayTipAmount = (float) ($tipDailyBreakdown->first()['total'] ?? 0.0);
+
+            $tipRecentNonZero3 = StaffTip::query()
+                ->where('staff_id', $staff->id)
+                ->with('dailyTip')
+                ->whereHas('dailyTip')
+                ->get()
+                ->groupBy(function (StaffTip $tip): string {
+                    return optional($tip->dailyTip?->business_date)?->toDateString() ?? '';
+                })
+                ->filter(fn ($rows, $date): bool => $date !== '')
+                ->map(function (Collection $rows, string $date): array {
+                    $lunch = (float) $rows
+                        ->filter(function (StaffTip $tip): bool {
+                            $shift = strtolower((string) ($tip->dailyTip?->shift ?? ''));
+
+                            return str_contains($shift, 'lunch');
+                        })
+                        ->sum('amount');
+
+                    $dinner = (float) $rows
+                        ->filter(function (StaffTip $tip): bool {
+                            $shift = strtolower((string) ($tip->dailyTip?->shift ?? ''));
+
+                            return str_contains($shift, 'dinner');
+                        })
+                        ->sum('amount');
+
+                    $total = (float) ($lunch + $dinner);
+
+                    return [
+                        'date_key' => $date,
+                        'date' => Carbon::parse($date)->format('m/d'),
+                        'lunch' => $lunch,
+                        'dinner' => $dinner,
+                        'total' => $total,
+                    ];
+                })
+                ->filter(fn (array $row): bool => ((float) ($row['total'] ?? 0.0)) >= 0.1)
+                ->sortByDesc(fn (array $row): string => (string) ($row['date_key'] ?? ''))
+                ->take(3)
+                ->map(function (array $row): array {
+                    unset($row['date_key']);
+
+                    return $row;
+                })
+                ->values();
+
+            $monthStart = $businessDate->copy()->startOfMonth()->toDateString();
+            $monthEnd = $businessDate->copy()->toDateString();
+            $monthlyAttendances = Attendance::query()
+                ->where('staff_id', $staff->id)
+                ->whereBetween('date', [$monthStart, $monthEnd])
+                ->orderBy('date')
+                ->get();
+
+            $monthLateDates = $monthlyAttendances
+                ->filter(fn (Attendance $row): bool => (int) ($row->late_minutes ?? 0) > 0)
+                ->map(function (Attendance $row): string {
+                    return Carbon::parse($row->date)->format('m/d').' 遅刻';
+                })
+                ->values();
+            $monthLateCount = $monthLateDates->count();
+
+            $monthAbsentDates = $monthlyAttendances
+                ->filter(function (Attendance $row) use ($staff): bool {
+                    $workDate = Carbon::parse($row->date);
+                    $dayKeyForRow = strtolower($workDate->englishDayOfWeek);
+                    $hasPlannedShift = filled($this->scheduledStartFromFixedShifts($staff, $dayKeyForRow, 'lunch'))
+                        || filled($this->scheduledStartFromFixedShifts($staff, $dayKeyForRow, 'dinner'));
+                    $hasAnyClockIn = $row->lunch_in_at !== null || $row->dinner_in_at !== null;
+
+                    return $hasPlannedShift && ! $hasAnyClockIn;
+                })
+                ->map(function (Attendance $row): string {
+                    return Carbon::parse($row->date)->format('m/d').' 欠勤';
+                })
+                ->values();
+            $monthAbsentCount = $monthAbsentDates->count();
         }
 
         $routinesPendingCount = 0;
@@ -162,7 +421,38 @@ class MyPageController extends Controller
             'todayClockInLabel' => $todayClockInLabel,
             'routinesAllComplete' => $routinesAllComplete,
             'routinesPendingCount' => $routinesPendingCount,
+            'businessDate' => $businessDate,
+            'todayAttendance' => $todayAttendance,
+            'roleLabel' => $roleLabel,
+            'roleColor' => $roleColor,
+            'lunchScheduledStart' => $lunchScheduledStart,
+            'dinnerScheduledStart' => $dinnerScheduledStart,
+            'lunchStatus' => $lunchStatus,
+            'dinnerStatus' => $dinnerStatus,
+            'lunchInTime' => $lunchInTime,
+            'dinnerInTime' => $dinnerInTime,
+            'totalTipAmount' => $totalTipAmount,
+            'recentTips' => $recentTips,
+            'tipHistory' => $tipHistory,
+            'todayTipAmount' => $todayTipAmount,
+            'last5Tips' => $last5Tips,
+            'tipDailyBreakdown' => $tipDailyBreakdown,
+            'tipRecent3Total' => $tipRecent3Total,
+            'tipRecentNonZero3' => $tipRecentNonZero3,
+            'monthLateCount' => $monthLateCount,
+            'monthAbsentCount' => $monthAbsentCount,
+            'monthLateDates' => $monthLateDates,
+            'monthAbsentDates' => $monthAbsentDates,
+            'statusResolver' => $statusResolver,
         ]);
+    }
+
+    public function autoLogout(Request $request): JsonResponse
+    {
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return response()->json(['ok' => true]);
     }
 
     public function openByPin(Request $request): RedirectResponse
@@ -395,8 +685,9 @@ class MyPageController extends Controller
                 ->orderBy('date')
                 ->get();
 
-            $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
-            $weekEnd = Carbon::now()->copy()->endOfWeek(Carbon::SUNDAY);
+            $businessCurrent = \App\Support\BusinessDate::current();
+            $weekStart = $businessCurrent->copy()->startOfWeek(\Illuminate\Support\Carbon::MONDAY);
+            $weekEnd = $businessCurrent->copy()->endOfWeek(\Illuminate\Support\Carbon::SUNDAY);
 
             $weekRows = Attendance::query()
                 ->where('staff_id', $staff->id)
@@ -573,6 +864,43 @@ class MyPageController extends Controller
     protected function parseShiftOutTime(?string $value, Carbon $date, ?Carbon $inAt): ?Carbon
     {
         return \App\Support\BusinessDate::parseTimeForBusinessDate($value, $date);
+    }
+
+    private function roleCategory(string $role): string
+    {
+        $r = strtolower(trim($role));
+        if ($r === '') {
+            return 'other';
+        }
+
+        $kitchenNeedles = ['kitchen', 'chef', 'cook', 'cuisine', 'commis', 'patissier', 'pâtissier', 'boulanger'];
+        $hallNeedles = ['hall', 'waiter', 'waitress', 'service', 'server', 'salle', 'floor', 'serveur', 'serveuse'];
+
+        foreach ($kitchenNeedles as $needle) {
+            if (str_contains($r, $needle)) {
+                return 'kitchen';
+            }
+        }
+
+        foreach ($hallNeedles as $needle) {
+            if (str_contains($r, $needle)) {
+                return 'hall';
+            }
+        }
+
+        return 'other';
+    }
+
+    private function scheduledStartFromFixedShifts(Staff $staff, string $dayKey, string $mealKey): ?string
+    {
+        $slot = data_get($staff->fixed_shifts, "{$dayKey}.{$mealKey}");
+        if (! is_array($slot) || ! isset($slot[0]) || ! is_string($slot[0])) {
+            return null;
+        }
+
+        $start = trim($slot[0]);
+
+        return $start !== '' ? $start : null;
     }
 
 }

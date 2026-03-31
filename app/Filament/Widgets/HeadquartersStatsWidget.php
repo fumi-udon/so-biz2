@@ -8,7 +8,6 @@ use App\Models\RoutineTaskLog;
 use App\Support\BusinessDate;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Illuminate\Support\Number;
 
 class HeadquartersStatsWidget extends StatsOverviewWidget
 {
@@ -63,13 +62,13 @@ class HeadquartersStatsWidget extends StatsOverviewWidget
         }
 
         $taskRateLabel = $totalTasks > 0
-            ? Number::percentage((float) round(100 * $completedCount / $totalTasks, 1), 1, 1, 'fr_TN')
+            ? number_format((float) round(100 * $completedCount / $totalTasks, 1), 1, '.', '').'%'
             : '—';
 
         return [
             Stat::make(
                 '本日のリアルタイム人件費',
-                Number::currency($laborCost, 'TND', 'fr_TN', 0),
+                number_format($laborCost, 0, '.', ' ').' TND',
             )
                 ->description('確定済み勤務区間 × 時給の合計')
                 ->icon('heroicon-o-banknotes')

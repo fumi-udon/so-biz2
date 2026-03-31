@@ -1,6 +1,6 @@
 /**
- * Loaded only on filament.admin.resources.attendances.index — keeps the data table
- * tabular on narrow viewports and enables horizontal scroll.
+ * Loaded only on filament.admin.resources.attendances.index — horizontal scroll
+ * for wide tables on narrow viewports (Filament standard table layout preserved).
  */
 .fi-resource-list-records-page .fi-ta-content-ctn {
     overflow-x: auto;

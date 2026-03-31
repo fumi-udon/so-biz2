@@ -2,7 +2,11 @@
 
 namespace App\Providers;
 
+use App\Models\DailyTip;
+use App\Models\DailyTipDistribution;
 use App\Models\Staff;
+use App\Observers\DailyTipDistributionObserver;
+use App\Observers\DailyTipObserver;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -21,6 +25,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        DailyTip::observe(DailyTipObserver::class);
+        DailyTipDistribution::observe(DailyTipDistributionObserver::class);
+
         View::composer('components.mypage-entry-modal', function ($view): void {
             $view->with(
                 'mypageStaffList',

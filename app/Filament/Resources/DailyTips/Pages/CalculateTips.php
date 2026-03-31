@@ -1,0 +1,464 @@
+<?php
+
+namespace App\Filament\Resources\DailyTips\Pages;
+
+use App\Filament\Resources\DailyTips\DailyTipResource;
+use App\Models\Attendance;
+use App\Models\DailyTip;
+use App\Models\Staff;
+use App\Support\DailyTipAuditContext;
+use App\Support\DailyTipAuditLogger;
+use App\Services\TipCalculationService;
+use App\Support\BusinessDate;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Form;
+use Filament\Notifications\Notification;
+use Filament\Resources\Pages\Page;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+
+class CalculateTips extends Page
+{
+    protected static string $resource = DailyTipResource::class;
+
+    protected static string $view = 'filament.resources.daily-tips.pages.calculate-tips';
+
+    protected static ?string $title = 'チップ計算';
+
+    /** ページ標準ヘッダーを出さず、本文から入力を開始する */
+    protected ?string $heading = '';
+
+    /** @var array<string, mixed> */
+    public array $data = [];
+
+    /** @var array<int, array<string, mixed>> */
+    public array $rows = [];
+
+    public float $distributed_total = 0.0;
+
+    public float $weekly_total = 0.0;
+
+    public float $monthly_total = 0.0;
+
+    /** @var array<int, array<string, mixed>> */
+    public array $recent_averages = [];
+
+    public function mount(): void
+    {
+        $this->form->fill([
+            'business_date' => BusinessDate::current()->toDateString(),
+            'shift' => 'lunch',
+            'total_amount' => '0',
+            'selected_staff_id' => null,
+        ]);
+        $this->loadRows();
+        $this->recalculateRows();
+        $this->refreshAnalytics();
+    }
+
+    public function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Grid::make([
+                    'default' => 1,
+                    'md' => 2,
+                ])
+                    ->extraAttributes([
+                        'class' => 'gap-y-2 gap-x-2',
+                    ])
+                    ->schema([
+                        Section::make()
+                            ->heading(null)
+                            ->compact()
+                            ->schema([
+                                DatePicker::make('business_date')
+                                    ->label('営業日')
+                                    ->required()
+                                    ->native(true)
+                                    ->live(debounce: 500)
+                                    ->afterStateUpdated(fn () => $this->afterConditionChanged())
+                                    ->extraInputAttributes(['class' => 'py-1.5 text-sm']),
+                            ])
+                            ->extraAttributes([
+                                'class' => 'rounded-xl border-2 border-amber-200 bg-amber-50/50 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-700 dark:bg-amber-950/30 dark:ring-amber-900/40',
+                            ]),
+                        Section::make()
+                            ->heading(null)
+                            ->compact()
+                            ->schema([
+                                Select::make('shift')
+                                    ->label('シフト')
+                                    ->options([
+                                        'lunch' => 'ランチ（L）',
+                                        'dinner' => 'ディナー（D）',
+                                    ])
+                                    ->required()
+                                    ->native(true)
+                                    ->live(debounce: 500)
+                                    ->afterStateUpdated(fn () => $this->afterConditionChanged())
+                                    ->extraInputAttributes(['class' => 'py-1.5 text-sm']),
+                            ])
+                            ->extraAttributes([
+                                'class' => 'rounded-xl border-2 border-indigo-200 bg-indigo-50/50 shadow-sm ring-1 ring-indigo-200/80 dark:border-indigo-700 dark:bg-indigo-950/30 dark:ring-indigo-900/40',
+                            ]),
+                    ]),
+                Section::make()
+                    ->heading(null)
+                    ->compact()
+                    ->schema([
+                        TextInput::make('total_amount')
+                            ->label('チップ総額（TND）')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step(0.001)
+                            ->required()
+                            ->live(debounce: 500)
+                            ->afterStateUpdated(fn () => $this->recalculateRows())
+                            ->extraInputAttributes([
+                                'class' => 'py-2 text-2xl font-semibold tabular-nums leading-tight',
+                                'step' => '0.001',
+                                'inputmode' => 'decimal',
+                            ]),
+                    ])
+                    ->extraAttributes([
+                        'class' => 'rounded-xl border-2 border-sky-400 bg-sky-50/50 shadow-sm ring-1 ring-sky-300/70 dark:border-sky-600 dark:bg-sky-950/40 dark:ring-sky-800/50',
+                    ]),
+                Section::make()
+                    ->heading(null)
+                    ->compact()
+                    ->schema([
+                        Select::make('selected_staff_id')
+                            ->label('スタッフを追加')
+                            ->options(fn (): array => $this->availableStaffOptions)
+                            ->placeholder('— 追加 —')
+                            ->native(true)
+                            ->live(debounce: 500)
+                            ->afterStateUpdated(fn () => $this->afterStaffSelectChanged())
+                            ->extraInputAttributes(['class' => 'py-1.5 text-sm']),
+                    ])
+                    ->extraAttributes([
+                        'class' => 'rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900',
+                    ]),
+            ])
+            ->statePath('data');
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function getAvailableStaffOptionsProperty(): array
+    {
+        $selected = array_map(fn (array $row): int => (int) $row['staff_id'], $this->rows);
+
+        return Staff::query()
+            ->where('is_active', true)
+            ->whereNotIn('id', $selected)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    protected function afterConditionChanged(): void
+    {
+        $this->loadRows();
+        $this->recalculateRows();
+        $this->refreshAnalytics();
+    }
+
+    protected function afterStaffSelectChanged(): void
+    {
+        $raw = $this->data['selected_staff_id'] ?? null;
+        if ($raw === null || $raw === '') {
+            return;
+        }
+
+        $this->addSelectedStaff((int) $raw);
+        $this->data['selected_staff_id'] = null;
+    }
+
+    public function addSelectedStaff(int $staffId): void
+    {
+        foreach ($this->rows as $row) {
+            if ((int) $row['staff_id'] === $staffId) {
+                return;
+            }
+        }
+
+        $staff = Staff::query()
+            ->where('is_active', true)
+            ->with('jobLevel')
+            ->find($staffId);
+
+        if (! $staff) {
+            return;
+        }
+
+        $rawWeight = $staff->jobLevel?->default_weight;
+        $base = $rawWeight === null
+            ? 10.0
+            : (float) TipCalculationService::normalizeWeightScalar($rawWeight);
+        $defaultWeight = $this->snapTipWeightToMasterGrid($base);
+
+        $this->rows[] = [
+            'staff_id' => $staff->id,
+            'name' => $staff->name,
+            'job_level' => $staff->jobLevel?->name ?? 'Unassigned',
+            'weight' => $defaultWeight,
+            'amount' => 0.0,
+            'is_tardy_deprived' => false,
+            'is_manual_added' => true,
+            'note' => null,
+        ];
+
+        $this->recalculateRows();
+    }
+
+    public function removeStaff(int $staffId): void
+    {
+        $this->rows = array_values(array_filter(
+            $this->rows,
+            fn (array $row): bool => (int) $row['staff_id'] !== $staffId
+        ));
+
+        $this->recalculateRows();
+    }
+
+    /**
+     * ネストした rows.* の更新でも再計算する。
+     */
+    public function updated($propertyName): void
+    {
+        if ($propertyName === 'rows') {
+            return;
+        }
+
+        if (str_starts_with($propertyName, 'rows.')) {
+            $this->recalculateRows();
+        }
+    }
+
+    public function confirm(): void
+    {
+        $this->validate([
+            'data.business_date' => ['required', 'date'],
+            'data.shift' => ['required', 'in:lunch,dinner'],
+            'data.total_amount' => ['required', 'numeric', 'min:0'],
+        ], attributes: [
+            'data.business_date' => '営業日',
+            'data.shift' => 'シフト',
+            'data.total_amount' => 'チップ総額',
+        ]);
+
+        $savedTotal = $this->normalizedTotalAmount();
+
+        DB::transaction(function () use ($savedTotal): void {
+            $tip = DailyTip::query()->updateOrCreate(
+                [
+                    'business_date' => $this->data['business_date'] ?? null,
+                    'shift' => $this->data['shift'] ?? 'lunch',
+                ],
+                [
+                    'total_amount' => $savedTotal,
+                ]
+            );
+
+            $beforeCount = (int) $tip->distributions()->count();
+            $createdCount = 0;
+
+            DailyTipAuditContext::suppressDistributionAudit(true);
+            try {
+                $tip->distributions()->delete();
+
+                foreach ($this->rows as $row) {
+                    $w = $this->snapTipWeightToMasterGrid(
+                        (float) TipCalculationService::normalizeWeightScalar($row['weight'] ?? 0)
+                    );
+                    $tip->distributions()->create([
+                        'staff_id' => (int) $row['staff_id'],
+                        'weight' => round($w, 3),
+                        'amount' => round((float) $row['amount'], 3),
+                        'is_tardy_deprived' => (bool) $row['is_tardy_deprived'],
+                        'is_manual_added' => (bool) $row['is_manual_added'],
+                        'note' => $row['note'],
+                    ]);
+                    $createdCount++;
+                }
+            } finally {
+                DailyTipAuditContext::suppressDistributionAudit(false);
+            }
+
+            DailyTipAuditLogger::write(
+                'distribution_recalculated',
+                $tip->business_date?->toDateString(),
+                $tip->shift,
+                [
+                    'daily_tip_id' => $tip->id,
+                    'removed_count' => $beforeCount,
+                    'created_count' => $createdCount,
+                    'final_total_amount' => (float) $tip->total_amount,
+                ]
+            );
+        });
+
+        Notification::make()
+            ->title('チップ配分を確定しました')
+            ->success()
+            ->send();
+
+        $this->refreshAnalytics();
+    }
+
+    protected function loadRows(): void
+    {
+        $businessDate = $this->data['business_date'] ?? BusinessDate::current()->toDateString();
+        $shift = $this->data['shift'] ?? 'lunch';
+
+        $attendances = Attendance::query()
+            ->whereDate('date', $businessDate)
+            ->when(
+                $shift === 'lunch',
+                fn ($query) => $query->whereNotNull('lunch_in_at'),
+                fn ($query) => $query->whereNotNull('dinner_in_at')
+            )
+            ->whereHas('staff')
+            ->with(['staff' => fn ($query) => $query->with('jobLevel')])
+            ->get()
+            ->filter(fn (Attendance $attendance): bool => $attendance->staff !== null)
+            ->unique('staff_id')
+            ->values();
+
+        $this->rows = $attendances->map(function (Attendance $attendance): array {
+            $lateMinutes = (int) ($attendance->late_minutes ?? 0);
+            $isTardy = $lateMinutes > 0;
+
+            if ((bool) ($attendance->is_edited_by_admin ?? false) && $lateMinutes === 0) {
+                $isTardy = false;
+            }
+
+            $rawWeight = $attendance->staff->jobLevel?->default_weight;
+            $base = $rawWeight === null
+                ? 10.0
+                : (float) TipCalculationService::normalizeWeightScalar($rawWeight);
+            $defaultWeight = $isTardy ? 0.0 : $this->snapTipWeightToMasterGrid($base);
+
+            return [
+                'staff_id' => (int) $attendance->staff_id,
+                'name' => (string) $attendance->staff->name,
+                'job_level' => (string) ($attendance->staff->jobLevel?->name ?? 'Unassigned'),
+                'weight' => $defaultWeight,
+                'amount' => 0.0,
+                'is_tardy_deprived' => $isTardy,
+                'is_manual_added' => false,
+                'note' => null,
+            ];
+        })->all();
+    }
+
+    protected function recalculateRows(): void
+    {
+        $targetTotal = $this->normalizedTotalAmount();
+
+        $weights = [];
+        foreach ($this->rows as $row) {
+            $w = (float) TipCalculationService::normalizeWeightScalar($row['weight'] ?? 0);
+            $weights[] = max(0.0, $this->snapTipWeightToMasterGrid($w));
+        }
+
+        $amounts = $this->tipService()->distributeAmounts($weights, $targetTotal);
+
+        $out = [];
+        $sum = 0.0;
+        foreach ($this->rows as $i => $row) {
+            $w = $weights[$i] ?? 0.0;
+            $amt = $amounts[$i] ?? 0.0;
+            $sum += $amt;
+            $out[] = array_merge($row, [
+                'weight' => $w,
+                'amount' => $amt,
+            ]);
+        }
+
+        $this->rows = $out;
+        $this->distributed_total = round($sum, 3);
+    }
+
+    /**
+     * JobLevel マスタ（0–100・10 刻み）と整合するウェイトへ丸める。
+     */
+    protected function snapTipWeightToMasterGrid(float $value): float
+    {
+        $snapped = (int) round($value / 10) * 10;
+
+        return (float) max(0, min(100, $snapped));
+    }
+
+    /**
+     * 空文字の total_amount を 0 として扱い、ミリ単位に丸める。
+     */
+    protected function normalizedTotalAmount(): float
+    {
+        $rawTotal = $this->data['total_amount'] ?? '0';
+        if ($rawTotal === '' || $rawTotal === null) {
+            $rawTotal = '0';
+        }
+
+        $rawTotal = str_replace(',', '', (string) $rawTotal);
+
+        return round(max(0.0, (float) $rawTotal), 3);
+    }
+
+    protected function refreshAnalytics(): void
+    {
+        $baseDate = Carbon::parse($this->data['business_date'] ?? BusinessDate::current()->toDateString());
+        $weekStart = $baseDate->copy()->startOfWeek(Carbon::MONDAY);
+        $weekEnd = $baseDate->copy()->endOfWeek(Carbon::SUNDAY);
+        $monthStart = $baseDate->copy()->startOfMonth();
+        $monthEnd = $baseDate->copy()->endOfMonth();
+
+        $this->weekly_total = (float) DailyTip::query()
+            ->whereBetween('business_date', [$weekStart->toDateString(), $weekEnd->toDateString()])
+            ->sum('total_amount');
+
+        $this->monthly_total = (float) DailyTip::query()
+            ->whereBetween('business_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
+            ->sum('total_amount');
+
+        $recent = \App\Models\DailyTipDistribution::query()
+            ->with('staff')
+            ->latest('id')
+            ->limit(300)
+            ->get()
+            ->groupBy('staff_id')
+            ->map(function ($group, $staffId): array {
+                $sample = $group->take(5);
+                $staffName = $sample->first()?->staff?->name ?? ('#'.$staffId);
+
+                return [
+                    'staff_name' => $staffName,
+                    'avg_amount' => round((float) $sample->avg('amount'), 3),
+                    'count' => $sample->count(),
+                ];
+            })
+            ->sortByDesc('avg_amount')
+            ->take(10)
+            ->values()
+            ->all();
+
+        $this->recent_averages = $recent;
+    }
+
+    protected function tipService(): TipCalculationService
+    {
+        return app(TipCalculationService::class);
+    }
+}

@@ -3,10 +3,13 @@
 namespace App\Filament\Resources\InventoryItems\Pages;
 
 use App\Filament\Resources\InventoryItems\InventoryItemResource;
+use App\Traits\RedirectsToIndex;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateInventoryItem extends CreateRecord
 {
+    use RedirectsToIndex;
+
     protected static string $resource = InventoryItemResource::class;
 
     /**

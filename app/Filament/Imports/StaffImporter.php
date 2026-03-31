@@ -49,9 +49,10 @@ class StaffImporter extends Importer
                 ->numeric()
                 ->rules(['nullable', 'numeric'])
                 ->ignoreBlankState(),
-            ImportColumn::make('job_level')
-                ->label('job_level')
-                ->rules(['nullable', 'string', 'max:255'])
+            ImportColumn::make('job_level_id')
+                ->label('job_level_id')
+                ->integer()
+                ->rules(['nullable', 'integer', 'exists:job_levels,id'])
                 ->ignoreBlankState(),
             ImportColumn::make('age')
                 ->label('age')

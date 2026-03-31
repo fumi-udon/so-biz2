@@ -30,8 +30,8 @@ class StaffExporter extends Exporter
                 ->label('target_weekly_hours'),
             ExportColumn::make('wage')
                 ->label('wage'),
-            ExportColumn::make('job_level')
-                ->label('job_level'),
+            ExportColumn::make('job_level_id')
+                ->label('job_level_id'),
             ExportColumn::make('age')
                 ->label('age'),
             ExportColumn::make('gender')

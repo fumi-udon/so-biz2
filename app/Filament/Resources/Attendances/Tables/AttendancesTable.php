@@ -2,105 +2,54 @@
 
 namespace App\Filament\Resources\Attendances\Tables;
 
+use App\Filament\Resources\Attendances\Forms\AttendanceForm;
 use App\Models\Attendance;
 use App\Models\Staff;
+use App\Support\AttendanceFormSaveData;
 use Filament\Forms\Components\DatePicker;
-use Filament\Support\Enums\MaxWidth;
+use Filament\Forms\Form;
 use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Actions\CreateAction;
 use Filament\Tables\Actions\DeleteAction;
 use Filament\Tables\Actions\DeleteBulkAction;
+use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\TextInputColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 class AttendancesTable
 {
-    protected static function clockInInputColumn(string $attribute, string $label): TextInputColumn
+    public static function formatMealRange(Attendance $record, string $meal): string
     {
-        return TextInputColumn::make($attribute)
-            ->label($label)
-            ->type('time')
-            ->updateStateUsing(function (?string $state, Attendance $record) use ($attribute): ?string {
-                if (blank($state)) {
-                    $record->{$attribute} = null;
-                    $record->is_edited_by_admin = true;
-                    $record->save();
+        $inKey = $meal === 'lunch' ? 'lunch_in_at' : 'dinner_in_at';
+        $outKey = $meal === 'lunch' ? 'lunch_out_at' : 'dinner_out_at';
+        $in = $record->{$inKey};
+        $out = $record->{$outKey};
 
-                    return null;
-                }
+        if (! $in && ! $out) {
+            return '—';
+        }
 
-                $date = $record->date instanceof Carbon
-                    ? $record->date->copy()->startOfDay()
-                    : Carbon::parse($record->date)->startOfDay();
+        $inStr = $in instanceof Carbon ? $in->format('H:i') : '—';
+        $outStr = $out instanceof Carbon ? $out->format('H:i') : '—';
 
-                $record->{$attribute} = \App\Support\BusinessDate::parseTimeForBusinessDate($state, $date);
-                $record->is_edited_by_admin = true;
-                $record->save();
-
-                return $state;
-            })
-            ->width('130px')
-            ->extraHeaderAttributes(['style' => 'min-width: 130px;'])
-            ->extraCellAttributes(['style' => 'min-width: 130px; vertical-align: middle;']);
-    }
-
-    protected static function clockOutInputColumn(string $attribute, string $label): TextInputColumn
-    {
-        return TextInputColumn::make($attribute)
-            ->label($label)
-            ->type('time')
-            ->updateStateUsing(function (?string $state, Attendance $record) use ($attribute): ?string {
-                if (blank($state)) {
-                    $record->{$attribute} = null;
-                    $record->is_edited_by_admin = true;
-                    $record->save();
-
-                    return null;
-                }
-
-                $date = $record->date instanceof Carbon
-                    ? $record->date->copy()->startOfDay()
-                    : Carbon::parse($record->date)->startOfDay();
-
-                $record->{$attribute} = \App\Support\BusinessDate::parseTimeForBusinessDate($state, $date);
-                $record->is_edited_by_admin = true;
-                $record->save();
-
-                return $state;
-            })
-            ->width('130px')
-            ->extraHeaderAttributes(['style' => 'min-width: 130px;'])
-            ->extraCellAttributes(function (Attendance $record) use ($attribute): array {
-                $base = ['style' => 'min-width: 130px; vertical-align: middle;'];
-                $incomplete = match ($attribute) {
-                    'lunch_out_at' => $record->lunch_in_at && ! $record->lunch_out_at,
-                    'dinner_out_at' => $record->dinner_in_at && ! $record->dinner_out_at,
-                    default => false,
-                };
-
-                if ($incomplete) {
-                    $base['class'] = '!bg-danger-50 dark:!bg-danger-950/40 ring-1 ring-danger-500/40';
-                }
-
-                return $base;
-            });
+        return $inStr.' – '.$outStr;
     }
 
     public static function configure(Table $table): Table
     {
         return $table
             ->striped()
-            ->paginated(false)
-            ->defaultSort('date', 'asc')
+            ->defaultSort('date', 'desc')
+            ->recordUrl(null)
             ->filters([
                 SelectFilter::make('staff_id')
-                    ->label('👤 スタッフ選択')
+                    ->label('スタッフ')
                     ->options(fn (): array => Staff::query()
                         ->where('is_active', true)
                         ->orderBy('name')
@@ -111,7 +60,7 @@ class AttendancesTable
                 Filter::make('month')
                     ->form([
                         DatePicker::make('month_filter')
-                            ->label('📅 表示月')
+                            ->label('表示月')
                             ->native(false)
                             ->displayFormat('Y年 m月')
                             ->default(now()->startOfMonth()),
@@ -123,68 +72,49 @@ class AttendancesTable
                             : Carbon::parse($raw);
                         $query->whereYear('date', $d->year)->whereMonth('date', $d->month);
                     }),
-            ], layout: FiltersLayout::AboveContent)
-            ->filtersFormColumns(2)
-            ->filtersFormWidth(MaxWidth::FourExtraLarge)
+            ], layout: FiltersLayout::Dropdown)
+            ->filtersFormColumns(1)
             ->headerActions([
                 CreateAction::make()
-                    ->label('＋ 新規打刻追加')
-                    ->slideOver(),
+                    ->label('新規打刻')
+                    ->slideOver()
+                    ->form(fn (Form $form): Form => AttendanceForm::configure($form))
+                    ->mutateFormDataUsing(fn (array $data): array => AttendanceFormSaveData::normalizeForCreate($data)),
             ])
             ->columns([
                 TextColumn::make('date')
                     ->label('日付')
-                    ->date('m/d (D)')
-                    ->sortable()
-                    ->wrap(false),
+                    ->date()
+                    ->sortable(),
                 TextColumn::make('staff.name')
                     ->label('スタッフ')
-                    ->searchable()
-                    ->wrap(false),
-                TextColumn::make('day_salary')
-                    ->label('日給(参考)')
-                    ->alignEnd()
-                    ->wrap(false)
-                    ->formatStateUsing(function (Attendance $record): string {
-                        $minutes = $record->calculateTotalMinutes();
-                        $wage = $record->staff?->hourly_wage;
-                        if ($minutes === null || $wage === null || (int) $wage === 0) {
-                            return '—';
-                        }
-
-                        $yen = (int) round(($minutes / 60) * (int) $wage);
-
-                        return number_format($yen).' 円';
-                    }),
-                self::clockInInputColumn('lunch_in_at', 'L-In'),
-                self::clockOutInputColumn('lunch_out_at', 'L-Out'),
-                self::clockInInputColumn('dinner_in_at', 'D-In'),
-                self::clockOutInputColumn('dinner_out_at', 'D-Out'),
-                TextColumn::make('id')
-                    ->label('備考')
-                    ->sortable(false)
-                    ->wrap(false)
-                    ->formatStateUsing(function ($state, Attendance $record): string {
-                        $parts = [];
-                        if ($record->hasMissingClockOut()) {
-                            $parts[] = '未退勤';
-                        }
-                        if ($record->approved_by_manager_id && $record->approvedByManager) {
-                            $parts[] = '承認: '.$record->approvedByManager->name;
-                        }
-
-                        return $parts !== [] ? implode(' · ', $parts) : '—';
-                    })
-                    ->color(fn (Attendance $record): ?string => $record->hasMissingClockOut() ? 'danger' : null),
-                TextInputColumn::make('admin_note')
-                    ->label('メモ')
-                    ->width('280px')
-                    ->extraHeaderAttributes(['style' => 'min-width: 250px;'])
-                    ->extraCellAttributes(['style' => 'min-width: 250px; vertical-align: middle;']),
+                    ->searchable(),
+                TextColumn::make('lunch')
+                    ->label('ランチ')
+                    ->getStateUsing(fn (Attendance $record): string => self::formatMealRange($record, 'lunch')),
+                TextColumn::make('dinner')
+                    ->label('ディナー')
+                    ->getStateUsing(fn (Attendance $record): string => self::formatMealRange($record, 'dinner')),
+                TextColumn::make('late_minutes')
+                    ->label('遅刻（分）')
+                    ->badge()
+                    ->formatStateUsing(fn ($state): string => $state === null ? '—' : (string) $state)
+                    ->color(fn ($state): string => $state === null ? 'gray' : ((int) $state > 0 ? 'danger' : 'success')),
             ])
             ->actions([
-                DeleteAction::make()
-                    ->iconButton(),
+                EditAction::make()
+                    ->label('編集')
+                    ->slideOver()
+                    ->form(fn (Form $form): Form => AttendanceForm::configure($form))
+                    ->using(function (array $data, Model $record, Table $table): Model {
+                        /** @var Attendance $record */
+                        $data = AttendanceFormSaveData::normalizeForRecord($record, $data);
+                        $data['is_edited_by_admin'] = true;
+                        $record->update($data);
+
+                        return $record->refresh();
+                    }),
+                DeleteAction::make(),
             ])
             ->bulkActions([
                 BulkActionGroup::make([

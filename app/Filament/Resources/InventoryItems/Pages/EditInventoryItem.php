@@ -3,11 +3,14 @@
 namespace App\Filament\Resources\InventoryItems\Pages;
 
 use App\Filament\Resources\InventoryItems\InventoryItemResource;
+use App\Traits\RedirectsToIndex;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 
 class EditInventoryItem extends EditRecord
 {
+    use RedirectsToIndex;
+
     protected static string $resource = InventoryItemResource::class;
 
     protected function getHeaderActions(): array

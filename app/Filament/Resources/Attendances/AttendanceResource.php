@@ -23,7 +23,10 @@ class AttendanceResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with(['staff', 'approvedByManager']);
+        return parent::getEloquentQuery()->with([
+            'staff' => fn ($q) => $q->withTrashed()->with(['jobLevel']),
+            'approvedByManager' => fn ($q) => $q->withTrashed(),
+        ]);
     }
 
     public static function form(Form $form): Form
@@ -40,16 +43,6 @@ class AttendanceResource extends Resource
     {
         return [
             //
-        ];
-    }
-
-    /**
-     * @return array<class-string<\Filament\Widgets\Widget>>
-     */
-    public static function getWidgets(): array
-    {
-        return [
-            Widgets\TodayAttendanceWidget::class,
         ];
     }
 
