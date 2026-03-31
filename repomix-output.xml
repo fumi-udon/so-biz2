@@ -230,6 +230,7 @@ database/
     2026_03_30_000013_replace_staff_job_level_with_job_level_id.php
     2026_03_30_000014_create_daily_tip_audits_table.php
     2026_03_30_210000_change_value_column_type_in_inventory_records.php
+    2026_03_31_090000_add_tip_applied_flags_to_attendances_table.php
     2026_03_31_100000_add_deleted_at_to_staff_table.php
     2026_03_31_100001_add_performance_indexes_to_tables.php
   seeders/
@@ -285,6 +286,45 @@ routes/
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="database/migrations/2026_03_31_090000_add_tip_applied_flags_to_attendances_table.php">
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('attendances', function (Blueprint $table) {
+            $table->boolean('is_lunch_tip_applied')
+                ->default(false)
+                ->after('is_tip_eligible');
+            $table->boolean('is_dinner_tip_applied')
+                ->default(false)
+                ->after('is_lunch_tip_applied');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('attendances', function (Blueprint $table) {
+            $table->dropColumn([
+                'is_lunch_tip_applied',
+                'is_dinner_tip_applied',
+            ]);
+        });
+    }
+};
+</file>
 
 <file path="app/Events/OrderPlaced.php">
 <?php
@@ -1815,6 +1855,7 @@ use App\Filament\Resources\DailyTips\DailyTipResource;
 use App\Filament\Resources\Staff\StaffResource;
 use App\Models\DailyTip;
 use App\Models\DailyTipDistribution;
+use App\Support\BusinessDate;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\Page;
@@ -1840,7 +1881,7 @@ class TipDashboard extends Page
 
     public function mount(): void
     {
-        $anchor = Carbon::now()->startOfDay();
+        $anchor = BusinessDate::current();
         $this->week_start = $anchor->copy()->startOfWeek($this->startDayOfWeek)->toDateString();
         $this->month_picker = Carbon::parse($this->week_start)->format('Y-m');
     }
@@ -2776,6 +2817,12 @@ class TimecardForm extends Component
 
     public string $extraReason = '';
 
+    public bool $showTipModal = false;
+
+    public ?string $tipModalState = null;
+
+    public ?string $tipTargetShift = null;
+
     public function mount(): void
     {
         $this->staffOptions = Staff::query()
@@ -2866,9 +2913,17 @@ class TimecardForm extends Component
             return;
         }
 
-        $this->applySuccessOutcome($outcome);
         $this->refreshShiftState($staff);
         $this->syncExtraMealDefault();
+
+        if (in_array($action, ['lunch_in', 'dinner_in'], true)) {
+            $isLate = $outcome->postFlow === 'mypage_late' && ($outcome->lateMinutes ?? 0) > 0;
+            $this->openTipResultModal($action, $isLate);
+
+            return;
+        }
+
+        $this->applySuccessOutcome($outcome);
     }
 
     public function submitExtraShift(): void
@@ -2925,10 +2980,12 @@ class TimecardForm extends Component
             return;
         }
 
-        $this->applySuccessOutcome($outcome);
         $this->extraReason = '';
         $this->refreshShiftState($staff);
         $this->syncExtraMealDefault();
+
+        $action = $this->extraMeal === 'lunch' ? 'lunch_in' : 'dinner_in';
+        $this->openTipResultModal($action, false);
     }
 
     public function resetAfterPunch(): void
@@ -2942,6 +2999,39 @@ class TimecardForm extends Component
         $this->bannerError = null;
         $this->bannerSuccess = null;
         $this->resetToStepOne();
+    }
+
+    public function applyForTip(): mixed
+    {
+        if ($this->authenticatedStaffId === null || $this->tipTargetShift === null) {
+            return redirect()->route('mypage.index');
+        }
+
+        $dateString = app(TimecardPunchService::class)->resolveTargetBusinessDate()->toDateString();
+        $attendance = Attendance::query()
+            ->where('staff_id', $this->authenticatedStaffId)
+            ->where('date', $dateString)
+            ->first();
+
+        if ($attendance) {
+            if ($this->tipTargetShift === 'lunch') {
+                $attendance->is_lunch_tip_applied = true;
+            } elseif ($this->tipTargetShift === 'dinner') {
+                $attendance->is_dinner_tip_applied = true;
+            }
+            $attendance->save();
+        }
+
+        $this->resetTipModalState();
+
+        return redirect()->route('mypage.index');
+    }
+
+    public function declineTipAndRedirect(): mixed
+    {
+        $this->resetTipModalState();
+
+        return redirect()->route('mypage.index');
     }
 
     public function isPunchDisabled(string $action): bool
@@ -3027,6 +3117,21 @@ class TimecardForm extends Component
         $this->js('setTimeout(() => $wire.resetAfterPunch(), 3500)');
     }
 
+    private function openTipResultModal(string $action, bool $isLate): void
+    {
+        $this->tipTargetShift = $action === 'lunch_in' ? 'lunch' : 'dinner';
+        $this->tipModalState = $isLate ? 'LOSE' : 'WIN';
+        $this->showTipModal = true;
+        $this->dispatch('open-modal', id: 'tip-result-modal');
+    }
+
+    private function resetTipModalState(): void
+    {
+        $this->showTipModal = false;
+        $this->tipModalState = null;
+        $this->tipTargetShift = null;
+    }
+
     private function resetToStepOne(): void
     {
         $this->step = 1;
@@ -3044,6 +3149,7 @@ class TimecardForm extends Component
         ];
         $this->extraMeal = 'lunch';
         $this->extraReason = '';
+        $this->resetTipModalState();
     }
 }
 </file>
@@ -3496,21 +3602,22 @@ class StaffTip extends Model
 namespace App\Observers;
 
 use App\Models\DailyTipDistribution;
+use App\Models\StaffTip;
 use App\Support\DailyTipAuditLogger;
 
 class DailyTipDistributionObserver
 {
-    public function created(DailyTipDistribution $distribution): void
+    public function created(DailyTipDistribution|StaffTip $distribution): void
     {
         DailyTipAuditLogger::forDistribution('created', $distribution);
     }
 
-    public function updated(DailyTipDistribution $distribution): void
+    public function updated(DailyTipDistribution|StaffTip $distribution): void
     {
         DailyTipAuditLogger::forDistribution('updated', $distribution);
     }
 
-    public function deleted(DailyTipDistribution $distribution): void
+    public function deleted(DailyTipDistribution|StaffTip $distribution): void
     {
         DailyTipAuditLogger::forDistribution('deleted', $distribution);
     }
@@ -3967,17 +4074,16 @@ final class TimecardPunchService
 
         $adminUsers = User::all();
 
+        $notification = Notification::make()
+            ->title("{$staff->name} さんが{$actionLabel}しました")
+            ->success();
+
+        $notification->sendToDatabase($adminUsers);
+
         try {
-            Notification::make()
-                ->title("{$staff->name} さんが{$actionLabel}しました")
-                ->success()
-                ->sendToDatabase($adminUsers)
-                ->broadcast($adminUsers);
+            $notification->broadcast($adminUsers);
         } catch (\Throwable) {
-            Notification::make()
-                ->title("{$staff->name} さんが{$actionLabel}しました")
-                ->success()
-                ->sendToDatabase($adminUsers);
+            // ブロードキャスト失敗時は DB 通知だけ確実に残す。
         }
     }
 
@@ -4302,6 +4408,7 @@ namespace App\Support;
 use App\Models\DailyTip;
 use App\Models\DailyTipAudit;
 use App\Models\DailyTipDistribution;
+use App\Models\StaffTip;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -4364,7 +4471,7 @@ final class DailyTipAuditLogger
         );
     }
 
-    public static function forDistribution(string $event, DailyTipDistribution $distribution): void
+    public static function forDistribution(string $event, DailyTipDistribution|StaffTip $distribution): void
     {
         if (DailyTipAuditContext::distributionAuditSuppressed()) {
             return;
@@ -8017,7 +8124,7 @@ window.Echo = new Echo({
     <title>タイムカード — {{ config('app.name', 'Laravel') }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    @livewireStyles
+    @filamentStyles
 </head>
 <body class="bg-dark text-light min-vh-100 d-flex flex-column">
     <x-client-nav variant="dark" />
@@ -8028,7 +8135,7 @@ window.Echo = new Echo({
         {{ config('app.name') }}
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
-    @livewireScripts
+    @filamentScripts(withCore: true)
 </body>
 </html>
 </file>
@@ -8283,6 +8390,40 @@ window.Echo = new Echo({
             @endif
         </div>
     @endif
+
+    <x-filament::modal
+        id="tip-result-modal"
+        :close-by-clicking-away="true"
+        :close-by-escaping="true"
+        width="md"
+        x-on:modal-closed.window="if ($event.detail.id === 'tip-result-modal') { $wire.declineTipAndRedirect() }"
+    >
+        @if ($tipModalState === 'WIN')
+            <div class="rounded-xl bg-linear-to-r from-amber-400 to-yellow-500 p-4 text-gray-950">
+                <p class="mb-2 text-lg font-black">🎉 YOU WIN!</p>
+                <p class="mb-4 text-sm font-bold">定刻クリア。チップ申請権を獲得しました！</p>
+                <button
+                    type="button"
+                    wire:click="applyForTip"
+                    class="w-full rounded-lg bg-black/85 px-3 py-2 text-sm font-extrabold text-yellow-200"
+                >
+                    🪙 チップ権利を受け取る
+                </button>
+            </div>
+        @elseif ($tipModalState === 'LOSE')
+            <div class="rounded-xl bg-linear-to-r from-red-800 to-gray-900 p-4 text-gray-100">
+                <p class="mb-2 text-lg font-black">💀 YOU LOSE...</p>
+                <p class="mb-4 text-sm font-bold">遅刻判定。本シフトのチップ権利を喪失しました。</p>
+                <button
+                    type="button"
+                    wire:click="declineTipAndRedirect"
+                    class="w-full rounded-lg bg-gray-600 px-3 py-2 text-sm font-extrabold text-gray-100"
+                >
+                    閉じる
+                </button>
+            </div>
+        @endif
+    </x-filament::modal>
 </div>
 </file>
 
@@ -8346,7 +8487,7 @@ window.Echo = new Echo({
                 <h1 class="h6 fw-bold mb-0">{{ $monthStart->translatedFormat('Y年n月') }} の勤怠</h1>
                 <div class="btn-group">
                     <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $prevMonth->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm rounded-start-4">&laquo;</a>
-                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => now()->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm">今月</a>
+                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => \App\Support\BusinessDate::current()->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm">今月</a>
                     <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $nextMonth->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm rounded-end-4">&raquo;</a>
                 </div>
             </div>
@@ -9705,6 +9846,7 @@ use App\Models\CloseCheckLog;
 use App\Models\CloseTask;
 use App\Models\Staff;
 use App\Services\RoutineInventoryCompletionService;
+use App\Support\BusinessDate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -9772,7 +9914,7 @@ class CloseCheckController extends Controller
 
         CloseCheckLog::query()->create([
             'staff_id' => $staff->id,
-            'date' => now()->toDateString(),
+            'date' => BusinessDate::toDateString(),
             'completed_at' => now(),
         ]);
 
@@ -11526,6 +11668,8 @@ class Attendance extends Model
         'dinner_out_at',
         'late_minutes',
         'is_tip_eligible',
+        'is_lunch_tip_applied',
+        'is_dinner_tip_applied',
         'is_edited_by_admin',
         'admin_note',
         'in_note',
@@ -11545,6 +11689,8 @@ class Attendance extends Model
             'dinner_in_at' => 'datetime',
             'dinner_out_at' => 'datetime',
             'is_tip_eligible' => 'boolean',
+            'is_lunch_tip_applied' => 'boolean',
+            'is_dinner_tip_applied' => 'boolean',
             'is_edited_by_admin' => 'boolean',
         ];
     }
@@ -11697,6 +11843,7 @@ namespace App\Providers;
 
 use App\Models\DailyTip;
 use App\Models\DailyTipDistribution;
+use App\Models\StaffTip;
 use App\Models\Staff;
 use App\Observers\DailyTipDistributionObserver;
 use App\Observers\DailyTipObserver;
@@ -11720,6 +11867,7 @@ class AppServiceProvider extends ServiceProvider
     {
         DailyTip::observe(DailyTipObserver::class);
         DailyTipDistribution::observe(DailyTipDistributionObserver::class);
+        StaffTip::observe(DailyTipDistributionObserver::class);
 
         View::composer('components.mypage-entry-modal', function ($view): void {
             $view->with(
@@ -13122,6 +13270,39 @@ class RoutineInventoryCompletionService
             <div class="mb-2 rounded-xl border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-600/30 dark:bg-rose-900/20 dark:text-rose-300">{{ $errors->first() }}</div>
         @endif
 
+        @php
+            $tipComboCount = (int) ($monthTipWinCount ?? 0);
+            $damageCount = (int) ($monthDamageCount ?? 0);
+            $tickerMessage = match (true) {
+                ($lunchStatus ?? 'none') === 'late' => 'ALERT: ランチ打刻が遅延中。至急チェックイン！',
+                ($dinnerStatus ?? 'none') === 'late' => 'ALERT: ディナー打刻が遅延中。至急チェックイン！',
+                ($lunchStatus ?? 'none') === 'future' => '本日ランチ: チップ申請待ち / 開始待機中',
+                ($dinnerStatus ?? 'none') === 'future' => '本日ディナー: チップ申請待ち / 開始待機中',
+                default => 'TIP SYSTEM PHASE 1 ONLINE - COMBOを積み上げろ！',
+            };
+        @endphp
+        <section class="mb-2 rounded-2xl border border-amber-300/80 bg-linear-to-r from-red-500 via-amber-400 to-yellow-300 p-px shadow-sm shadow-amber-300/50 dark:border-amber-400/30 dark:from-red-900/70 dark:via-amber-700/60 dark:to-yellow-700/60">
+            <div class="rounded-[15px] bg-black/85 px-2 py-2 text-white">
+                <div class="mb-1 flex items-center justify-between gap-2 text-[10px] font-extrabold tracking-wide">
+                    <span class="rounded bg-red-600/90 px-1.5 py-0.5 text-yellow-200 ring-1 ring-red-300/50">ROUND 1</span>
+                    <span class="truncate text-right text-yellow-200">MYPAGE BATTLE HUD</span>
+                </div>
+                <div class="mb-1 overflow-hidden rounded border border-yellow-300/40 bg-black/60 px-2 py-1">
+                    <p class="ticker-text whitespace-nowrap text-[11px] font-extrabold text-yellow-200">
+                        {{ $tickerMessage }}
+                    </p>
+                </div>
+                <div class="grid grid-cols-1 gap-1 text-[11px] font-black sm:grid-cols-2">
+                    <div class="rounded border border-yellow-300/50 bg-linear-to-r from-amber-500/30 to-yellow-400/30 px-2 py-1 text-yellow-100">
+                        🔥 TIP COMBO: <span class="text-base text-yellow-200">{{ $tipComboCount }}</span>回
+                    </div>
+                    <div class="rounded border border-red-300/60 bg-linear-to-r from-rose-600/35 to-red-500/30 px-2 py-1 text-red-100">
+                        💀 LATE (DAMAGE): <span class="text-base text-red-200">{{ $damageCount }}</span>回
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <article class="mypage-card profile-card rounded-2xl border border-fuchsia-300/80 bg-linear-to-br from-violet-100 via-fuchsia-100 to-sky-100 p-2 text-gray-900 shadow-sm shadow-fuchsia-200/60 dark:border-fuchsia-500/30 dark:from-gray-900 dark:via-purple-950/60 dark:to-slate-900 dark:text-gray-100">
                 <div class="mb-1 flex items-center justify-between">
@@ -13302,27 +13483,21 @@ class RoutineInventoryCompletionService
                 });
             };
 
-            const logout = async () => {
-                try {
-                    const response = await fetch(autoLogoutUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                            'Accept': 'application/json',
-                        },
-                        credentials: 'same-origin',
-                        body: JSON.stringify({ reason: 'idle-timeout' }),
+            const logout = () => {
+                fetch(autoLogoutUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                        'Accept': 'application/json',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ reason: 'idle-timeout' }),
+                })
+                    .catch(() => {})
+                    .finally(() => {
+                        window.location.href = '/timecard';
                     });
-                    if (!response.ok) {
-                        forceRedirect();
-                        return;
-                    }
-                } catch (e) {
-                    forceRedirect();
-                    return;
-                }
-                forceRedirect();
             };
 
             const tick = () => {
@@ -13356,6 +13531,7 @@ namespace App\Filament\Resources\Attendances\Tables;
 use App\Filament\Resources\Attendances\Forms\AttendanceForm;
 use App\Models\Attendance;
 use App\Models\Staff;
+use App\Support\BusinessDate;
 use App\Support\AttendanceFormSaveData;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Form;
@@ -13414,12 +13590,12 @@ class AttendancesTable
                             ->label('表示月')
                             ->native(false)
                             ->displayFormat('Y年 m月')
-                            ->default(now()->startOfMonth()),
+                            ->default(BusinessDate::current()->startOfMonth()),
                     ])
                     ->query(function (Builder $query, array $data): void {
                         $raw = $data['month_filter'] ?? null;
                         $d = blank($raw)
-                            ? now()->startOfMonth()
+                            ? BusinessDate::current()->startOfMonth()
                             : Carbon::parse($raw);
                         $query->whereYear('date', $d->year)->whereMonth('date', $d->month);
                     }),
@@ -13667,6 +13843,8 @@ class MyPageController extends Controller
         $tipRecentNonZero3 = collect();
         $monthLateCount = 0;
         $monthAbsentCount = 0;
+        $monthTipWinCount = 0;
+        $monthDamageCount = 0;
         $monthLateDates = collect();
         $monthAbsentDates = collect();
 
@@ -13964,6 +14142,15 @@ class MyPageController extends Controller
                 })
                 ->values();
             $monthAbsentCount = $monthAbsentDates->count();
+            $monthDamageCount = $monthLateCount;
+            $monthTipWinCount = $monthlyAttendances->reduce(
+                function (int $carry, Attendance $row): int {
+                    return $carry
+                        + ((bool) ($row->is_lunch_tip_applied ?? false) ? 1 : 0)
+                        + ((bool) ($row->is_dinner_tip_applied ?? false) ? 1 : 0);
+                },
+                0,
+            );
         }
 
         $routinesPendingCount = 0;
@@ -14008,6 +14195,8 @@ class MyPageController extends Controller
             'tipRecentNonZero3' => $tipRecentNonZero3,
             'monthLateCount' => $monthLateCount,
             'monthAbsentCount' => $monthAbsentCount,
+            'monthTipWinCount' => $monthTipWinCount,
+            'monthDamageCount' => $monthDamageCount,
             'monthLateDates' => $monthLateDates,
             'monthAbsentDates' => $monthAbsentDates,
             'statusResolver' => $statusResolver,
@@ -14237,7 +14426,7 @@ class MyPageController extends Controller
         $monthParam = $request->input('month');
         $monthStart = Carbon::parse(is_string($monthParam) && preg_match('/^\d{4}-\d{2}$/', $monthParam)
             ? $monthParam.'-01'
-            : now()->format('Y-m-01'))->startOfMonth();
+            : BusinessDate::current()->format('Y-m-01'))->startOfMonth();
 
         $monthAttendances = collect();
         $weekMinutes = 0;

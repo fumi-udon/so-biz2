@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Attendances\Tables;
 use App\Filament\Resources\Attendances\Forms\AttendanceForm;
 use App\Models\Attendance;
 use App\Models\Staff;
+use App\Support\BusinessDate;
 use App\Support\AttendanceFormSaveData;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Form;
@@ -63,12 +64,12 @@ class AttendancesTable
                             ->label('表示月')
                             ->native(false)
                             ->displayFormat('Y年 m月')
-                            ->default(now()->startOfMonth()),
+                            ->default(BusinessDate::current()->startOfMonth()),
                     ])
                     ->query(function (Builder $query, array $data): void {
                         $raw = $data['month_filter'] ?? null;
                         $d = blank($raw)
-                            ? now()->startOfMonth()
+                            ? BusinessDate::current()->startOfMonth()
                             : Carbon::parse($raw);
                         $query->whereYear('date', $d->year)->whereMonth('date', $d->month);
                     }),

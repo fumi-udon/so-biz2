@@ -9,6 +9,7 @@ use App\Services\TimecardPunchOutcome;
 use App\Services\TimecardPunchService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -47,6 +48,12 @@ class TimecardForm extends Component
     public string $extraMeal = 'lunch';
 
     public string $extraReason = '';
+
+    public bool $showTipModal = false;
+
+    public ?string $tipModalState = null;
+
+    public ?string $tipTargetShift = null;
 
     public function mount(): void
     {
@@ -138,9 +145,17 @@ class TimecardForm extends Component
             return;
         }
 
-        $this->applySuccessOutcome($outcome);
         $this->refreshShiftState($staff);
         $this->syncExtraMealDefault();
+
+        if (in_array($action, ['lunch_in', 'dinner_in'], true)) {
+            $isLate = $outcome->postFlow === 'mypage_late' && ($outcome->lateMinutes ?? 0) > 0;
+            $this->openTipResultModal($action, $isLate);
+
+            return;
+        }
+
+        $this->applySuccessOutcome($outcome);
     }
 
     public function submitExtraShift(): void
@@ -197,10 +212,12 @@ class TimecardForm extends Component
             return;
         }
 
-        $this->applySuccessOutcome($outcome);
         $this->extraReason = '';
         $this->refreshShiftState($staff);
         $this->syncExtraMealDefault();
+
+        $action = $this->extraMeal === 'lunch' ? 'lunch_in' : 'dinner_in';
+        $this->openTipResultModal($action, false);
     }
 
     public function resetAfterPunch(): void
@@ -214,6 +231,50 @@ class TimecardForm extends Component
         $this->bannerError = null;
         $this->bannerSuccess = null;
         $this->resetToStepOne();
+    }
+
+    public function applyForTip(): mixed
+    {
+        if ($this->authenticatedStaffId === null || $this->tipTargetShift === null) {
+            return redirect()->route('mypage.index');
+        }
+
+        $dateString = app(TimecardPunchService::class)->resolveTargetBusinessDate()->toDateString();
+        $attendance = Attendance::query()
+            ->where('staff_id', $this->authenticatedStaffId)
+            ->where('date', $dateString)
+            ->first();
+
+        if ($attendance) {
+            $table = $attendance->getTable();
+            if ($this->tipTargetShift === 'lunch') {
+                if (! Schema::hasColumn($table, 'is_lunch_tip_applied')) {
+                    return redirect()
+                        ->route('mypage.index')
+                        ->with('error', 'チップ申請カラムが未適用です。管理者にマイグレーション実行を依頼してください。');
+                }
+                $attendance->is_lunch_tip_applied = true;
+            } elseif ($this->tipTargetShift === 'dinner') {
+                if (! Schema::hasColumn($table, 'is_dinner_tip_applied')) {
+                    return redirect()
+                        ->route('mypage.index')
+                        ->with('error', 'チップ申請カラムが未適用です。管理者にマイグレーション実行を依頼してください。');
+                }
+                $attendance->is_dinner_tip_applied = true;
+            }
+            $attendance->save();
+        }
+
+        $this->resetTipModalState();
+
+        return redirect()->route('mypage.index');
+    }
+
+    public function declineTipAndRedirect(): mixed
+    {
+        $this->resetTipModalState();
+
+        return redirect()->route('mypage.index');
     }
 
     public function isPunchDisabled(string $action): bool
@@ -299,6 +360,21 @@ class TimecardForm extends Component
         $this->js('setTimeout(() => $wire.resetAfterPunch(), 3500)');
     }
 
+    private function openTipResultModal(string $action, bool $isLate): void
+    {
+        $this->tipTargetShift = $action === 'lunch_in' ? 'lunch' : 'dinner';
+        $this->tipModalState = $isLate ? 'LOSE' : 'WIN';
+        $this->showTipModal = true;
+        $this->dispatch('open-modal', id: 'tip-result-modal');
+    }
+
+    private function resetTipModalState(): void
+    {
+        $this->showTipModal = false;
+        $this->tipModalState = null;
+        $this->tipTargetShift = null;
+    }
+
     private function resetToStepOne(): void
     {
         $this->step = 1;
@@ -316,5 +392,6 @@ class TimecardForm extends Component
         ];
         $this->extraMeal = 'lunch';
         $this->extraReason = '';
+        $this->resetTipModalState();
     }
 }

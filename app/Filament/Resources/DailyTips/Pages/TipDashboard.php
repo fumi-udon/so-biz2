@@ -6,6 +6,7 @@ use App\Filament\Resources\DailyTips\DailyTipResource;
 use App\Filament\Resources\Staff\StaffResource;
 use App\Models\DailyTip;
 use App\Models\DailyTipDistribution;
+use App\Support\BusinessDate;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\Page;
@@ -31,7 +32,7 @@ class TipDashboard extends Page
 
     public function mount(): void
     {
-        $anchor = Carbon::now()->startOfDay();
+        $anchor = BusinessDate::current();
         $this->week_start = $anchor->copy()->startOfWeek($this->startDayOfWeek)->toDateString();
         $this->month_picker = Carbon::parse($this->week_start)->format('Y-m');
     }

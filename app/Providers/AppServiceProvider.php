@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\DailyTip;
 use App\Models\DailyTipDistribution;
+use App\Models\StaffTip;
 use App\Models\Staff;
 use App\Observers\DailyTipDistributionObserver;
 use App\Observers\DailyTipObserver;
@@ -27,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
     {
         DailyTip::observe(DailyTipObserver::class);
         DailyTipDistribution::observe(DailyTipDistributionObserver::class);
+        StaffTip::observe(DailyTipDistributionObserver::class);
 
         View::composer('components.mypage-entry-modal', function ($view): void {
             $view->with(

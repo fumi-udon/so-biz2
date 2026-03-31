@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\DailyTip;
 use App\Models\DailyTipAudit;
 use App\Models\DailyTipDistribution;
+use App\Models\StaffTip;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -67,7 +68,7 @@ final class DailyTipAuditLogger
         );
     }
 
-    public static function forDistribution(string $event, DailyTipDistribution $distribution): void
+    public static function forDistribution(string $event, DailyTipDistribution|StaffTip $distribution): void
     {
         if (DailyTipAuditContext::distributionAuditSuppressed()) {
             return;

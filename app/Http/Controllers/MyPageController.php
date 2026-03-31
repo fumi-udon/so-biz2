@@ -100,6 +100,8 @@ class MyPageController extends Controller
         $tipRecentNonZero3 = collect();
         $monthLateCount = 0;
         $monthAbsentCount = 0;
+        $monthTipWinCount = 0;
+        $monthDamageCount = 0;
         $monthLateDates = collect();
         $monthAbsentDates = collect();
 
@@ -397,6 +399,15 @@ class MyPageController extends Controller
                 })
                 ->values();
             $monthAbsentCount = $monthAbsentDates->count();
+            $monthDamageCount = $monthLateCount;
+            $monthTipWinCount = $monthlyAttendances->reduce(
+                function (int $carry, Attendance $row): int {
+                    return $carry
+                        + ((bool) ($row->is_lunch_tip_applied ?? false) ? 1 : 0)
+                        + ((bool) ($row->is_dinner_tip_applied ?? false) ? 1 : 0);
+                },
+                0,
+            );
         }
 
         $routinesPendingCount = 0;
@@ -441,6 +452,8 @@ class MyPageController extends Controller
             'tipRecentNonZero3' => $tipRecentNonZero3,
             'monthLateCount' => $monthLateCount,
             'monthAbsentCount' => $monthAbsentCount,
+            'monthTipWinCount' => $monthTipWinCount,
+            'monthDamageCount' => $monthDamageCount,
             'monthLateDates' => $monthLateDates,
             'monthAbsentDates' => $monthAbsentDates,
             'statusResolver' => $statusResolver,
@@ -670,7 +683,7 @@ class MyPageController extends Controller
         $monthParam = $request->input('month');
         $monthStart = Carbon::parse(is_string($monthParam) && preg_match('/^\d{4}-\d{2}$/', $monthParam)
             ? $monthParam.'-01'
-            : now()->format('Y-m-01'))->startOfMonth();
+            : BusinessDate::current()->format('Y-m-01'))->startOfMonth();
 
         $monthAttendances = collect();
         $weekMinutes = 0;

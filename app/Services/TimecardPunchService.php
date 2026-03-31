@@ -306,17 +306,16 @@ final class TimecardPunchService
 
         $adminUsers = User::all();
 
+        $notification = Notification::make()
+            ->title("{$staff->name} さんが{$actionLabel}しました")
+            ->success();
+
+        $notification->sendToDatabase($adminUsers);
+
         try {
-            Notification::make()
-                ->title("{$staff->name} さんが{$actionLabel}しました")
-                ->success()
-                ->sendToDatabase($adminUsers)
-                ->broadcast($adminUsers);
+            $notification->broadcast($adminUsers);
         } catch (\Throwable) {
-            Notification::make()
-                ->title("{$staff->name} さんが{$actionLabel}しました")
-                ->success()
-                ->sendToDatabase($adminUsers);
+            // ブロードキャスト失敗時は DB 通知だけ確実に残す。
         }
     }
 

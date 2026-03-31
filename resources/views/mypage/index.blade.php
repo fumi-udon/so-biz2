@@ -71,6 +71,39 @@
             <div class="mb-2 rounded-xl border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-600/30 dark:bg-rose-900/20 dark:text-rose-300">{{ $errors->first() }}</div>
         @endif
 
+        @php
+            $tipComboCount = (int) ($monthTipWinCount ?? 0);
+            $damageCount = (int) ($monthDamageCount ?? 0);
+            $tickerMessage = match (true) {
+                ($lunchStatus ?? 'none') === 'late' => 'ALERT: ランチ打刻が遅延中。至急チェックイン！',
+                ($dinnerStatus ?? 'none') === 'late' => 'ALERT: ディナー打刻が遅延中。至急チェックイン！',
+                ($lunchStatus ?? 'none') === 'future' => '本日ランチ: チップ申請待ち / 開始待機中',
+                ($dinnerStatus ?? 'none') === 'future' => '本日ディナー: チップ申請待ち / 開始待機中',
+                default => 'TIP SYSTEM PHASE 1 ONLINE - COMBOを積み上げろ！',
+            };
+        @endphp
+        <section class="mb-2 rounded-2xl border border-amber-300/80 bg-linear-to-r from-red-500 via-amber-400 to-yellow-300 p-px shadow-sm shadow-amber-300/50 dark:border-amber-400/30 dark:from-red-900/70 dark:via-amber-700/60 dark:to-yellow-700/60">
+            <div class="rounded-[15px] bg-black/85 px-2 py-2 text-white">
+                <div class="mb-1 flex items-center justify-between gap-2 text-[10px] font-extrabold tracking-wide">
+                    <span class="rounded bg-red-600/90 px-1.5 py-0.5 text-yellow-200 ring-1 ring-red-300/50">ROUND 1</span>
+                    <span class="truncate text-right text-yellow-200">MYPAGE BATTLE HUD</span>
+                </div>
+                <div class="mb-1 overflow-hidden rounded border border-yellow-300/40 bg-black/60 px-2 py-1">
+                    <p class="ticker-text whitespace-nowrap text-[11px] font-extrabold text-yellow-200">
+                        {{ $tickerMessage }}
+                    </p>
+                </div>
+                <div class="grid grid-cols-1 gap-1 text-[11px] font-black sm:grid-cols-2">
+                    <div class="rounded border border-yellow-300/50 bg-linear-to-r from-amber-500/30 to-yellow-400/30 px-2 py-1 text-yellow-100">
+                        🔥 TIP COMBO: <span class="text-base text-yellow-200">{{ $tipComboCount }}</span>回
+                    </div>
+                    <div class="rounded border border-red-300/60 bg-linear-to-r from-rose-600/35 to-red-500/30 px-2 py-1 text-red-100">
+                        💀 LATE (DAMAGE): <span class="text-base text-red-200">{{ $damageCount }}</span>回
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <article class="mypage-card profile-card rounded-2xl border border-fuchsia-300/80 bg-linear-to-br from-violet-100 via-fuchsia-100 to-sky-100 p-2 text-gray-900 shadow-sm shadow-fuchsia-200/60 dark:border-fuchsia-500/30 dark:from-gray-900 dark:via-purple-950/60 dark:to-slate-900 dark:text-gray-100">
                 <div class="mb-1 flex items-center justify-between">
@@ -251,27 +284,21 @@
                 });
             };
 
-            const logout = async () => {
-                try {
-                    const response = await fetch(autoLogoutUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                            'Accept': 'application/json',
-                        },
-                        credentials: 'same-origin',
-                        body: JSON.stringify({ reason: 'idle-timeout' }),
+            const logout = () => {
+                fetch(autoLogoutUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                        'Accept': 'application/json',
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ reason: 'idle-timeout' }),
+                })
+                    .catch(() => {})
+                    .finally(() => {
+                        window.location.href = '/timecard';
                     });
-                    if (!response.ok) {
-                        forceRedirect();
-                        return;
-                    }
-                } catch (e) {
-                    forceRedirect();
-                    return;
-                }
-                forceRedirect();
             };
 
             const tick = () => {

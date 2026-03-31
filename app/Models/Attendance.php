@@ -23,6 +23,8 @@ class Attendance extends Model
         'dinner_out_at',
         'late_minutes',
         'is_tip_eligible',
+        'is_lunch_tip_applied',
+        'is_dinner_tip_applied',
         'is_edited_by_admin',
         'admin_note',
         'in_note',
@@ -42,6 +44,8 @@ class Attendance extends Model
             'dinner_in_at' => 'datetime',
             'dinner_out_at' => 'datetime',
             'is_tip_eligible' => 'boolean',
+            'is_lunch_tip_applied' => 'boolean',
+            'is_dinner_tip_applied' => 'boolean',
             'is_edited_by_admin' => 'boolean',
         ];
     }

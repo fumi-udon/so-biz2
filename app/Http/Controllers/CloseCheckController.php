@@ -6,6 +6,7 @@ use App\Models\CloseCheckLog;
 use App\Models\CloseTask;
 use App\Models\Staff;
 use App\Services\RoutineInventoryCompletionService;
+use App\Support\BusinessDate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -73,7 +74,7 @@ class CloseCheckController extends Controller
 
         CloseCheckLog::query()->create([
             'staff_id' => $staff->id,
-            'date' => now()->toDateString(),
+            'date' => BusinessDate::toDateString(),
             'completed_at' => now(),
         ]);
 

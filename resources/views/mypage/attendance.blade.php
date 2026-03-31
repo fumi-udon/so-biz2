@@ -57,7 +57,7 @@
                 <h1 class="h6 fw-bold mb-0">{{ $monthStart->translatedFormat('Y年n月') }} の勤怠</h1>
                 <div class="btn-group">
                     <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $prevMonth->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm rounded-start-4">&laquo;</a>
-                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => now()->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm">今月</a>
+                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => \App\Support\BusinessDate::current()->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm">今月</a>
                     <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $nextMonth->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm rounded-end-4">&raquo;</a>
                 </div>
             </div>

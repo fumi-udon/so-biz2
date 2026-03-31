@@ -203,4 +203,38 @@
             @endif
         </div>
     @endif
+
+    <x-filament::modal
+        id="tip-result-modal"
+        :close-by-clicking-away="true"
+        :close-by-escaping="true"
+        width="md"
+        x-on:modal-closed.window="if ($event.detail.id === 'tip-result-modal') { $wire.declineTipAndRedirect() }"
+    >
+        @if ($tipModalState === 'WIN')
+            <div class="rounded-xl bg-linear-to-r from-amber-400 to-yellow-500 p-4 text-gray-950">
+                <p class="mb-2 text-lg font-black">🎉 YOU WIN!</p>
+                <p class="mb-4 text-sm font-bold">定刻クリア。チップ申請権を獲得しました！</p>
+                <button
+                    type="button"
+                    wire:click="applyForTip"
+                    class="w-full rounded-lg bg-black/85 px-3 py-2 text-sm font-extrabold text-yellow-200"
+                >
+                    🪙 チップ権利を受け取る
+                </button>
+            </div>
+        @elseif ($tipModalState === 'LOSE')
+            <div class="rounded-xl bg-linear-to-r from-red-800 to-gray-900 p-4 text-gray-100">
+                <p class="mb-2 text-lg font-black">💀 YOU LOSE...</p>
+                <p class="mb-4 text-sm font-bold">遅刻判定。本シフトのチップ権利を喪失しました。</p>
+                <button
+                    type="button"
+                    wire:click="declineTipAndRedirect"
+                    class="w-full rounded-lg bg-gray-600 px-3 py-2 text-sm font-extrabold text-gray-100"
+                >
+                    閉じる
+                </button>
+            </div>
+        @endif
+    </x-filament::modal>
 </div>
