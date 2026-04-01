@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Shops;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\Shops\Forms\ShopForm;
 use App\Filament\Resources\Shops\Pages\CreateShop;
 use App\Filament\Resources\Shops\Pages\EditShop;
@@ -9,10 +10,9 @@ use App\Filament\Resources\Shops\Pages\ListShops;
 use App\Filament\Resources\Shops\Tables\ShopsTable;
 use App\Models\Shop;
 use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables\Table;
 
-class ShopResource extends Resource
+class ShopResource extends AdminOnlyResource
 {
     protected static ?string $model = Shop::class;
 

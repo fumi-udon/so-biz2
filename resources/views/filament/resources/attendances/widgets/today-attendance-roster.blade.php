@@ -66,16 +66,17 @@
                                         return '<span class="text-[10px] text-gray-400 dark:text-gray-500">—</span>';
                                     }
 
-                                    $plannedDisp = $plannedStart ?: '-';
+                                    $plannedDisp = e($plannedStart !== null && $plannedStart !== '' ? $plannedStart : '-');
+                                    $actualDisp = e($actualInTime ?? '');
 
                                     $left = '<span class="font-mono tabular-nums text-[10px] text-gray-500">'.$plannedDisp.'</span>';
                                     $arrow = '<span class="mx-1 text-[10px] text-gray-300">▶</span>';
 
                                     return match ($status) {
                                         'clocked' => $left.$arrow.'<span class="text-[10px] select-none">🟢</span>'.
-                                            '<span class="font-mono tabular-nums text-[10px] text-gray-900">'.$actualInTime.'</span>',
+                                            '<span class="font-mono tabular-nums text-[10px] text-gray-900">'.$actualDisp.'</span>',
                                         'extra' => $left.$arrow.'<span class="text-[10px] select-none">🆘</span>'.
-                                            '<span class="font-mono tabular-nums text-[10px] text-gray-900">'.$actualInTime.'</span>',
+                                            '<span class="font-mono tabular-nums text-[10px] text-gray-900">'.$actualDisp.'</span>',
                                         'late' => $left.$arrow.'<span class="text-[10px] select-none">🔴</span>'.
                                             '<span class="text-[10px] text-red-600 dark:text-red-400 ml-1">未出勤</span>',
                                         'future' => $left.$arrow.'<span class="text-[10px] select-none text-gray-500">⚪</span>',

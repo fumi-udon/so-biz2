@@ -58,7 +58,7 @@
             <div class="mb-1 flex items-center justify-between gap-2">
                 <h3 class="text-xs font-bold uppercase tracking-wide text-indigo-800 dark:text-indigo-300">週間：誰がいついくら</h3>
                 <span class="rounded-md border border-indigo-200 bg-indigo-100 px-2 py-0.5 text-xs font-bold tabular-nums text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-200">
-                    週計 {{ number_format($w['week_total'], 3) }} TND
+                    週計 {{ number_format($w['week_total'], 3) }} DT
                 </span>
             </div>
             <div class="max-h-[min(58vh,32rem)] overflow-auto rounded-xl border-2 border-indigo-400 bg-white shadow-md dark:border-indigo-600 dark:bg-gray-950">
@@ -133,7 +133,7 @@
         <div class="flex min-h-0 flex-col gap-3 xl:col-span-2">
             <div class="rounded-xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-50 to-white p-3 shadow-sm dark:border-emerald-700 dark:from-emerald-950/30 dark:to-gray-900">
                 <div class="text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">{{ $m['month_label'] }} · 店舗チップ総額</div>
-                <div class="mt-1 text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-400">{{ number_format($m['pool'], 3) }} <span class="text-sm font-semibold">TND</span></div>
+                <div class="mt-1 text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-400">{{ number_format($m['pool'], 3) }} <span class="text-sm font-semibold">DT</span></div>
             </div>
 
             <div class="flex min-h-0 flex-1 flex-col rounded-xl border-2 border-violet-400 bg-white p-3 shadow-md dark:border-violet-700 dark:bg-gray-950">

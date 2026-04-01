@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Events\OrderPlaced;
 use App\Models\Order;
 use Illuminate\Contracts\View\View;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -24,13 +25,22 @@ class ClientOrderForm extends Component
 
     public function submit(): void
     {
-        $this->validate([
+        $allowedTables = array_map(
+            static fn (string $t): int => (int) $t,
+            config('restaurant.tables', ['1', '2', '3', '4'])
+        );
+
+        $validated = $this->validate([
+            'table_number' => ['required', 'integer', Rule::in($allowedTables)],
             'items' => ['required', 'string', 'max:10000'],
+        ], attributes: [
+            'table_number' => 'テーブル番号',
+            'items' => '注文内容',
         ]);
 
         $order = Order::query()->create([
-            'table_number' => $this->table_number,
-            'items' => $this->items,
+            'table_number' => (string) $validated['table_number'],
+            'items' => $validated['items'],
             'status' => 'pending',
         ]);
 

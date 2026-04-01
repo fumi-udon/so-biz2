@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\InventoryRecords;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\InventoryRecords\Pages\CreateInventoryRecord;
 use App\Filament\Resources\InventoryRecords\Pages\EditInventoryRecord;
 use App\Filament\Resources\InventoryRecords\Pages\ListInventoryRecords;
@@ -12,7 +13,6 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
@@ -20,7 +20,7 @@ use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
-class InventoryRecordResource extends Resource
+class InventoryRecordResource extends AdminOnlyResource
 {
     protected static ?string $model = InventoryRecord::class;
 

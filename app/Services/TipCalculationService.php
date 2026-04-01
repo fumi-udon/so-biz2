@@ -4,9 +4,15 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\DailyTip;
+use Illuminate\Support\Facades\DB;
 
 class TipCalculationService
 {
+    /**
+     * 職階マスタに既定ウェイトが無い場合のフォールバック（CalculateTips の 10 刻みグリッドと整合）。
+     */
+    public const DEFAULT_DISTRIBUTION_WEIGHT = 10.0;
+
     /**
      * チップ配分のウェイトを float に正規化する。
      *
@@ -84,7 +90,7 @@ class TipCalculationService
             }
 
             $rawWeight = $attendance->staff->jobLevel?->default_weight;
-            $weight = $rawWeight === null ? 1.0 : self::normalizeWeightScalar($rawWeight);
+            $weight = $rawWeight === null ? self::DEFAULT_DISTRIBUTION_WEIGHT : self::normalizeWeightScalar($rawWeight);
             $lateMinutes = (int) ($attendance->late_minutes ?? 0);
             $isTardy = $lateMinutes > 0;
 
@@ -142,7 +148,7 @@ class TipCalculationService
         $draft = [];
         foreach ($normalized as $index => $weight) {
             $raw = ($weight / $totalWeight) * $targetTotal;
-            $floor = floor($raw * 1000) / 1000;
+            $floor = floor(round($raw * 1000, 4)) / 1000;
             $draft[] = [
                 'index' => $index,
                 'floor' => $floor,
@@ -180,8 +186,8 @@ class TipCalculationService
 
     public function recalculateAmounts(DailyTip $dailyTip): void
     {
-        /** @var Collection<int, \App\Models\DailyTipDistribution> $rows */
-        $rows = $dailyTip->distributions()->get();
+        /** @var \Illuminate\Support\Collection<int, \App\Models\DailyTipDistribution> $rows */
+        $rows = $dailyTip->distributions()->orderBy('id')->get();
 
         $targetTotal = round((float) $dailyTip->total_amount, 3);
 
@@ -192,9 +198,22 @@ class TipCalculationService
         $weights = $rows->map(fn ($row) => max(0, self::normalizeWeightScalar($row->weight)))->values()->all();
         $amounts = $this->distributeAmounts($weights, $targetTotal);
 
+        $ids = $rows->pluck('id')->all();
+        $caseFragments = [];
+        $bindings = [];
         foreach ($rows->values() as $i => $row) {
-            $row->amount = $amounts[$i] ?? 0.0;
-            $row->save();
+            $amt = round((float) ($amounts[$i] ?? 0.0), 3);
+            $caseFragments[] = 'WHEN ? THEN ?';
+            $bindings[] = $row->id;
+            $bindings[] = $amt;
         }
+
+        $inList = implode(',', array_fill(0, count($ids), '?'));
+        $sql = 'UPDATE daily_tip_distributions SET amount = CASE id '.implode(' ', $caseFragments).' END, updated_at = ? WHERE daily_tip_id = ? AND id IN ('.$inList.')';
+        $bindings[] = now()->format('Y-m-d H:i:s');
+        $bindings[] = $dailyTip->id;
+        array_push($bindings, ...$ids);
+
+        DB::update($sql, $bindings);
     }
 }

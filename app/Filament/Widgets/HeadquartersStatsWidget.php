@@ -68,7 +68,7 @@ class HeadquartersStatsWidget extends StatsOverviewWidget
         return [
             Stat::make(
                 '本日のリアルタイム人件費',
-                number_format($laborCost, 0, '.', ' ').' TND',
+                number_format($laborCost, 0, '.', ' ').' DT',
             )
                 ->description('確定済み勤務区間 × 時給の合計')
                 ->icon('heroicon-o-banknotes')

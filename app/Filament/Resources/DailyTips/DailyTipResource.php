@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\DailyTips;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\DailyTips\Pages\CreateDailyTip;
 use App\Filament\Resources\DailyTips\Pages\CalculateTips;
 use App\Filament\Resources\DailyTips\Pages\EditDailyTip;
@@ -13,12 +14,11 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
-class DailyTipResource extends Resource
+class DailyTipResource extends AdminOnlyResource
 {
     protected static ?string $model = DailyTip::class;
 

@@ -122,11 +122,11 @@ final class TimecardPunchService
         $dateString = $targetDate->toDateString();
 
         if ($action === 'lunch_in' && ! $this->isMealScheduled($staff, $targetDate, 'lunch')) {
-            return new TimecardPunchOutcome(false, '本日のランチ予定がありません。臨時出勤（ヘルプ）申請から打刻してください。');
+            return new TimecardPunchOutcome(false, 'Aucun shift dejeuner prevu aujourd\'hui. Utilisez la demande d\'aide.');
         }
 
         if ($action === 'dinner_in' && ! $this->isMealScheduled($staff, $targetDate, 'dinner')) {
-            return new TimecardPunchOutcome(false, '本日のディナー予定がありません。臨時出勤（ヘルプ）申請から打刻してください。');
+            return new TimecardPunchOutcome(false, 'Aucun shift diner prevu aujourd\'hui. Utilisez la demande d\'aide.');
         }
 
         $existing = Attendance::query()
@@ -135,18 +135,18 @@ final class TimecardPunchService
             ->first();
 
         if ($action === 'lunch_out' && ($existing === null || $existing->lunch_in_at === null)) {
-            return new TimecardPunchOutcome(false, 'ランチ出勤の打刻がありません。');
+            return new TimecardPunchOutcome(false, 'Aucun pointage d\'entree dejeuner trouve.');
         }
 
         if ($action === 'dinner_out' && ($existing === null || $existing->dinner_in_at === null)) {
-            return new TimecardPunchOutcome(false, 'ディナー出勤の打刻がありません。');
+            return new TimecardPunchOutcome(false, 'Aucun pointage d\'entree diner trouve.');
         }
 
         if (in_array($action, ['lunch_out', 'dinner_out'], true)) {
             $gate = app(RoutineInventoryCompletionService::class);
 
             if (! $gate->staffHasAllRoutineAndInventoryDone($staff, $dateString)) {
-                return new TimecardPunchOutcome(false, '未完了のタスク・棚卸しがあります。マイページを確認してください。');
+                return new TimecardPunchOutcome(false, 'Des taches ou inventaires restent incomplets. Verifiez Mon espace.');
             }
         }
 
@@ -173,11 +173,11 @@ final class TimecardPunchService
                 $attendance = Attendance::query()->whereKey($attendance->id)->lockForUpdate()->first();
 
                 if ($attendance === null) {
-                    throw new \RuntimeException('打刻を処理できませんでした。もう一度お試しください。');
+                    throw new \RuntimeException('Impossible de traiter le pointage. Reessayez.');
                 }
 
                 if ($attendance->getAttribute($column) !== null) {
-                    throw new \RuntimeException('既に打刻済みです。');
+                    throw new \RuntimeException('Ce pointage est deja enregistre.');
                 }
 
                 $attendance->{$column} = $clockAt;
@@ -191,7 +191,7 @@ final class TimecardPunchService
             });
         } catch (QueryException $e) {
             if ($this->isAttendanceDuplicateKeyException($e)) {
-                return new TimecardPunchOutcome(false, '既に打刻済みです。');
+                return new TimecardPunchOutcome(false, 'Ce pointage est deja enregistre.');
             }
 
             throw $e;
@@ -225,12 +225,12 @@ final class TimecardPunchService
         $column = self::ACTION_TO_COLUMN[$action];
 
         if ($this->isMealScheduled($staff, $targetDate, $meal)) {
-            return new TimecardPunchOutcome(false, 'このシフトは予定に含まれています。通常の出勤ボタンから打刻してください。');
+            return new TimecardPunchOutcome(false, 'Ce shift est deja planifie. Utilisez le bouton normal d\'entree.');
         }
 
         $clockAt = now();
         $reasonTrim = trim($reason);
-        $shiftLabel = $meal === 'lunch' ? 'ランチ' : 'ディナー';
+        $shiftLabel = $meal === 'lunch' ? 'Dejeuner' : 'Diner';
 
         try {
             DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $shiftLabel, $reasonTrim): void {
@@ -249,20 +249,20 @@ final class TimecardPunchService
                 $attendance = Attendance::query()->whereKey($attendance->id)->lockForUpdate()->first();
 
                 if ($attendance === null) {
-                    throw new \RuntimeException('打刻を処理できませんでした。もう一度お試しください。');
+                    throw new \RuntimeException('Impossible de traiter le pointage. Reessayez.');
                 }
 
                 if ($attendance->getAttribute($column) !== null) {
-                    throw new \RuntimeException('既に打刻済みです。');
+                    throw new \RuntimeException('Ce pointage est deja enregistre.');
                 }
 
                 $attendance->{$column} = $clockAt;
 
                 $line = sprintf(
-                    '[%s] 【臨時出勤】%s ヘルプ打刻%s',
+                    '[%s] [Entree exceptionnelle] Aide %s%s',
                     $clockAt->format('Y-m-d H:i'),
                     $shiftLabel,
-                    $reasonTrim !== '' ? ' 理由: '.$reasonTrim : ''
+                    $reasonTrim !== '' ? ' Motif: '.$reasonTrim : ''
                 );
                 $prev = $attendance->in_note;
                 $attendance->in_note = $prev !== null && $prev !== ''
@@ -273,7 +273,7 @@ final class TimecardPunchService
             });
         } catch (QueryException $e) {
             if ($this->isAttendanceDuplicateKeyException($e)) {
-                return new TimecardPunchOutcome(false, '既に打刻済みです。');
+                return new TimecardPunchOutcome(false, 'Ce pointage est deja enregistre.');
             }
 
             throw $e;
@@ -283,8 +283,8 @@ final class TimecardPunchService
 
         $adminUsers = User::all();
         Notification::make()
-            ->title('【臨時出勤】'.$staff->name.' が臨時出勤しました。チップ追加を確認してください。')
-            ->body($staff->name.' が '.$shiftLabel.' のヘルプに入りました。チップの確認をお願いします。'.($reasonTrim !== '' ? '（'.$reasonTrim.'）' : ''))
+            ->title('[Entree exceptionnelle] '.$staff->name.' a ete ajoute(e). Verifiez le tip.')
+            ->body($staff->name.' a rejoint l\'aide '.$shiftLabel.'. Merci de verifier le tip.'.($reasonTrim !== '' ? ' ('.$reasonTrim.')' : ''))
             ->warning()
             ->sendToDatabase($adminUsers);
 
@@ -297,17 +297,17 @@ final class TimecardPunchService
     private function notifyNormalPunch(Staff $staff, string $action): void
     {
         $actionLabel = match ($action) {
-            'lunch_in' => 'ランチ出勤',
-            'lunch_out' => 'ランチ退勤',
-            'dinner_in' => 'ディナー出勤',
-            'dinner_out' => 'ディナー退勤',
-            default => '打刻',
+            'lunch_in' => 'entree dejeuner',
+            'lunch_out' => 'sortie dejeuner',
+            'dinner_in' => 'entree diner',
+            'dinner_out' => 'sortie diner',
+            default => 'pointage',
         };
 
         $adminUsers = User::all();
 
         $notification = Notification::make()
-            ->title("{$staff->name} さんが{$actionLabel}しました")
+            ->title("{$staff->name} a fait {$actionLabel}")
             ->success();
 
         $notification->sendToDatabase($adminUsers);

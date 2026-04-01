@@ -115,4 +115,6 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    'daily_close_alert_address' => env('DAILY_CLOSE_ALERT_EMAIL'),
+
 ];

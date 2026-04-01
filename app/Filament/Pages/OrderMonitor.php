@@ -2,11 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\AdminOnlyPage;
 use App\Models\Order;
-use Filament\Pages\Page;
 use Livewire\Attributes\On;
 
-class OrderMonitor extends Page
+class OrderMonitor extends AdminOnlyPage
 {
     protected static ?string $navigationIcon = 'heroicon-o-bell-alert';
 
@@ -61,7 +61,8 @@ class OrderMonitor extends Page
             ->orderByDesc('id')
             ->get();
 
-        foreach (['1', '2', '3', '4'] as $t) {
+        foreach (config('restaurant.tables', ['1', '2', '3', '4']) as $t) {
+            $t = (string) $t;
             $this->ordersByTable[$t] = $pending
                 ->filter(fn (Order $o): bool => (string) $o->table_number === $t)
                 ->values()

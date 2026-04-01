@@ -54,7 +54,7 @@ class DailyTipDistributionRelationManager extends RelationManager
                         TextInput::make('weight')
                             ->required()
                             ->numeric()
-                            ->default(1)
+                            ->default(10)
                             ->step(0.001)
                             ->minValue(0),
                         TextInput::make('note')
@@ -89,7 +89,7 @@ class DailyTipDistributionRelationManager extends RelationManager
                         TextInput::make('weight')
                             ->required()
                             ->numeric()
-                            ->default(1)
+                            ->default(10)
                             ->step(0.001)
                             ->minValue(0),
                         TextInput::make('note')

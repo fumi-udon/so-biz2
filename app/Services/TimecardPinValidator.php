@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\RateLimiter;
 final class TimecardPinValidator
 {
     /**
-     * PIN を検証する。問題があればエラーメッセージを返し、成功時は null。
+     * Validate PIN and return an error message on failure.
      */
     public function validate(Staff $staff, string $pinCode): ?string
     {
@@ -16,10 +16,10 @@ final class TimecardPinValidator
             return 'Aucun code PIN défini. Contactez un responsable.';
         }
 
-        $pinKey = 'pin-attempt:'.$staff->id;
+        $pinKey = 'pin-attempt:staff:'.$staff->id.':'.(request()->ip() ?? 'unknown');
 
         if (RateLimiter::tooManyAttempts($pinKey, 5)) {
-            return 'PINの入力を複数回間違えました。1分間お待ちください。';
+            return 'Trop de tentatives PIN incorrectes. Veuillez patienter 1 minute.';
         }
 
         if (! hash_equals((string) $staff->pin_code, (string) $pinCode)) {

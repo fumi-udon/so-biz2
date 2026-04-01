@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\InventoryItems;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\InventoryItems\Pages\CreateInventoryItem;
 use App\Filament\Resources\InventoryItems\Pages\EditInventoryItem;
 use App\Filament\Resources\InventoryItems\Pages\ListInventoryItems;
@@ -15,13 +16,12 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
-use Filament\Resources\Resource;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
-class InventoryItemResource extends Resource
+class InventoryItemResource extends AdminOnlyResource
 {
     protected static ?string $model = InventoryItem::class;
 

@@ -55,8 +55,14 @@ class TimecardForm extends Component
 
     public ?string $tipTargetShift = null;
 
+    public bool $showPunchCompleteModal = false;
+
+    public ?string $punchCompleteLabel = null;
+
     public function mount(): void
     {
+        request()->session()->forget('mypage_staff_id');
+
         $this->staffOptions = Staff::query()
             ->where('is_active', true)
             ->orderBy('name')
@@ -75,7 +81,7 @@ class TimecardForm extends Component
             'selectedStaffId' => ['required', 'integer', 'exists:staff,id'],
             'pinCode' => ['required', 'string', 'digits:4'],
         ], [], [
-            'selectedStaffId' => 'スタッフ',
+            'selectedStaffId' => 'Personnel',
             'pinCode' => 'PIN',
         ]);
 
@@ -85,7 +91,7 @@ class TimecardForm extends Component
             ->first();
 
         if (! $staff) {
-            $this->addError('selectedStaffId', 'スタッフが見つかりません。');
+            $this->addError('selectedStaffId', 'Personnel introuvable.');
 
             return;
         }
@@ -120,7 +126,7 @@ class TimecardForm extends Component
         }
 
         if ($this->isPunchDisabled($action)) {
-            $this->bannerError = 'この操作は現在できません。';
+            $this->bannerError = 'Cette operation est actuellement indisponible.';
 
             return;
         }
@@ -132,7 +138,7 @@ class TimecardForm extends Component
 
         if (! $staff) {
             $this->resetToStepOne();
-            $this->bannerError = 'セッションが無効です。最初からやり直してください。';
+            $this->bannerError = 'Session invalide. Recommencez depuis le debut.';
 
             return;
         }
@@ -155,7 +161,7 @@ class TimecardForm extends Component
             return;
         }
 
-        $this->applySuccessOutcome($outcome);
+        $this->applySuccessOutcome($outcome, $action);
     }
 
     public function submitExtraShift(): void
@@ -176,7 +182,7 @@ class TimecardForm extends Component
         ]));
 
         if ($allowed === []) {
-            $this->bannerError = '臨時出勤は現在できません。';
+            $this->bannerError = 'L\'entree exceptionnelle n\'est pas disponible maintenant.';
 
             return;
         }
@@ -185,7 +191,7 @@ class TimecardForm extends Component
             'extraMeal' => ['required', Rule::in($allowed)],
             'extraReason' => ['nullable', 'string', 'max:500'],
         ], [], [
-            'extraMeal' => 'シフト',
+            'extraMeal' => 'Shift',
         ]);
 
         $staff = Staff::query()
@@ -195,7 +201,7 @@ class TimecardForm extends Component
 
         if (! $staff) {
             $this->resetToStepOne();
-            $this->bannerError = 'セッションが無効です。最初からやり直してください。';
+            $this->bannerError = 'Session invalide. Recommencez depuis le debut.';
 
             return;
         }
@@ -233,6 +239,14 @@ class TimecardForm extends Component
         $this->resetToStepOne();
     }
 
+    public function closePunchCompleteModal(): void
+    {
+        $this->dispatch('close-modal', id: 'punch-complete-modal');
+        $this->showPunchCompleteModal = false;
+        $this->punchCompleteLabel = null;
+        $this->resetAfterPunch();
+    }
+
     public function applyForTip(): mixed
     {
         if ($this->authenticatedStaffId === null || $this->tipTargetShift === null) {
@@ -250,31 +264,39 @@ class TimecardForm extends Component
             if ($this->tipTargetShift === 'lunch') {
                 if (! Schema::hasColumn($table, 'is_lunch_tip_applied')) {
                     return redirect()
-                        ->route('mypage.index')
-                        ->with('error', 'チップ申請カラムが未適用です。管理者にマイグレーション実行を依頼してください。');
+                        ->route('mypage.index', ['staff_id' => $this->authenticatedStaffId])
+                        ->with('error', 'La colonne de demande de tip est absente. Demandez la migration a un admin.');
                 }
                 $attendance->is_lunch_tip_applied = true;
             } elseif ($this->tipTargetShift === 'dinner') {
                 if (! Schema::hasColumn($table, 'is_dinner_tip_applied')) {
                     return redirect()
-                        ->route('mypage.index')
-                        ->with('error', 'チップ申請カラムが未適用です。管理者にマイグレーション実行を依頼してください。');
+                        ->route('mypage.index', ['staff_id' => $this->authenticatedStaffId])
+                        ->with('error', 'La colonne de demande de tip est absente. Demandez la migration a un admin.');
                 }
                 $attendance->is_dinner_tip_applied = true;
             }
             $attendance->save();
         }
 
+        session()->put('mypage_staff_id', $this->authenticatedStaffId);
         $this->resetTipModalState();
 
-        return redirect()->route('mypage.index');
+        return redirect()->route('mypage.index', ['staff_id' => $this->authenticatedStaffId]);
     }
 
     public function declineTipAndRedirect(): mixed
     {
+        if ($this->authenticatedStaffId === null) {
+            $this->resetTipModalState();
+
+            return redirect()->route('mypage.index');
+        }
+
+        session()->put('mypage_staff_id', $this->authenticatedStaffId);
         $this->resetTipModalState();
 
-        return redirect()->route('mypage.index');
+        return redirect()->route('mypage.index', ['staff_id' => $this->authenticatedStaffId]);
     }
 
     public function isPunchDisabled(string $action): bool
@@ -349,15 +371,22 @@ class TimecardForm extends Component
         }
     }
 
-    private function applySuccessOutcome(TimecardPunchOutcome $outcome): void
+    private function applySuccessOutcome(TimecardPunchOutcome $outcome, string $action): void
     {
-        if ($outcome->postFlow === 'mypage_late' && $outcome->lateMinutes !== null) {
-            $this->bannerSuccess = '打刻しました（遅刻 '.$outcome->lateMinutes.' 分として記録）';
-        } else {
-            $this->bannerSuccess = '打刻が完了しました。お疲れ様です。';
-        }
+        $this->punchCompleteLabel = match ($action) {
+            'lunch_out' => 'LUNCH OUT',
+            'dinner_out' => 'DINNER OUT',
+            default => 'SHIFT OUT',
+        };
 
-        $this->js('setTimeout(() => $wire.resetAfterPunch(), 3500)');
+        if ($outcome->postFlow === 'mypage_late' && $outcome->lateMinutes !== null) {
+            $this->bannerSuccess = 'Sortie enregistree (retard de '.$outcome->lateMinutes.' min).';
+        } else {
+            $this->bannerSuccess = null;
+        }
+        $this->showPunchCompleteModal = true;
+        $this->dispatch('open-modal', id: 'punch-complete-modal');
+        $this->js('setTimeout(() => $wire.closePunchCompleteModal(), 4200)');
     }
 
     private function openTipResultModal(string $action, bool $isLate): void
@@ -392,6 +421,8 @@ class TimecardForm extends Component
         ];
         $this->extraMeal = 'lunch';
         $this->extraReason = '';
+        $this->showPunchCompleteModal = false;
+        $this->punchCompleteLabel = null;
         $this->resetTipModalState();
     }
 }

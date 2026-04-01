@@ -69,7 +69,10 @@ class MyPageController extends Controller
         })->values();
 
         $staffId = $request->integer('staff_id') ?: null;
-        $staff = $staffId ? Staff::query()->where('id', $staffId)->where('is_active', true)->first() : null;
+        $authorizedStaffId = $request->session()->get('mypage_staff_id');
+        $staff = ($staffId !== null && $authorizedStaffId !== null && (int) $authorizedStaffId === $staffId)
+            ? Staff::query()->where('id', $staffId)->where('is_active', true)->first()
+            : null;
 
         $businessDate = BusinessDate::current();
         $dateString = $businessDate->toDateString();
@@ -104,6 +107,7 @@ class MyPageController extends Controller
         $monthDamageCount = 0;
         $monthLateDates = collect();
         $monthAbsentDates = collect();
+        $monthAttendances = collect();
 
         if ($staff) {
             $completionCount = RoutineTaskLog::query()
@@ -375,11 +379,12 @@ class MyPageController extends Controller
                 ->whereBetween('date', [$monthStart, $monthEnd])
                 ->orderBy('date')
                 ->get();
+            $monthAttendances = $monthlyAttendances;
 
             $monthLateDates = $monthlyAttendances
                 ->filter(fn (Attendance $row): bool => (int) ($row->late_minutes ?? 0) > 0)
                 ->map(function (Attendance $row): string {
-                    return Carbon::parse($row->date)->format('m/d').' 遅刻';
+                    return Carbon::parse($row->date)->format('m/d').' retard';
                 })
                 ->values();
             $monthLateCount = $monthLateDates->count();
@@ -395,7 +400,7 @@ class MyPageController extends Controller
                     return $hasPlannedShift && ! $hasAnyClockIn;
                 })
                 ->map(function (Attendance $row): string {
-                    return Carbon::parse($row->date)->format('m/d').' 欠勤';
+                    return Carbon::parse($row->date)->format('m/d').' absence';
                 })
                 ->values();
             $monthAbsentCount = $monthAbsentDates->count();
@@ -456,6 +461,7 @@ class MyPageController extends Controller
             'monthDamageCount' => $monthDamageCount,
             'monthLateDates' => $monthLateDates,
             'monthAbsentDates' => $monthAbsentDates,
+            'monthAttendances' => $monthAttendances,
             'statusResolver' => $statusResolver,
         ]);
     }
@@ -481,28 +487,38 @@ class MyPageController extends Controller
             ->first();
 
         if (! $staff) {
-            return back()->with('error', 'スタッフが見つかりません。');
+            return back()->with('error', 'Personnel introuvable.');
         }
 
         if ($staff->pin_code === null || $staff->pin_code === '') {
-            return back()->with('error', 'このスタッフの PIN が未設定です。');
+            return back()->with('error', 'Aucun PIN defini pour ce personnel.');
         }
 
-        $pinKey = 'pin-attempt:'.$staff->id;
+        $pinKey = 'pin-attempt:staff:'.$staff->id.':'.(request()->ip() ?? 'unknown');
 
         if (RateLimiter::tooManyAttempts($pinKey, 5)) {
-            return back()->with('error', 'PINの入力を複数回間違えました。1分間お待ちください。');
+            return back()->with('error', 'Trop de tentatives PIN incorrectes. Veuillez patienter 1 minute.');
         }
 
         if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
             RateLimiter::hit($pinKey, 60);
 
-            return back()->with('error', 'PIN が正しくありません。');
+            return back()->with('error', 'Code PIN incorrect.');
         }
 
         RateLimiter::clear($pinKey);
+        $request->session()->put('mypage_staff_id', $staff->id);
 
         return redirect()->route('mypage.index', ['staff_id' => $staff->id]);
+    }
+
+    public function reauthenticate(Request $request): RedirectResponse
+    {
+        $request->session()->forget('mypage_staff_id');
+
+        return redirect()
+            ->route('home', ['open_mypage' => 1])
+            ->with('status', 'Saisissez le PIN pour acceder a Mon espace. Changement de personnel possible a tout moment.');
     }
 
     public function store(Request $request): RedirectResponse
@@ -523,20 +539,20 @@ class MyPageController extends Controller
         if (! $staff) {
             return redirect()
                 ->route('mypage.index')
-                ->with('error', 'スタッフが見つかりません。');
+                ->with('error', 'Personnel introuvable.');
         }
 
         if ($staff->pin_code === null || $staff->pin_code === '') {
             return redirect()
                 ->route('mypage.index', ['staff_id' => $staff->id])
-                ->with('error', 'PIN が設定されていません。');
+                ->with('error', 'PIN non configure.');
         }
 
         if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
             return redirect()
                 ->route('mypage.index', ['staff_id' => $staff->id])
                 ->withInput($request->except('pin_code'))
-                ->with('error', 'PIN が正しくありません。');
+                ->with('error', 'Code PIN incorrect.');
         }
 
         $dateString = BusinessDate::toDateString();
@@ -571,7 +587,7 @@ class MyPageController extends Controller
                 $item = $itemsById->get($itemId);
                 if (! $item) {
                     throw ValidationException::withMessages([
-                        'inventory_val' => '不正な棚卸し品目が含まれています。',
+                        'inventory_val' => 'Des articles d\'inventaire invalides sont inclus.',
                     ]);
                 }
                 if ($raw === null || $raw === '') {
@@ -580,14 +596,14 @@ class MyPageController extends Controller
                 $type = $item->input_type ?? 'number';
                 if ($type === 'number' && ! is_numeric($raw)) {
                     throw ValidationException::withMessages([
-                        "inventory_val.$itemId" => '数値で入力してください。',
+                        "inventory_val.$itemId" => 'Veuillez saisir une valeur numerique.',
                     ]);
                 }
                 if ($type === 'select') {
                     $opts = $item->options ?? [];
                     if (! is_array($opts) || ! in_array($raw, $opts, true)) {
                         throw ValidationException::withMessages([
-                            "inventory_val.$itemId" => '選択肢から選んでください。',
+                            "inventory_val.$itemId" => 'Veuillez choisir une option valide.',
                         ]);
                     }
                 }
@@ -667,7 +683,7 @@ class MyPageController extends Controller
 
         return redirect()
             ->route('mypage.index', ['staff_id' => $staff->id])
-            ->with('status', '保存しました。');
+            ->with('status', 'Enregistre avec succes.');
     }
 
     public function attendance(Request $request): View
@@ -724,6 +740,7 @@ class MyPageController extends Controller
             'staff' => $staff,
             'monthStart' => $monthStart,
             'monthAttendances' => $monthAttendances,
+            'attendances' => $monthAttendances,
             'weekMinutes' => $weekMinutes,
             'monthMinutes' => $monthMinutes,
             'monthLateCount' => $monthLateCount,
@@ -743,6 +760,10 @@ class MyPageController extends Controller
             'dinner_out' => ['nullable', 'date_format:H:i'],
             'manager_pin' => ['nullable', 'string', 'digits:4'],
         ]);
+        $monthParam = $request->input('month');
+        $requestedMonth = is_string($monthParam) && preg_match('/^\d{4}-\d{2}$/', $monthParam)
+            ? $monthParam
+            : null;
 
         $staff = Staff::query()
             ->where('id', $validated['staff_id'])
@@ -751,31 +772,43 @@ class MyPageController extends Controller
 
         if (! $staff) {
             return redirect()
-                ->route('mypage.attendance')
-                ->with('error', 'スタッフが見つかりません。');
+                ->route('mypage.attendance', array_filter([
+                    'staff_id' => $validated['staff_id'] ?? null,
+                    'month' => $requestedMonth,
+                ]))
+                ->with('error', 'Personnel introuvable.');
         }
 
         if ($staff->pin_code === null || $staff->pin_code === '') {
             return redirect()
-                ->route('mypage.attendance', ['staff_id' => $staff->id])
-                ->with('error', 'PIN が設定されていません。');
+                ->route('mypage.attendance', array_filter([
+                    'staff_id' => $staff->id,
+                    'month' => $requestedMonth,
+                ]))
+                ->with('error', 'PIN non configure.');
         }
 
-        $pinKey = 'pin-attempt:'.$staff->id;
+        $pinKey = 'pin-attempt:staff:'.$staff->id.':'.(request()->ip() ?? 'unknown');
 
         if (RateLimiter::tooManyAttempts($pinKey, 5)) {
             return redirect()
-                ->route('mypage.attendance', ['staff_id' => $staff->id])
-                ->with('error', 'PINの入力を複数回間違えました。1分間お待ちください。');
+                ->route('mypage.attendance', array_filter([
+                    'staff_id' => $staff->id,
+                    'month' => $requestedMonth,
+                ]))
+                ->with('error', 'Trop de tentatives PIN incorrectes. Veuillez patienter 1 minute.');
         }
 
         if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
             RateLimiter::hit($pinKey, 60);
 
             return redirect()
-                ->route('mypage.attendance', ['staff_id' => $staff->id])
+                ->route('mypage.attendance', array_filter([
+                    'staff_id' => $staff->id,
+                    'month' => $requestedMonth,
+                ]))
                 ->withInput($request->except(['pin_code', 'manager_pin']))
-                ->with('error', '本人の PIN が正しくありません。');
+                ->with('error', 'Le PIN personnel est incorrect.');
         }
 
         RateLimiter::clear($pinKey);
@@ -785,8 +818,11 @@ class MyPageController extends Controller
 
         if (! $attendance || $attendance->staff_id !== $staff->id) {
             return redirect()
-                ->route('mypage.attendance', ['staff_id' => $staff->id])
-                ->with('error', '勤怠データが不正です。');
+                ->route('mypage.attendance', array_filter([
+                    'staff_id' => $staff->id,
+                    'month' => $requestedMonth,
+                ]))
+                ->with('error', 'Donnees de presence invalides.');
         }
 
         $date = $attendance->date instanceof Carbon
@@ -800,9 +836,12 @@ class MyPageController extends Controller
             foreach ([$lunchOut, $dinnerOut] as $parsedTime) {
                 if ($parsedTime && $parsedTime->isFuture()) {
                     return redirect()
-                        ->back()
+                        ->route('mypage.attendance', [
+                            'staff_id' => $staff->id,
+                            'month' => $date->format('Y-m'),
+                        ])
                         ->withInput($request->except(['pin_code', 'manager_pin']))
-                        ->with('error', '未来の時間は入力できません。');
+                        ->with('error', 'Une heure future ne peut pas etre saisie.');
                 }
             }
 
@@ -817,7 +856,7 @@ class MyPageController extends Controller
                     'staff_id' => $staff->id,
                     'month' => $date->format('Y-m'),
                 ])
-                ->with('status', '退勤時間を更新しました。');
+                ->with('status', 'Heures de sortie mises a jour.');
         }
 
         $managerPin = $validated['manager_pin'] ?? null;
@@ -826,7 +865,7 @@ class MyPageController extends Controller
             return redirect()
                 ->route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $date->format('Y-m')])
                 ->withInput($request->except(['pin_code', 'manager_pin']))
-                ->with('error', '出勤時間の変更にはマネージャー PIN が必要です。');
+                ->with('error', 'Le PIN manager est requis pour modifier l\'heure d\'entree.');
         }
 
         $manager = Staff::query()
@@ -840,7 +879,7 @@ class MyPageController extends Controller
             return redirect()
                 ->route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $date->format('Y-m')])
                 ->withInput($request->except(['pin_code', 'manager_pin']))
-                ->with('error', 'マネージャー PIN が正しくないか、権限がありません。');
+                ->with('error', 'PIN manager invalide ou autorisation insuffisante.');
         }
 
         $lunchIn = $this->parseShiftInTime($validated['lunch_in'] ?? null, $date);
@@ -849,9 +888,12 @@ class MyPageController extends Controller
         foreach ([$lunchIn, $dinnerIn] as $parsedTime) {
             if ($parsedTime && $parsedTime->isFuture()) {
                 return redirect()
-                    ->back()
+                    ->route('mypage.attendance', [
+                        'staff_id' => $staff->id,
+                        'month' => $date->format('Y-m'),
+                    ])
                     ->withInput($request->except(['pin_code', 'manager_pin']))
-                    ->with('error', '未来の時間は入力できません。');
+                    ->with('error', 'Une heure future ne peut pas etre saisie.');
             }
         }
 
@@ -866,7 +908,7 @@ class MyPageController extends Controller
                 'staff_id' => $staff->id,
                 'month' => $date->format('Y-m'),
             ])
-            ->with('status', '出勤時間を更新しました（マネージャー承認済み）。');
+            ->with('status', 'Heures d\'entree mises a jour (approuve par manager).');
     }
 
     protected function parseShiftInTime(?string $value, Carbon $date): ?Carbon

@@ -7,9 +7,12 @@ use App\Livewire\TimecardForm;
 use App\Livewire\ClientOrderForm;
 use App\Models\User;
 use Filament\Notifications\Notification;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
+Route::get('/', function (Request $request) {
+    $request->session()->forget('mypage_staff_id');
+
     return view('welcome');
 })->name('home');
 
@@ -23,6 +26,7 @@ Route::post('/close-check/process', [CloseCheckController::class, 'process'])->n
 Route::get('/close-check/success', [CloseCheckController::class, 'success'])->name('close-check.success');
 
 Route::get('/mypage', [MyPageController::class, 'index'])->name('mypage.index');
+Route::get('/mypage/reauth', [MyPageController::class, 'reauthenticate'])->name('mypage.reauth');
 Route::post('/mypage/open', [MyPageController::class, 'openByPin'])->name('mypage.open');
 Route::post('/mypage', [MyPageController::class, 'store'])->name('mypage.store');
 Route::post('/mypage/auto-logout', [MyPageController::class, 'autoLogout'])->name('mypage.auto-logout');

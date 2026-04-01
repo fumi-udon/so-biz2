@@ -1,53 +1,57 @@
-<div class="timecard-livewire">
-    <header class="text-center mb-4">
-        <p class="text-info small text-uppercase mb-1 tracking-wide">タイムカード</p>
-        <h1 class="h3 fw-semibold mb-3">打刻</h1>
-        <p class="text-secondary small mb-1">
-            営業日
-            <time class="text-light font-monospace" datetime="{{ $targetBusinessDate->toDateString() }}">
+<div class="space-y-3">
+    <header class="rounded-2xl border-4 border-black bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 p-5 text-center shadow-[0_10px_0_0_rgba(0,0,0,1)]">
+        <p class="mb-1 text-sm font-black uppercase tracking-[0.2em] text-black">TIME ATTACK</p>
+        <h1 class="mb-2 text-3xl font-black tracking-widest text-black">BATAILLE DE POINTAGE</h1>
+        <p class="mb-1 text-sm text-gray-500">
+            Date de service
+            <time class="font-mono font-semibold text-gray-800" datetime="{{ $targetBusinessDate->toDateString() }}">
                 {{ $targetBusinessDate->format('Y/m/d') }}
             </time>
         </p>
-        <p class="text-secondary mb-0" style="font-size: 0.7rem;">6時前の打刻は前営業日として記録されます（夜勤など）。</p>
+        <p class="text-sm font-semibold text-black/80">Les pointages avant 06:00 sont enregistres sur le jour d'exploitation precedent.</p>
+        <p class="text-[10px] text-black/60">早朝打刻は前営業日扱い</p>
     </header>
 
     @if ($bannerSuccess)
-        <div class="alert alert-success border-0 shadow-sm mb-3 py-3 text-center fw-semibold" role="status">
+        <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700" role="status">
             {{ $bannerSuccess }}
         </div>
     @endif
 
     @if ($bannerError)
-        <div class="alert alert-danger border-0 mb-3 py-3" role="alert">
+        <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700" role="alert">
             {{ $bannerError }}
         </div>
     @endif
 
     @if ($staffOptions === [])
-        <div class="border border-secondary border-2 border-dashed rounded-3 p-5 text-center text-secondary">
-            アクティブなスタッフが登録されていません。
+        <div class="rounded-xl border-2 border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+            Aucun personnel actif n'est enregistre.
         </div>
     @elseif ($step === 1)
-        <div class="rounded-3 border border-secondary bg-black bg-opacity-25 p-4">
-            <p class="small text-secondary mb-3">Step 1 — 本人確認</p>
+        <div class="rounded-2xl border-4 border-black bg-white p-5 shadow-[0_8px_0_0_rgba(0,0,0,1)]">
+            <p class="mb-3 text-sm font-black uppercase tracking-widest text-indigo-700">Etape 1 - Verification d'identite</p>
             <div class="mb-3">
-                <label for="tc_staff" class="form-label small text-secondary">スタッフ</label>
-                <select
-                    id="tc_staff"
-                    wire:model.live="selectedStaffId"
-                    class="form-select form-select-lg"
-                >
-                    <option value="">選択してください</option>
-                    @foreach ($staffOptions as $opt)
-                        <option value="{{ $opt['id'] }}">{{ $opt['name'] }}</option>
-                    @endforeach
-                </select>
+                <label for="tc_staff" class="mb-1 block text-sm font-medium text-gray-700">Personnel</label>
+                <div class="relative">
+                    <select
+                        id="tc_staff"
+                        wire:model.live="selectedStaffId"
+                        class="block w-full !appearance-none rounded-lg border border-gray-300 bg-white !bg-none px-3 py-3 pr-10 text-base text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    >
+                        <option value="">Veuillez selectionner</option>
+                        @foreach ($staffOptions as $opt)
+                            <option value="{{ $opt['id'] }}">{{ $opt['name'] }}</option>
+                        @endforeach
+                    </select>
+                    <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-500">▾</span>
+                </div>
                 @error('selectedStaffId')
-                    <div class="text-danger small mt-1">{{ $message }}</div>
+                    <div class="mt-1 text-sm text-rose-600">{{ $message }}</div>
                 @enderror
             </div>
             <div class="mb-4">
-                <label for="tc_pin" class="form-label small text-secondary">PIN（4桁）</label>
+                <label for="tc_pin" class="mb-1 block text-sm font-medium text-gray-700">PIN (4 chiffres)</label>
                 <input
                     id="tc_pin"
                     type="password"
@@ -55,30 +59,30 @@
                     inputmode="numeric"
                     autocomplete="one-time-code"
                     maxlength="4"
-                    class="form-control form-control-lg text-center font-monospace"
+                    class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-center font-mono text-lg text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                     placeholder="••••"
                 />
                 @error('pinCode')
-                    <div class="text-danger small mt-1">{{ $message }}</div>
+                    <div class="mt-1 text-sm text-rose-600">{{ $message }}</div>
                 @enderror
             </div>
             <button
                 type="button"
                 wire:click="authenticate"
                 wire:loading.attr="disabled"
-                class="btn btn-primary btn-lg w-100 py-4 fs-4 fw-bold"
+                class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black bg-indigo-500 px-4 py-4 text-lg font-black tracking-widest text-white shadow-[0_8px_0_0_rgba(0,0,0,1)] transition hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 active:translate-y-2 active:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
             >
-                <span wire:loading.remove wire:target="authenticate">次へ</span>
-                <span wire:loading wire:target="authenticate">確認中…</span>
+                <span wire:loading.remove wire:target="authenticate">Continuer</span>
+                <span wire:loading wire:target="authenticate">Verification...</span>
             </button>
         </div>
     @else
-        <div class="mb-4 rounded-3 border border-info border-opacity-50 bg-info bg-opacity-10 px-3 py-3 text-center">
-            <p class="mb-0 fs-4 fw-semibold text-light">
-                お疲れ様です、{{ $authenticatedStaffName }} さん
+        <div class="rounded-2xl border-4 border-black bg-gradient-to-r from-cyan-200 to-blue-200 px-4 py-4 text-center shadow-[0_8px_0_0_rgba(0,0,0,1)]">
+            <p class="text-xl font-black text-sky-950">
+                Bon courage, {{ $authenticatedStaffName }}
             </p>
-            <button type="button" wire:click="backToAuth" class="btn btn-link btn-sm text-secondary mt-2 px-0">
-                別のスタッフに切り替える
+            <button type="button" wire:click="backToAuth" class="mt-2 text-sm font-medium text-sky-700 underline underline-offset-2">
+                Changer de personnel
             </button>
         </div>
 
@@ -89,67 +93,69 @@
             $canExtraLunch = ! $s['lunch_scheduled'] && ! $s['lunch_in'];
             $canExtraDinner = ! $s['dinner_scheduled'] && ! $s['dinner_in'];
             $extraAvailable = $canExtraLunch || $canExtraDinner;
+            $lunchInDone = (bool) ($s['lunch_in'] ?? false);
+            $lunchOutDone = (bool) ($s['lunch_out'] ?? false);
+            $dinnerInDone = (bool) ($s['dinner_in'] ?? false);
+            $dinnerOutDone = (bool) ($s['dinner_out'] ?? false);
         @endphp
 
-        <div class="d-flex flex-column gap-4 align-items-stretch justify-content-center mx-auto w-100" style="max-width: 28rem;">
+        <div class="mx-auto grid w-full max-w-5xl grid-cols-1 gap-3 lg:grid-cols-2">
             @if ($showLunchBlock)
-                <section class="timecard-meal-block w-100" aria-label="ランチ打刻">
-                    <p class="text-center text-secondary small text-uppercase mb-2">ランチ</p>
-                    <div class="row g-3">
-                        <div class="col-12 col-sm-6">
+                <section class="rounded-2xl border-4 border-black bg-gradient-to-br from-orange-400 via-red-500 to-rose-600 p-4 text-white shadow-[0_10px_0_0_rgba(0,0,0,1)]" aria-label="Pointage dejeuner">
+                    <p class="mb-1 text-sm font-black uppercase tracking-[0.2em] text-orange-100">ROUND 1</p>
+                    <p class="mb-3 text-center text-lg font-black tracking-widest text-white">LUNCH SIDE</p>
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        <div>
                             <button
                                 type="button"
                                 wire:click="punch('lunch_in')"
                                 wire:loading.attr="disabled"
                                 @disabled($this->isPunchDisabled('lunch_in'))
-                                class="btn btn-lg w-100 py-4 fs-4 fw-bold border-2 {{ $this->isPunchDisabled('lunch_in') ? 'btn-secondary opacity-50 cursor-not-allowed bg-secondary border-secondary' : 'btn-success' }}"
+                                class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black px-4 py-4 text-lg font-black tracking-widest transition focus:outline-none focus:ring-2 {{ $this->isPunchDisabled('lunch_in') ? 'cursor-not-allowed border-gray-400 bg-gray-300 px-2 py-1.5 text-xs font-semibold tracking-normal text-gray-600 opacity-90' : 'bg-yellow-300 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)] hover:bg-yellow-200 focus:ring-yellow-300/60 active:translate-y-2 active:shadow-none' }}"
                             >
-                                ランチ出勤
+                                {{ $lunchInDone ? '✅ Entree dejeuner deja pointee' : 'Entree dejeuner' }}
                             </button>
                         </div>
-                        <div class="col-12 col-sm-6">
+                        <div>
                             <button
                                 type="button"
                                 wire:click="punch('lunch_out')"
                                 wire:loading.attr="disabled"
                                 @disabled($this->isPunchDisabled('lunch_out'))
-                                class="btn btn-lg w-100 py-4 fs-4 fw-bold border-2 {{ $this->isPunchDisabled('lunch_out') ? 'btn-secondary opacity-50 cursor-not-allowed bg-secondary border-secondary' : 'btn-outline-success' }}"
+                                class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black px-4 py-4 text-lg font-black tracking-widest transition focus:outline-none focus:ring-2 {{ $this->isPunchDisabled('lunch_out') ? 'cursor-not-allowed border-gray-400 bg-gray-300 px-2 py-1.5 text-xs font-semibold tracking-normal text-gray-600 opacity-90' : 'bg-white text-red-700 shadow-[0_8px_0_0_rgba(0,0,0,1)] hover:bg-red-50 focus:ring-red-200/70 active:translate-y-2 active:shadow-none' }}"
                             >
-                                ランチ退勤
+                                {{ $lunchOutDone ? '✅ Sortie dejeuner deja pointee' : 'Sortie dejeuner' }}
                             </button>
                         </div>
                     </div>
                 </section>
             @endif
 
-            @if ($showLunchBlock && $showDinnerBlock)
-                <hr class="border-secondary my-0 opacity-50">
-            @endif
-
             @if ($showDinnerBlock)
-                <section class="timecard-meal-block w-100" aria-label="ディナー打刻">
-                    <p class="text-center text-secondary small text-uppercase mb-2">ディナー</p>
-                    <div class="row g-3">
-                        <div class="col-12 col-sm-6">
+                <section class="rounded-2xl border-4 border-black bg-gradient-to-br from-indigo-700 via-blue-900 to-purple-900 p-4 text-white shadow-[0_10px_0_0_rgba(0,0,0,1)]" aria-label="Pointage diner">
+                    <p class="mb-1 text-sm font-black uppercase tracking-[0.2em] text-indigo-100">ROUND 2</p>
+                    <p class="mb-3 text-center text-lg font-black tracking-widest text-white">DINNER SIDE</p>
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        <div>
                             <button
                                 type="button"
                                 wire:click="punch('dinner_in')"
                                 wire:loading.attr="disabled"
                                 @disabled($this->isPunchDisabled('dinner_in'))
-                                class="btn btn-lg w-100 py-4 fs-4 fw-bold border-2 {{ $this->isPunchDisabled('dinner_in') ? 'btn-secondary opacity-50 cursor-not-allowed bg-secondary border-secondary' : 'btn-warning text-dark' }}"
+                                class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black px-4 py-4 text-lg font-black tracking-widest transition focus:outline-none focus:ring-2 {{ $this->isPunchDisabled('dinner_in') ? 'cursor-not-allowed border-gray-400 bg-gray-300 px-2 py-1.5 text-xs font-semibold tracking-normal text-gray-600 opacity-90' : 'bg-cyan-300 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)] hover:bg-cyan-200 focus:ring-cyan-300/60 active:translate-y-2 active:shadow-none' }}"
                             >
-                                ディナー出勤
+                                {{ $dinnerInDone ? '✅ Entree diner deja pointee' : 'Entree diner' }}
                             </button>
                         </div>
-                        <div class="col-12 col-sm-6">
+                        <div>
                             <button
                                 type="button"
                                 wire:click="punch('dinner_out')"
                                 wire:loading.attr="disabled"
                                 @disabled($this->isPunchDisabled('dinner_out'))
-                                class="btn btn-lg w-100 py-4 fs-4 fw-bold border-2 {{ $this->isPunchDisabled('dinner_out') ? 'btn-secondary opacity-50 cursor-not-allowed bg-secondary border-secondary' : 'btn-outline-warning text-warning' }}"
+                                class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black px-4 py-4 text-lg font-black tracking-widest transition focus:outline-none focus:ring-2 {{ $this->isPunchDisabled('dinner_out') ? 'cursor-not-allowed border-gray-400 bg-gray-300 px-2 py-1.5 text-xs font-semibold tracking-normal text-gray-600 opacity-90' : 'bg-white text-indigo-800 shadow-[0_8px_0_0_rgba(0,0,0,1)] hover:bg-indigo-50 focus:ring-indigo-200/70 active:translate-y-2 active:shadow-none' }}"
                             >
-                                ディナー退勤
+                                {{ $dinnerOutDone ? '✅ Sortie diner deja pointee' : 'Sortie diner' }}
                             </button>
                         </div>
                     </div>
@@ -157,50 +163,62 @@
             @endif
         </div>
 
-        <div class="rounded-3 border border-warning border-2 bg-warning bg-opacity-10 p-4 mt-4 mb-3">
-            <p class="small fw-bold text-warning-emphasis mb-2">臨時出勤（ヘルプ）</p>
-            @if ($extraAvailable)
-                @if ($this->allMainPunchesDisabled())
-                    <p class="small text-warning-emphasis mb-3 fw-semibold">
-                        ⚠️ 本日のシフト予定がありません。ヘルプ等の場合は以下から申請してください。
-                    </p>
+        <div x-data="{ showExtra: false }" class="rounded-2xl border-2 border-amber-700 bg-amber-100 p-4">
+            <button
+                type="button"
+                class="text-sm font-semibold text-amber-900 underline underline-offset-2"
+                @click="showExtra = !showExtra"
+            >
+                ➕ Declarer une entree exceptionnelle (aide)
+            </button>
+            <div x-show="showExtra" x-collapse class="mt-3">
+                        <p class="mb-2 text-sm font-bold text-amber-900">Entree exceptionnelle (aide)</p>
+                @if ($extraAvailable)
+                    @if ($this->allMainPunchesDisabled())
+                        <p class="mb-3 text-sm font-semibold text-amber-800">
+                            ⚠️ Aucun shift prevu aujourd'hui. Utilisez la demande d'aide ci-dessous.
+                        </p>
+                    @else
+                        <p class="mb-3 text-sm font-semibold text-amber-800">
+                            ⚠️ Les plages non planifiees ne peuvent pas etre pointees avec le bouton normal. Utilisez cette demande d'aide.
+                        </p>
+                    @endif
+                    <div class="mb-3">
+                        <label class="mb-1 block text-sm font-medium text-gray-700">Shift exceptionnel</label>
+                        <div class="relative">
+                            <select wire:model.live="extraMeal" class="block w-full !appearance-none rounded-lg border border-gray-300 bg-white !bg-none px-3 py-3 pr-10 text-base text-gray-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30">
+                                @if ($canExtraLunch)
+                                    <option value="lunch">Dejeuner (L)</option>
+                                @endif
+                                @if ($canExtraDinner)
+                                    <option value="dinner">Diner (D)</option>
+                                @endif
+                            </select>
+                            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-500">▾</span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="mb-1 block text-sm font-medium text-gray-700">Motif (optionnel)</label>
+                        <textarea wire:model.live.debounce.500ms="extraReason" class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30" rows="2" maxlength="500" placeholder="Ex.: remplacement d'absence"></textarea>
+                    </div>
+                    <button
+                        type="button"
+                        wire:click="submitExtraShift"
+                        wire:loading.attr="disabled"
+                        class="inline-flex w-full items-center justify-center rounded-lg border border-amber-600 bg-amber-500 px-4 py-4 text-lg font-semibold text-amber-950 transition hover:bg-amber-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <span wire:loading.remove wire:target="submitExtraShift">Pointer comme entree exceptionnelle</span>
+                        <span wire:loading wire:target="submitExtraShift">Traitement...</span>
+                    </button>
+                    @error('extraMeal')
+                        <div class="mt-2 text-sm text-rose-600">{{ $message }}</div>
+                    @enderror
                 @else
-                    <p class="small text-warning-emphasis mb-3 fw-semibold">
-                        ⚠️ シフト未登録の区間は通常ボタンでは打刻できません。ヘルプの場合はこちらから申請してください。
+                    <p class="text-sm text-gray-600">
+                        Aucune demande exceptionnelle n'est necessaire pour le moment.
                     </p>
                 @endif
-                <div class="mb-3">
-                    <label class="form-label small text-secondary">臨時出勤するシフト</label>
-                    <select wire:model.live="extraMeal" class="form-select form-select-lg">
-                        @if ($canExtraLunch)
-                            <option value="lunch">ランチ（L）</option>
-                        @endif
-                        @if ($canExtraDinner)
-                            <option value="dinner">ディナー（D）</option>
-                        @endif
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small text-secondary">理由（任意）</label>
-                    <textarea wire:model.live.debounce.500ms="extraReason" class="form-control" rows="2" maxlength="500" placeholder="例：欠勤カバー"></textarea>
-                </div>
-                <button
-                    type="button"
-                    wire:click="submitExtraShift"
-                    wire:loading.attr="disabled"
-                    class="btn btn-warning btn-lg w-100 py-4 fs-4 fw-bold text-dark"
-                >
-                    <span wire:loading.remove wire:target="submitExtraShift">臨時出勤として打刻する</span>
-                    <span wire:loading wire:target="submitExtraShift">処理中…</span>
-                </button>
-                @error('extraMeal')
-                    <div class="text-danger small mt-2">{{ $message }}</div>
-                @enderror
-            @else
-                <p class="small text-secondary mb-0">
-                    現在、臨時出勤の申請は不要です。（予定外のシフトが発生した場合は、管理者にご相談ください。）
-                </p>
-            @endif
+            </div>
         </div>
     @endif
 
@@ -212,29 +230,51 @@
         x-on:modal-closed.window="if ($event.detail.id === 'tip-result-modal') { $wire.declineTipAndRedirect() }"
     >
         @if ($tipModalState === 'WIN')
-            <div class="rounded-xl bg-linear-to-r from-amber-400 to-yellow-500 p-4 text-gray-950">
+            <div class="rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 p-4 text-gray-950">
                 <p class="mb-2 text-lg font-black">🎉 YOU WIN!</p>
-                <p class="mb-4 text-sm font-bold">定刻クリア。チップ申請権を獲得しました！</p>
+                <p class="mb-4 text-sm font-bold">Arrivee a l'heure. Droit de demande de tip obtenu !</p>
                 <button
                     type="button"
                     wire:click="applyForTip"
                     class="w-full rounded-lg bg-black/85 px-3 py-2 text-sm font-extrabold text-yellow-200"
                 >
-                    🪙 チップ権利を受け取る
+                    🪙 Recevoir le droit au tip
                 </button>
             </div>
         @elseif ($tipModalState === 'LOSE')
-            <div class="rounded-xl bg-linear-to-r from-red-800 to-gray-900 p-4 text-gray-100">
+            <div class="rounded-xl bg-gradient-to-r from-red-800 to-gray-900 p-4 text-gray-100">
                 <p class="mb-2 text-lg font-black">💀 YOU LOSE...</p>
-                <p class="mb-4 text-sm font-bold">遅刻判定。本シフトのチップ権利を喪失しました。</p>
+                <p class="mb-4 text-sm font-bold">Retard constate. Le droit au tip pour ce shift est perdu.</p>
                 <button
                     type="button"
                     wire:click="declineTipAndRedirect"
                     class="w-full rounded-lg bg-gray-600 px-3 py-2 text-sm font-extrabold text-gray-100"
                 >
-                    閉じる
+                    Fermer
                 </button>
             </div>
         @endif
+    </x-filament::modal>
+
+    <x-filament::modal
+        id="punch-complete-modal"
+        :close-by-clicking-away="false"
+        :close-by-escaping="true"
+        width="md"
+        x-on:modal-closed.window="if ($event.detail.id === 'punch-complete-modal') { $wire.closePunchCompleteModal() }"
+    >
+        <div class="rounded-xl border-4 border-black bg-gradient-to-r from-emerald-400 via-cyan-300 to-sky-400 p-4 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)]">
+            <p class="mb-1 text-center text-sm font-black tracking-[0.2em] text-slate-800">TIMECARD COMPLETE</p>
+            <p class="mb-1 text-center text-xl font-black tracking-widest">🎉 Pointage termine Bravo merci 🎉</p>
+            <p class="mb-2 text-center text-sm font-bold">{{ $punchCompleteLabel ?? 'SHIFT OUT' }}</p>
+            <p class="mb-3 text-center text-sm font-semibold">Merci pour votre travail aujourd'hui !</p>
+            <button
+                type="button"
+                x-on:click="$dispatch('close-modal', { id: 'punch-complete-modal' })"
+                class="w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-black text-slate-900 shadow-[0_4px_0_0_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
+            >
+                OK
+            </button>
+        </div>
     </x-filament::modal>
 </div>

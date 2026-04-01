@@ -13,10 +13,21 @@
     class="-mt-2 max-w-full overflow-x-hidden [&_section.flex.flex-col]:gap-y-2 [&_section.flex.flex-col]:py-3"
 >
     <div class="space-y-2 pb-28 sm:pb-24">
-        {{-- フォーム: 営業日(Amber) / シフト(Indigo) / 総額(Sky) / 追加 — Section は CalculateTips.php で定義 --}}
+        {{-- Formulaire principal --}}
         {{ $this->form }}
 
-        {{-- 合計: Amber --}}
+        @if ($this->needsManagerPin())
+            <x-filament::section
+                :compact="true"
+                :heading="null"
+                class="border-2 border-danger-300 bg-danger-50/70 shadow-sm ring-1 ring-danger-200 dark:border-danger-700 dark:bg-danger-950/30"
+            >
+                <p class="text-xs font-semibold text-danger-700 dark:text-danger-300">
+                    Alerte: tip &gt; 200 DT. PIN manager obligatoire pour valider.
+                </p>
+            </x-filament::section>
+        @endif
+
         <x-filament::section
             :compact="true"
             :heading="null"
@@ -25,23 +36,22 @@
             <div
                 class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs sm:text-sm"
             >
-                <span class="font-semibold text-amber-900 dark:text-amber-200">配分合計 / 入力総額</span>
+                <span class="font-semibold text-amber-900 dark:text-amber-200">Total distribue / Total saisi</span>
                 <span
                     class="font-mono text-sm font-bold tabular-nums sm:text-base {{ $match ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-300' }}"
                 >
-                    {{ number_format($distributed_total, 3) }} / {{ number_format($target, 3) }} TND
+                    {{ number_format($distributed_total, 3) }} / {{ number_format($target, 3) }} DT
                 </span>
             </div>
         </x-filament::section>
 
-        {{-- 配分テーブル: Emerald 枠 --}}
         <x-filament-tables::container
             class="border-2 border-emerald-600/30 bg-white shadow-md ring-2 ring-emerald-600/20 dark:border-emerald-600/40 dark:bg-gray-900 dark:ring-emerald-500/20"
         >
             <x-filament-tables::table class="table-fixed text-sm">
                 <x-slot name="header">
                     <x-filament-tables::header-cell name="col_staff" :sortable="false">
-                        スタッフ
+                        Staff
                     </x-filament-tables::header-cell>
                     <x-filament-tables::header-cell
                         name="col_weight"
@@ -56,7 +66,7 @@
                         :sortable="false"
                         :alignment="Alignment::End"
                     >
-                        配分額
+                        Montant
                     </x-filament-tables::header-cell>
                     <x-filament-tables::header-cell
                         name="col_actions"
@@ -64,7 +74,7 @@
                         :alignment="Alignment::End"
                         class="w-12"
                     >
-                        <span class="sr-only">操作</span>
+                        <span class="sr-only">Action</span>
                     </x-filament-tables::header-cell>
                 </x-slot>
 
@@ -76,7 +86,7 @@
                                     {{ $row['name'] }}
                                 </span>
                                 <x-filament::badge color="gray" size="xs">
-                                    {{ $shift === 'lunch' ? '昼' : '夜' }}
+                                    {{ $shift === 'lunch' ? 'Midi' : 'Soir' }}
                                 </x-filament::badge>
                                 @if(! empty($row['is_tardy_deprived']))
                                     <x-filament::badge
@@ -84,7 +94,7 @@
                                         size="xs"
                                         class="ring-1 ring-rose-600/50 !bg-rose-50 !text-rose-700 dark:!bg-rose-950/50 dark:!text-rose-300 dark:ring-rose-600/40"
                                     >
-                                        遅
+                                        Retard
                                     </x-filament::badge>
                                 @endif
                             </div>
@@ -120,7 +130,7 @@
                                 {{ number_format((float) $row['amount'], 3) }}
                             </span>
                             <span class="ms-0.5 text-[10px] font-medium text-emerald-700/70 dark:text-emerald-500/80"
-                                >TND</span
+                                >DT</span
                             >
                         </x-filament-tables::cell>
                         <x-filament-tables::cell class="!px-1 !py-1.5 text-end align-middle">
@@ -132,7 +142,7 @@
                                 wire:click="removeStaff({{ (int) $row['staff_id'] }})"
                                 wire:loading.attr="disabled"
                             >
-                                削除
+                                Retirer
                             </x-filament::button>
                         </x-filament-tables::cell>
                     </x-filament-tables::row>
@@ -143,14 +153,13 @@
                             colspan="4"
                             tag="td"
                         >
-                            この条件で出勤のスタッフはいません。上の「スタッフを追加」から手動で加えてください。
+                            Aucun staff present pour cette condition. Ajoute manuellement.
                         </x-filament-tables::cell>
                     </x-filament-tables::row>
                 @endforelse
             </x-filament-tables::table>
         </x-filament-tables::container>
 
-        {{-- 週次・月次（Emerald 系） --}}
         <x-filament::section
             :compact="true"
             :heading="null"
@@ -159,14 +168,14 @@
             <div
                 class="flex flex-wrap items-baseline gap-x-3 gap-y-0 text-xs text-emerald-900 dark:text-emerald-200"
             >
-                <span class="font-semibold">今週計</span>
+                <span class="font-semibold">Semaine</span>
                 <span class="font-mono font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
-                    {{ number_format($weekly_total, 3) }} TND
+                    {{ number_format($weekly_total, 3) }} DT
                 </span>
                 <span class="text-emerald-300 dark:text-emerald-800">|</span>
-                <span class="font-semibold">今月計</span>
+                <span class="font-semibold">Mois</span>
                 <span class="font-mono font-medium tabular-nums text-emerald-700 dark:text-emerald-300">
-                    {{ number_format($monthly_total, 3) }} TND
+                    {{ number_format($monthly_total, 3) }} DT
                 </span>
             </div>
         </x-filament::section>
@@ -182,9 +191,40 @@
             wire:loading.attr="disabled"
             class="w-full min-h-[48px] justify-center rounded-xl border-2 border-emerald-700 bg-gradient-to-b from-emerald-500 to-emerald-600 px-3 py-3 text-base font-bold text-white shadow-lg shadow-emerald-600/30 hover:from-emerald-400 hover:to-emerald-500 focus:ring-4 focus:ring-emerald-400/50 dark:border-emerald-500 dark:from-emerald-600 dark:to-emerald-700 dark:hover:from-emerald-500 dark:hover:to-emerald-600"
         >
-            確定して保存
+            Valider et sauvegarder
         </x-filament::button>
     </div>
+
+    <x-filament::section
+        :compact="true"
+        :heading="null"
+        class="border-2 border-gray-300 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900"
+    >
+        <details>
+            <summary class="cursor-pointer text-xs font-semibold text-gray-800 dark:text-gray-100">
+                Historique caisse (3 jours)
+            </summary>
+            <div class="mt-2 space-y-1.5">
+                @foreach($this->recentFinanceHistory() as $h)
+                    <div @class([
+                        'flex items-center justify-between rounded-md border px-2 py-1 text-[11px]',
+                        'border-danger-300 bg-danger-50 text-danger-700 dark:border-danger-700 dark:bg-danger-950/30 dark:text-danger-300' => $h->close_status !== 'success',
+                        'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200' => $h->close_status === 'success',
+                    ])>
+                        <span class="font-mono">{{ $h->business_date?->format('m-d') }} · {{ $h->shift === 'lunch' ? 'Midi' : 'Soir' }}</span>
+                        <span class="inline-flex items-center gap-1">
+                            @if($h->close_status === 'success')
+                                <x-filament::icon icon="heroicon-o-check-circle" class="h-4 w-4 text-success-600 dark:text-success-400" />
+                            @else
+                                <x-filament::icon icon="heroicon-o-x-circle" class="h-4 w-4 text-danger-600 dark:text-danger-400" />
+                            @endif
+                            <span class="font-mono">{{ number_format((float) ($h->final_tip_amount ?? $h->chips ?? 0), 3) }} DT</span>
+                        </span>
+                    </div>
+                @endforeach
+            </div>
+        </details>
+    </x-filament::section>
 
     <div
         wire:loading.delay

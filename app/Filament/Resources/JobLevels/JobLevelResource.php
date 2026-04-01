@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\JobLevels;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\JobLevels\Pages\CreateJobLevel;
 use App\Filament\Resources\JobLevels\Pages\EditJobLevel;
 use App\Filament\Resources\JobLevels\Pages\ListJobLevels;
@@ -9,12 +10,11 @@ use App\Models\JobLevel;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Validation\Rule;
 
-class JobLevelResource extends Resource
+class JobLevelResource extends AdminOnlyResource
 {
     protected static ?string $model = JobLevel::class;
 

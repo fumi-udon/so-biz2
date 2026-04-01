@@ -9,8 +9,10 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\View\PanelsRenderHook;
 use App\Filament\Resources\Attendances\Widgets\TodayAttendanceWidget;
+use Illuminate\Support\Facades\Auth;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\Facades\Blade;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -45,6 +47,13 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->homeUrl(function (): string {
+                if (Auth::user()?->isCashier()) {
+                    return route('filament.admin.pages.daily-close-check');
+                }
+
+                return url('/admin');
+            })
             // エクスポート完了時の「ダウンロード」リンクは DB 通知（ベルアイコン）に表示される
             ->databaseNotifications()
             ->colors([
@@ -79,6 +88,16 @@ class AdminPanelProvider extends PanelProvider
                     }
 
                     return '<link rel="stylesheet" href="'.asset('css/filament-attendances-layout.css').'" />';
+                },
+            )
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                function (): string {
+                    if (! request()->routeIs('filament.admin.pages.daily-close-check')) {
+                        return '';
+                    }
+
+                    return Blade::render('@vite([\'resources/css/app.css\'])');
                 },
             );
     }

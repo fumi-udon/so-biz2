@@ -73,7 +73,7 @@ class StaffForm
                 TextInput::make('hourly_wage')
                     ->numeric()
                     ->label('時給')
-                    ->suffix('円')
+                    ->suffix('DT')
                     ->nullable(),
                 TextInput::make('target_weekly_hours')
                     ->numeric()

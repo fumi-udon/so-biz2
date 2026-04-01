@@ -1,11 +1,11 @@
 <x-filament-panels::page>
-    <div class="space-y-4">
+    <div class="space-y-4" wire:poll.10s="loadOrders">
         <p class="text-sm text-gray-600 dark:text-gray-400">
-            {{ __('新規注文は Pusher 経由でリアルタイム反映されます（Table 1〜4）。') }}
+            {{ __('Les nouvelles commandes sont synchronisees en temps reel via Pusher (tables 1 a 4).') }}
         </p>
 
         <div class="grid gap-4 sm:grid-cols-2">
-            @foreach (['1', '2', '3', '4'] as $table)
+            @foreach (config('restaurant.tables', ['1', '2', '3', '4']) as $table)
                 @php
                     $blink = $blinkingTable === $table;
                     $orders = $ordersByTable[$table] ?? [];
@@ -23,7 +23,7 @@
                         {{ __('Table') }} {{ $table }}
                     </h2>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {{ __('未処理') }}: {{ count($orders) }}
+                        {{ __('En attente') }}: {{ count($orders) }}
                     </p>
 
                     <ul class="mt-3 space-y-2">
@@ -39,7 +39,7 @@
                             </li>
                         @empty
                             <li class="text-sm text-gray-500 dark:text-gray-400">
-                                {{ __('注文なし') }}
+                                {{ __('Aucune commande') }}
                             </li>
                         @endforelse
                     </ul>

@@ -2,14 +2,14 @@
 
 namespace App\Filament\Resources\DailyTipAudits;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\DailyTipAudits\Pages\ListDailyTipAudits;
 use App\Models\DailyTipAudit;
-use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
-class DailyTipAuditResource extends Resource
+class DailyTipAuditResource extends AdminOnlyResource
 {
     protected static ?string $model = DailyTipAudit::class;
 

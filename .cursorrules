@@ -6,6 +6,12 @@
 - Sail runtime path: ./vendor/laravel/sail/runtimes/8.4 (fixed, do not alter)
 - compose.yaml: preserve structure and indentation exactly
 
+## [RULE] Color contrast (always)
+- Every background MUST have explicit foreground colors that remain readable in both light and dark (use `text-gray-950 dark:text-white` or a dedicated palette such as `bg-slate-900` + `text-slate-100`).
+- Never leave body text as default without checking: `bg-white` + `text-gray-900` / `dark:bg-gray-900` + `text-gray-100` (or equivalent) on the same element or its text children.
+- Custom modals/panels: either force a single contrast context (e.g. `dark` + dark `!bg-*` + light text) or duplicate Filament’s light/dark pairs; do not mix white Filament surfaces with theme-dependent text that can match the background.
+- After UI changes, mentally verify: light mode AND dark mode — no “invisible” text on tables, inputs, badges, or nested `fi-section` cards.
+
 ## [RULE] Filament v3 Frontend
 - USE: x-filament::* and x-filament-tables::* official Blade components
 - FORBIDDEN: custom <div>/<table> layouts, inline styles, <style> tags
@@ -24,3 +30,15 @@
 - Numeric inputs: numeric + step="0.001"
 - Images/large elements: aspect-video + overflow-hidden
 - On layout issues: replace custom implementation with standard Filament components first
+
+## [RULE] Frontend Layout Safety (No-Drift)
+- One page, one CSS ecosystem: NEVER mix Bootstrap and Tailwind on the same page.
+- If a page uses any `x-filament::*` component, ALWAYS include `@filamentStyles` and `@filamentScripts(withCore: true)`.
+- Keep Tailwind syntax version consistent per project setup (do not mix v3/v4 utility names).
+- Prefer `@vite(resources/css/app.css)` for stable class generation; use CDN only when explicitly required.
+- Keep layout responsibilities isolated (e.g. `timecard` layout must not depend on Bootstrap-only nav/modal components).
+- Standardize form controls: use consistent classes for `input/select/textarea`; for `select`, enforce `appearance-none` + custom arrow.
+- Keep Alpine.js local and minimal (`x-data` scoped per section; use `x-show` + `x-collapse` for toggles).
+- Do not put complex data logic in Blade; compute in Controller/Livewire and pass view-ready data.
+- Before finalizing UI changes, verify mobile (390px) and tablet (768px) for: initial render, input, error state, modal state, and navigation.
+- Final grep check for Tailwind pages: no `btn-`, `row`, `col-`, `data-bs-`, or Bootstrap CDN links.

@@ -1,107 +1,132 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="fr">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>業務ポータル — {{ config('app.name') }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <title>Portail d'exploitation — {{ config('app.name') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>[x-cloak]{display:none!important;}</style>
 </head>
-<body class="bg-light d-flex flex-column min-vh-100">
+<body x-data="{ openMyPageModal: @js(request()->boolean('open_mypage')) }" class="min-h-screen bg-slate-100 text-slate-900 antialiased">
+    @php
+        $mypageStaffList = \App\Models\Staff::query()->where('is_active', true)->orderBy('name')->get();
+    @endphp
+
     <x-client-nav />
 
-    <main class="container py-3 py-md-5 flex-grow-1" style="max-width: 800px;">
+    <main class="mx-auto w-full max-w-5xl px-3 py-3">
         @if (session('error'))
-            <div class="alert alert-danger shadow-sm rounded-4 py-2 small mb-3" role="alert">{{ session('error') }}</div>
+            <div class="mb-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{{ session('error') }}</div>
         @endif
-        <div class="mb-3 mb-md-4 text-center text-md-start">
-            <h1 class="h3 fw-bold text-dark">業務メニュー</h1>
-            <p class="text-secondary mb-0 small">担当の業務を選択してください。</p>
-        </div>
 
-        <div class="row row-cols-1 row-cols-md-2 g-3 g-md-4">
-            <div class="col">
-                <a href="{{ route('timecard.index') }}" class="text-decoration-none">
-                    <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
-                        <div class="card-body text-center p-4">
-                            <div class="display-4 text-primary mb-3"><i class="bi bi-clock-history"></i></div>
-                            <h2 class="h5 fw-bold text-dark mb-2">タイムカード</h2>
-                            <p class="text-secondary small mb-0">出勤・退勤の打刻を行います。</p>
-                        </div>
-                    </div>
-                </a>
+        <section class="mb-2 rounded-2xl border-2 border-black bg-gradient-to-r from-red-600 via-orange-500 to-amber-300 p-0.5 shadow-[0_6px_0_0_rgba(0,0,0,1)]">
+            <div class="rounded-[14px] bg-black/90 px-3 py-2">
+                <p class="text-sm font-black tracking-[0.14em] text-yellow-200">BATTLE READY BUSINESS MENU</p>
+                <p class="text-xs font-semibold text-slate-300">Lancez les operations essentielles en un geste.</p>
+                <p class="text-[10px] text-slate-400">業務開始の入口</p>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <a href="{{ route('timecard.index') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-blue-500 to-cyan-300 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+                <p class="text-lg">🕒</p>
+                <p class="text-sm font-black tracking-wide text-black">Pointage</p>
+                <p class="text-xs font-semibold text-black/75">Enregistrer entree/sortie</p>
+            </a>
+
+            <button type="button" @click="openMyPageModal = true" class="group rounded-xl border-2 border-black bg-gradient-to-br from-emerald-400 to-lime-300 p-2 text-left shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+                <p class="text-lg">🪪</p>
+                <p class="text-sm font-black tracking-wide text-black">Mon espace</p>
+                <p class="text-xs font-semibold text-black/75">Acces par PIN</p>
+            </button>
+
+            <a href="{{ route('inventory.index') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-cyan-400 to-sky-300 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+                <p class="text-lg">📦</p>
+                <p class="text-sm font-black tracking-wide text-black">Inventaire</p>
+                <p class="text-xs font-semibold text-black/75">Saisie du stock</p>
+            </a>
+
+            <a href="{{ route('close-check.index') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-rose-500 to-red-400 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+                <p class="text-lg">🔒</p>
+                <p class="text-sm font-black tracking-wide text-white">Cloture</p>
+                <p class="text-xs font-semibold text-white/80">Verification de fin de service</p>
+            </a>
+
+            <a href="{{ url('/admin/daily-close-check') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-fuchsia-600 to-violet-500 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+                <p class="text-lg">💰</p>
+                <p class="text-sm font-black tracking-wide text-white">Cloture caisse</p>
+                <p class="text-xs font-semibold text-white/80">レジ締め</p>
+            </a>
+
+            <a href="{{ route('mypage.attendance') }}" class="rounded-xl border-2 border-black bg-gradient-to-br from-violet-500 to-purple-400 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+                <p class="text-lg">📊</p>
+                <p class="text-sm font-black tracking-wide text-white">Suivi des heures</p>
+                <p class="text-xs font-semibold text-white/80">Consulter les presences</p>
+            </a>
+
+            <a href="{{ url('/admin') }}" class="rounded-xl border-2 border-black bg-gradient-to-br from-slate-800 to-slate-600 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+                <p class="text-lg">⚙️</p>
+                <p class="text-sm font-black tracking-wide text-white">Administration</p>
+                <p class="text-xs font-semibold text-slate-300">Parametrage</p>
+            </a>
+
+            <div class="rounded-xl border-2 border-dashed border-slate-400 bg-white/70 p-2">
+                <p class="text-lg">🧾</p>
+                <p class="text-sm font-black tracking-wide text-slate-700">Rapport journalier</p>
+                <p class="text-xs font-semibold text-slate-500">Bientot disponible</p>
             </div>
 
-            <div class="col">
-                <button
-                    type="button"
-                    class="w-100 text-start border-0 bg-transparent p-0 rounded-3 hover-shadow transition"
-                    data-bs-toggle="modal"
-                    data-bs-target="#mypagePinModal"
-                >
-                    <div class="card h-100 shadow-sm border-0 bg-white">
-                        <div class="card-body text-center p-3 p-md-4">
-                            <div class="display-4 text-success mb-2 mb-md-3"><i class="bi bi-clipboard2-check"></i></div>
-                            <h2 class="h5 fw-bold text-dark mb-1 mb-md-2">マイページ</h2>
-                            <p class="text-secondary small mb-0">名前とPIN · タスク・棚卸し</p>
-                        </div>
-                    </div>
-                </button>
+            <div class="rounded-xl border-2 border-dashed border-slate-400 bg-white/70 p-2">
+                <p class="text-lg">📣</p>
+                <p class="text-sm font-black tracking-wide text-slate-700">Messages</p>
+                <p class="text-xs font-semibold text-slate-500">Bientot disponible</p>
             </div>
-
-            <div class="col">
-                <a href="{{ route('inventory.index') }}" class="text-decoration-none">
-                    <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
-                        <div class="card-body text-center p-4">
-                            <div class="display-4 text-info mb-3"><i class="bi bi-box-seam"></i></div>
-                            <h2 class="h5 fw-bold text-dark mb-2">棚卸し</h2>
-                            <p class="text-secondary small mb-0">タイミング別の進捗を確認し、入力します。</p>
-                        </div>
-                    </div>
-                </a>
-            </div>
-
-            <div class="col">
-                <a href="{{ route('close-check.index') }}" class="text-decoration-none">
-                    <div class="card h-100 shadow-sm border-0 bg-white hover-shadow transition">
-                        <div class="card-body text-center p-4">
-                            <div class="display-4 text-danger mb-3"><i class="bi bi-lock-fill"></i></div>
-                            <h2 class="h5 fw-bold text-dark mb-2">クローズチェック</h2>
-                            <p class="text-secondary small mb-0">閉店前の最終確認とレジ締めを行います。</p>
-                        </div>
-                    </div>
-                </a>
-            </div>
-
-            <div class="col">
-                <a href="{{ url('/admin') }}" class="text-decoration-none">
-                    <div class="card h-100 shadow-sm border-0 bg-dark text-white hover-shadow transition">
-                        <div class="card-body text-center p-4">
-                            <div class="display-4 text-light mb-3"><i class="bi bi-gear-fill"></i></div>
-                            <h2 class="h5 fw-bold text-white mb-2">本部管理 (Admin)</h2>
-                            <p class="text-white-50 small mb-0">マスターデータの設定や各種記録を確認します。</p>
-                        </div>
-                    </div>
-                </a>
-            </div>
-        </div>
+        </section>
     </main>
 
-    <footer class="bg-white border-top py-4 mt-auto">
-        <div class="container text-center small text-secondary">
-            &copy; {{ date('Y') }} {{ config('app.name') }} System.
-        </div>
+    <footer class="mt-3 border-t border-slate-300 py-2 text-center text-xs font-medium text-slate-500">
+        &copy; {{ date('Y') }} {{ config('app.name') }} System.
     </footer>
 
-    <style>
-        .hover-shadow:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
-        }
-        .transition {
-            transition: all 0.2s ease-in-out;
-        }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <div
+        x-show="openMyPageModal"
+        x-cloak
+        x-transition.opacity
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3"
+        @click.self="openMyPageModal = false"
+    >
+        <div class="w-full max-w-sm rounded-2xl border-4 border-black bg-white p-4 shadow-[0_10px_0_0_rgba(0,0,0,1)]">
+            <h2 class="mb-1 text-base font-black tracking-wide text-slate-900">Connexion Mon espace</h2>
+            <p class="mb-3 text-sm font-semibold text-slate-600">Selectionnez le personnel puis saisissez le PIN (4 chiffres).</p>
+            <p class="mb-3 -mt-2 text-[10px] text-slate-400">本人確認（4桁PIN）</p>
+            <form method="POST" action="{{ route('mypage.open') }}" class="space-y-2.5">
+                @csrf
+                <div>
+                    <label for="mypage_modal_staff_id" class="mb-1 block text-xs font-black tracking-wide text-slate-800">Personnel</label>
+                    <div class="relative">
+                        <select id="mypage_modal_staff_id" name="staff_id" required class="block w-full appearance-none rounded-lg border-2 border-black bg-white px-3 py-2.5 pr-9 text-sm font-semibold text-slate-900">
+                            <option value="">Veuillez selectionner</option>
+                            @foreach ($mypageStaffList as $s)
+                                <option value="{{ $s->id }}">{{ $s->name }}</option>
+                            @endforeach
+                        </select>
+                        <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-700">▾</span>
+                    </div>
+                    @if ($mypageStaffList->isEmpty())
+                        <p class="mt-1 text-xs font-semibold text-rose-600">Aucun personnel actif disponible.</p>
+                    @endif
+                </div>
+                <div>
+                    <label for="mypage_modal_pin" class="mb-1 block text-xs font-black tracking-wide text-slate-800">PIN (4 chiffres)</label>
+                    <input id="mypage_modal_pin" type="password" name="pin_code" required maxlength="4" pattern="[0-9]*" inputmode="numeric" autocomplete="one-time-code" placeholder="••••" class="block w-full rounded-lg border-2 border-black px-3 py-2.5 text-center font-mono text-lg font-bold tracking-[0.25em] text-slate-900" @disabled($mypageStaffList->isEmpty())>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" @click="openMyPageModal = false" class="rounded-lg border-2 border-slate-300 px-2 py-2 text-sm font-bold text-slate-700">Fermer</button>
+                    <button type="submit" class="rounded-lg border-2 border-black bg-emerald-400 px-2 py-2 text-sm font-black text-black shadow-[0_4px_0_0_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none" @disabled($mypageStaffList->isEmpty())>Entrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </body>
 </html>

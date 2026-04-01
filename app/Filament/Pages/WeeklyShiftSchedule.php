@@ -2,14 +2,15 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\AdminOnlyPage;
 use App\Models\Attendance;
 use App\Models\Staff;
+use App\Services\AttendanceStatusResolver;
 use App\Support\BusinessDate;
-use Filament\Pages\Page;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
-class WeeklyShiftSchedule extends Page
+class WeeklyShiftSchedule extends AdminOnlyPage
 {
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
@@ -20,8 +21,6 @@ class WeeklyShiftSchedule extends Page
     protected static ?string $navigationLabel = '週間シフト表';
 
     protected static string $view = 'filament.pages.weekly-shift-schedule';
-
-    private const GRACE_MINUTES_AFTER_PLANNED_START = 10;
 
     /** @var array<string, string> */
     private const DAY_LABELS = [
@@ -226,32 +225,14 @@ class WeeklyShiftSchedule extends Page
             return 'none';
         }
 
-        $deadline = $this->deadlineAfterGrace($plannedStartTime);
-        if ($deadline === null) {
-            return 'future';
-        }
+        /** @var AttendanceStatusResolver $resolver */
+        $resolver = app(AttendanceStatusResolver::class);
 
-        if (now()->greaterThan($deadline)) {
-            return 'late';
-        }
-
-        return 'future';
-    }
-
-    private function deadlineAfterGrace(?string $plannedStartTime): ?Carbon
-    {
-        if ($plannedStartTime === null || trim($plannedStartTime) === '') {
-            return null;
-        }
-
-        $base = BusinessDate::current()->copy()->startOfDay();
-        try {
-            [$h, $m] = array_map('intval', explode(':', trim($plannedStartTime), 2));
-
-            return $base->copy()->setTime($h, $m, 0)->addMinutes(self::GRACE_MINUTES_AFTER_PLANNED_START);
-        } catch (\Throwable) {
-            return null;
-        }
+        return $resolver->resolveMealStatus(
+            BusinessDate::current(),
+            $plannedStartTime,
+            $inAt,
+        );
     }
 
     /**

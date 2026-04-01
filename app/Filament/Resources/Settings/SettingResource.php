@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Settings;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\Settings\Pages\ManageSettings;
 use App\Models\Setting;
 use App\Support\InventorySettingOptions;
@@ -10,7 +11,6 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
-use Filament\Resources\Resource;
 use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Actions\DeleteAction;
 use Filament\Tables\Actions\DeleteBulkAction;
@@ -20,7 +20,7 @@ use Filament\Tables\Table;
 use Illuminate\Validation\ValidationException;
 use JsonException;
 
-class SettingResource extends Resource
+class SettingResource extends AdminOnlyResource
 {
     protected static ?string $model = Setting::class;
 

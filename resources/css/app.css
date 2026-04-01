@@ -9,3 +9,109 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+/* レジ締め業務ページのみ：Filament 既定の縦余白・横パディングを詰めたビジネス向け密度 */
+body.daily-close-check-page .fi-main {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+@media (width >= 768px) {
+    body.daily-close-check-page .fi-main {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}
+
+@media (width >= 1024px) {
+    body.daily-close-check-page .fi-main {
+        padding-left: 1.25rem;
+        padding-right: 1.25rem;
+    }
+}
+
+body.daily-close-check-page .fi-page > section {
+    row-gap: 0.75rem;
+    padding-block: 1rem;
+}
+
+body.daily-close-check-page .fi-page .grid.flex-1.auto-cols-fr.gap-y-8 {
+    row-gap: 1rem;
+}
+
+body.daily-close-check-page .fi-form.grid.gap-y-6 {
+    row-gap: 1rem;
+}
+
+body.daily-close-check-page .fi-section-header {
+    padding: 0.75rem 1rem;
+}
+
+body.daily-close-check-page .fi-section-content {
+    padding: 1rem;
+}
+
+body.daily-close-check-page .fi-fo-component-ctn.gap-6 {
+    gap: 1rem;
+}
+
+/* Ventes POS : impact type Street Fighter 2 (flash + ring + squash/stretch) après import API */
+@keyframes recettes-st2-boom {
+    0% {
+        transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+        filter: brightness(1);
+        box-shadow: 0 0 0 0 transparent;
+    }
+    5% {
+        transform: translate3d(-4px, 1px, 0) scale(1.01) rotate(-0.6deg);
+    }
+    12% {
+        transform: translate3d(4px, -3px, 0) scale(1.16) rotate(0.6deg);
+        filter: brightness(1.5);
+        box-shadow:
+            0 0 0 3px rgba(253, 224, 71, 1),
+            0 0 0 7px rgba(220, 38, 38, 0.55),
+            0 0 32px rgba(251, 146, 60, 0.9),
+            0 0 48px rgba(250, 204, 21, 0.35);
+    }
+    24% {
+        transform: translate3d(-5px, 4px, 0) scale(0.9) rotate(-1.2deg);
+        filter: brightness(1.12);
+        box-shadow: 0 0 18px rgba(251, 191, 36, 0.5);
+    }
+    40% {
+        transform: translate3d(3px, -10px, 0) scale(1.08) rotate(0.8deg);
+        filter: brightness(1.22);
+        box-shadow: 0 0 22px rgba(252, 211, 77, 0.45);
+    }
+    58% {
+        transform: translate3d(-2px, 3px, 0) scale(0.97) rotate(-0.3deg);
+        filter: brightness(1.05);
+    }
+    78% {
+        transform: translate3d(0, -2px, 0) scale(1.02) rotate(0deg);
+        box-shadow: 0 0 10px rgba(251, 191, 36, 0.2);
+    }
+    100% {
+        transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+        filter: brightness(1);
+        box-shadow: none;
+    }
+}
+
+body.daily-close-check-page .fi-ventes-pos-field-wrap.animate-recettes-st2-hit {
+    position: relative;
+    z-index: 2;
+    overflow: visible;
+    border-radius: 0.75rem;
+    animation: recettes-st2-boom 0.82s cubic-bezier(0.22, 1, 0.36, 1) both;
+    will-change: transform, filter, box-shadow;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.daily-close-check-page .fi-ventes-pos-field-wrap.animate-recettes-st2-hit {
+        animation: none;
+        filter: none;
+        box-shadow: none;
+    }
+}

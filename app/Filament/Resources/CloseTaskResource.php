@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\CloseTask\Pages\CreateCloseTask;
 use App\Filament\Resources\CloseTask\Pages\EditCloseTask;
 use App\Filament\Resources\CloseTask\Pages\ListCloseTasks;
@@ -11,7 +12,6 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Actions\DeleteBulkAction;
 use Filament\Tables\Actions\EditAction;
@@ -20,7 +20,7 @@ use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
-class CloseTaskResource extends Resource
+class CloseTaskResource extends AdminOnlyResource
 {
     protected static ?string $model = CloseTask::class;
 

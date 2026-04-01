@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Staff;
 
+use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\Staff\Forms\StaffForm;
 use App\Filament\Resources\Staff\Pages\CreateStaff;
 use App\Filament\Resources\Staff\Pages\EditStaff;
@@ -9,11 +10,10 @@ use App\Filament\Resources\Staff\Pages\ListStaff;
 use App\Filament\Resources\Staff\Tables\StaffTable;
 use App\Models\Staff;
 use Filament\Forms\Form;
-use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
-class StaffResource extends Resource
+class StaffResource extends AdminOnlyResource
 {
     protected static ?string $model = Staff::class;
 

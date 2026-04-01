@@ -9,6 +9,7 @@ use App\Services\RoutineInventoryCompletionService;
 use App\Support\BusinessDate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\View\View;
 
 class CloseCheckController extends Controller
@@ -65,12 +66,25 @@ class CloseCheckController extends Controller
                 ->with('error', 'PIN が設定されていません。管理者に連絡してください。');
         }
 
+        $pinKey = 'close-check-pin:staff:'.$staff->id.':'.($request->ip() ?? 'unknown');
+
+        if (RateLimiter::tooManyAttempts($pinKey, 5)) {
+            return redirect()
+                ->route('close-check.index')
+                ->withInput($request->except('pin_code'))
+                ->with('error', 'PIN の試行回数が上限に達しました。しばらく待ってから再度お試しください。');
+        }
+
         if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
+            RateLimiter::hit($pinKey, 60);
+
             return redirect()
                 ->route('close-check.index')
                 ->withInput($request->except('pin_code'))
                 ->with('error', 'PIN が正しくありません。');
         }
+
+        RateLimiter::clear($pinKey);
 
         CloseCheckLog::query()->create([
             'staff_id' => $staff->id,

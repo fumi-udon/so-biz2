@@ -1,36 +1,45 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="fr">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>勤怠（マイページ） — {{ config('app.name') }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <title>Presence (Mon espace) — {{ config('app.name') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>[x-cloak]{display:none!important;}</style>
 </head>
-<body class="bg-light">
+<body class="min-h-screen bg-slate-100 text-slate-900">
     <x-client-nav />
 
-    <div class="container py-3 py-md-4 mx-auto" style="max-width: 48rem;">
-        <nav class="mb-3" aria-label="breadcrumb">
-            <ol class="breadcrumb small mb-0">
-                <li class="breadcrumb-item"><a href="{{ route('home') }}" class="text-decoration-none">トップ</a></li>
-                <li class="breadcrumb-item"><a href="{{ route('mypage.index') }}" class="text-decoration-none">マイページ</a></li>
-                <li class="breadcrumb-item active" aria-current="page">勤怠</li>
-            </ol>
-        </nav>
+    <div
+        x-data="{
+            outOpen: false,
+            inOpen: false,
+            outData: { id: '', lunchOut: '', dinnerOut: '' },
+            inData: { id: '', lunchIn: '', dinnerIn: '' },
+            openOut(data) { this.outData = data; this.outOpen = true },
+            openIn(data) { this.inData = data; this.inOpen = true },
+        }"
+        class="mx-auto w-full max-w-6xl px-4 py-4"
+    >
+        <section class="mb-4 rounded-2xl border-2 border-black bg-gradient-to-r from-indigo-900 via-blue-900 to-purple-900 p-4 text-white shadow-[0_8px_0_0_rgba(0,0,0,1)]">
+            <h1 class="text-2xl font-black tracking-wide">CENTRE DE PRESENCE</h1>
+            <p class="mt-1 text-sm font-semibold text-slate-200">Controle mensuel des presences, corrections et alertes.</p>
+            <p class="text-[10px] text-slate-300">勤怠確認と補正</p>
+        </section>
 
         @if (session('status'))
-            <div class="alert alert-success rounded-4 shadow-sm">{{ session('status') }}</div>
+            <div class="mb-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{{ session('status') }}</div>
         @endif
         @if (session('error'))
-            <div class="alert alert-danger rounded-4 shadow-sm">{{ session('error') }}</div>
+            <div class="mb-3 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ session('error') }}</div>
         @endif
 
-        <form method="get" action="{{ route('mypage.attendance') }}" class="mb-4">
-            <label for="staff_select" class="form-label fw-semibold">スタッフを選択</label>
-            <select name="staff_id" id="staff_select" class="form-select form-select-lg rounded-4" onchange="this.form.submit()">
-                <option value="">— 選択 —</option>
+        <form method="get" action="{{ route('mypage.attendance') }}" class="mb-4 rounded-xl border-2 border-black bg-white p-4 shadow-[0_6px_0_0_rgba(0,0,0,1)]">
+            <label for="staff_select" class="mb-2 block text-sm font-black text-slate-800">Selection du personnel</label>
+            <select name="staff_id" id="staff_select" class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-base text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30" onchange="this.form.submit()">
+                <option value="">— Selectionner —</option>
                 @foreach ($staffList as $s)
                     <option value="{{ $s->id }}" @selected($staff && $staff->id === $s->id)>{{ $s->name }}</option>
                 @endforeach
@@ -38,8 +47,8 @@
         </form>
 
         @if (! $staff)
-            <div class="border border-2 border-dashed rounded-4 p-5 text-center text-secondary bg-white shadow-sm">
-                スタッフを選ぶと、月次の勤怠と統計が表示されます。
+            <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white p-8 text-center text-sm font-semibold text-slate-500">
+                Selectionnez un personnel pour afficher les presences mensuelles et les statistiques.
             </div>
         @else
             @php
@@ -48,212 +57,228 @@
                 $fmtHm = static function (int $minutes): string {
                     $h = intdiv($minutes, 60);
                     $m = $minutes % 60;
-
                     return sprintf('%d:%02d', $h, $m);
                 };
+                $todayBusinessDate = \App\Support\BusinessDate::current()->toDateString();
             @endphp
 
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <h1 class="h6 fw-bold mb-0">{{ $monthStart->translatedFormat('Y年n月') }} の勤怠</h1>
-                <div class="btn-group">
-                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $prevMonth->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm rounded-start-4">&laquo;</a>
-                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => \App\Support\BusinessDate::current()->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm">今月</a>
-                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $nextMonth->format('Y-m')]) }}" class="btn btn-outline-secondary btn-sm rounded-end-4">&raquo;</a>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-xl font-black text-slate-900">Presence {{ $monthStart->translatedFormat('Y/m') }}</h2>
+                <div class="inline-flex rounded-lg border-2 border-black bg-white p-0.5 text-sm font-bold shadow-[0_4px_0_0_rgba(0,0,0,1)]">
+                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $prevMonth->format('Y-m')]) }}" class="rounded px-3 py-1 text-slate-700 hover:bg-slate-100">&laquo;</a>
+                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => \App\Support\BusinessDate::current()->format('Y-m')]) }}" class="rounded px-3 py-1 text-slate-700 hover:bg-slate-100">Mois courant</a>
+                    <a href="{{ route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $nextMonth->format('Y-m')]) }}" class="rounded px-3 py-1 text-slate-700 hover:bg-slate-100">&raquo;</a>
                 </div>
             </div>
 
-            <div class="row g-3 mb-4">
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-4 h-100 bg-primary-subtle">
-                        <div class="card-body">
-                            <p class="text-primary small mb-1 fw-semibold">今週の労働時間</p>
-                            <p class="h4 mb-0 font-monospace">{{ $fmtHm($weekMinutes) }}</p>
-                        </div>
-                    </div>
+            <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div class="rounded-xl border-2 border-black bg-gradient-to-br from-blue-100 to-cyan-100 p-4 shadow-[0_5px_0_0_rgba(0,0,0,1)]">
+                    <p class="text-sm font-black text-blue-800">Heures cette semaine</p>
+                    <p class="mt-1 font-mono text-3xl font-black text-blue-900">{{ $fmtHm($weekMinutes) }}</p>
                 </div>
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-4 h-100 bg-success-subtle">
-                        <div class="card-body">
-                            <p class="text-success small mb-1 fw-semibold">当月の労働時間</p>
-                            <p class="h4 mb-0 font-monospace">{{ $fmtHm($monthMinutes) }}</p>
-                        </div>
-                    </div>
+                <div class="rounded-xl border-2 border-black bg-gradient-to-br from-emerald-100 to-lime-100 p-4 shadow-[0_5px_0_0_rgba(0,0,0,1)]">
+                    <p class="text-sm font-black text-emerald-800">Heures ce mois</p>
+                    <p class="mt-1 font-mono text-3xl font-black text-emerald-900">{{ $fmtHm($monthMinutes) }}</p>
                 </div>
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-4 h-100 bg-warning-subtle">
-                        <div class="card-body">
-                            <p class="text-warning-emphasis small mb-1 fw-semibold">当月の遅刻回数</p>
-                            <p class="h4 mb-0 font-monospace">{{ $monthLateCount }} <span class="fs-6">回</span></p>
-                        </div>
-                    </div>
+                <div class="rounded-xl border-2 border-black bg-gradient-to-br from-amber-100 to-orange-100 p-4 shadow-[0_5px_0_0_rgba(0,0,0,1)]">
+                    <p class="text-sm font-black text-amber-800">Retards ce mois</p>
+                    <p class="mt-1 font-mono text-3xl font-black text-amber-900">{{ $monthLateCount }}<span class="ml-1 text-base">fois</span></p>
                 </div>
             </div>
 
-            <div class="table-responsive shadow-sm rounded-4 bg-white">
-                <table class="table table-sm table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th scope="col">日付</th>
-                            <th scope="col">L 出</th>
-                            <th scope="col">L 退</th>
-                            <th scope="col">D 出</th>
-                            <th scope="col">D 退</th>
-                            <th scope="col" class="text-end">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($monthAttendances as $att)
-                            @php
-                                $d = $att->date;
-                                $dateLabel = $d instanceof \Carbon\Carbon ? $d->format('m/d (D)') : \Carbon\Carbon::parse($d)->format('m/d (D)');
-                            @endphp
+            <section class="mb-4 rounded-xl border-2 border-black bg-white p-3 shadow-[0_6px_0_0_rgba(0,0,0,1)]">
+                <h3 class="mb-2 text-base font-black text-slate-900">🧾 Tableau detaille des pointages</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="border-b border-slate-200 bg-slate-50">
                             <tr>
-                                <td class="small fw-semibold">{{ $dateLabel }}</td>
-                                <td class="font-monospace small">{{ $att->lunch_in_at?->format('H:i') ?? '—' }}</td>
-                                <td class="font-monospace small @if($att->lunch_in_at && ! $att->lunch_out_at) text-danger fw-bold @endif">{{ $att->lunch_out_at?->format('H:i') ?? ($att->lunch_in_at ? '未退勤' : '—') }}</td>
-                                <td class="font-monospace small">{{ $att->dinner_in_at?->format('H:i') ?? '—' }}</td>
-                                <td class="font-monospace small @if($att->dinner_in_at && ! $att->dinner_out_at) text-danger fw-bold @endif">{{ $att->dinner_out_at?->format('H:i') ?? ($att->dinner_in_at ? '未退勤' : '—') }}</td>
-                                <td class="text-end text-nowrap">
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline-secondary btn-sm py-2 px-2"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#modalClockIn"
-                                        data-attendance-id="{{ $att->id }}"
-                                        data-staff-id="{{ $staff->id }}"
-                                        data-month="{{ $monthStart->format('Y-m') }}"
-                                        data-lunch-in="{{ $att->lunch_in_at?->format('H:i') ?? '' }}"
-                                        data-dinner-in="{{ $att->dinner_in_at?->format('H:i') ?? '' }}"
-                                    >出勤</button>
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline-primary btn-sm py-2 px-2"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#modalClockOut"
-                                        data-attendance-id="{{ $att->id }}"
-                                        data-staff-id="{{ $staff->id }}"
-                                        data-month="{{ $monthStart->format('Y-m') }}"
-                                        data-lunch-out="{{ $att->lunch_out_at?->format('H:i') ?? '' }}"
-                                        data-dinner-out="{{ $att->dinner_out_at?->format('H:i') ?? '' }}"
-                                    >退勤</button>
-                                </td>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">Date</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">L Entree</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">L Sortie</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">D Entree</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">D Sortie</th>
+                                <th class="px-3 py-2 text-right font-black text-slate-700">Action</th>
                             </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            @foreach ($monthAttendances as $att)
+                                @php
+                                    $d = $att->date;
+                                    $dateLabel = $d instanceof \Carbon\Carbon ? $d->format('m/d (D)') : \Carbon\Carbon::parse($d)->format('m/d (D)');
+                                @endphp
+                                <tr class="border-b border-slate-100 last:border-b-0">
+                                    <td class="px-3 py-2 font-bold text-slate-800">{{ $dateLabel }}</td>
+                                    <td class="px-3 py-2 font-mono">{{ $att->lunch_in_at?->format('H:i') ?? '—' }}</td>
+                                    <td class="px-3 py-2 font-mono @if($att->lunch_in_at && ! $att->lunch_out_at) font-bold text-rose-600 @endif">{{ $att->lunch_out_at?->format('H:i') ?? ($att->lunch_in_at ? 'Sortie manquante' : '—') }}</td>
+                                    <td class="px-3 py-2 font-mono">{{ $att->dinner_in_at?->format('H:i') ?? '—' }}</td>
+                                    <td class="px-3 py-2 font-mono @if($att->dinner_in_at && ! $att->dinner_out_at) font-bold text-rose-600 @endif">{{ $att->dinner_out_at?->format('H:i') ?? ($att->dinner_in_at ? 'Sortie manquante' : '—') }}</td>
+                                    <td class="px-3 py-2 text-right">
+                                        <div class="inline-flex gap-1">
+                                            <button type="button" class="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100" @click='openIn({ id: "{{ $att->id }}", lunchIn: "{{ $att->lunch_in_at?->format('H:i') ?? '' }}", dinnerIn: "{{ $att->dinner_in_at?->format('H:i') ?? '' }}" })'>Entree</button>
+                                            <button type="button" class="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100" @click='openOut({ id: "{{ $att->id }}", lunchOut: "{{ $att->lunch_out_at?->format('H:i') ?? '' }}", dinnerOut: "{{ $att->dinner_out_at?->format('H:i') ?? '' }}" })'>Sortie</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @if ($monthAttendances->isEmpty())
+                    <p class="mt-3 text-sm font-semibold text-slate-500">Aucune donnee de presence pour ce mois.</p>
+                @endif
+            </section>
 
-            @if ($monthAttendances->isEmpty())
-                <p class="text-secondary small mt-3 mb-0">この月の勤怠データはまだありません。</p>
-            @endif
+            <section class="rounded-xl border-2 border-black bg-white p-4 shadow-[0_6px_0_0_rgba(0,0,0,1)]">
+                <h3 class="mb-3 text-base font-black text-slate-900">📊 Resume mensuel des presences</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-slate-50">
+                            <tr class="border-b border-slate-200">
+                                <th class="px-3 py-2 text-left font-black text-slate-700">Date</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">LUNCH</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">DINNER</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">Anomalie</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                            @forelse (($attendances ?? $monthAttendances ?? collect()) as $row)
+                                @php
+                                    $dateValue = $row->date instanceof \Illuminate\Support\Carbon ? $row->date->toDateString() : \Illuminate\Support\Carbon::parse($row->date)->toDateString();
+                                    $isNotToday = $dateValue !== $todayBusinessDate;
+                                    $hasLunchMissingClockOut = $row->lunch_in_at !== null && $row->lunch_out_at === null;
+                                    $hasDinnerMissingClockOut = $row->dinner_in_at !== null && $row->dinner_out_at === null;
+                                    $hasMissingClockOut = $isNotToday && ($hasLunchMissingClockOut || $hasDinnerMissingClockOut);
+                                @endphp
+                                <tr class="border-b border-slate-100">
+                                    <td class="px-3 py-2 font-mono text-slate-700">{{ \Illuminate\Support\Carbon::parse($dateValue)->format('m/d') }}</td>
+                                    <td class="px-3 py-2 font-mono text-slate-700">{{ $row->lunch_in_at?->format('H:i') ?? '--:--' }} - {{ $row->lunch_out_at?->format('H:i') ?? '--:--' }}</td>
+                                    <td class="px-3 py-2 font-mono text-slate-700">{{ $row->dinner_in_at?->format('H:i') ?? '--:--' }} - {{ $row->dinner_out_at?->format('H:i') ?? '--:--' }}</td>
+                                    <td class="px-3 py-2">
+                                        <div class="flex flex-wrap gap-1">
+                                            @if ((int) ($row->late_minutes ?? 0) > 0)
+                                                <span class="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-800">Retard</span>
+                                            @endif
+                                            @if ($hasMissingClockOut)
+                                                <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">Pointage oublie</span>
+                                            @endif
+                                            @if ((int) ($row->late_minutes ?? 0) === 0 && ! $hasMissingClockOut)
+                                                <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">Normal</span>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="px-3 py-3 text-center text-sm text-slate-500">Aucune donnee disponible.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                <div
+                    x-data="{
+                        message: '',
+                        errorOpen: false,
+                        staffName: @js($staff->name),
+                        sendWhatsapp() {
+                            if (this.message.trim() === '') {
+                                this.errorOpen = true;
+                                return;
+                            }
+                            const text = `[Demande de correction: ${this.staffName}]\n\n${this.message}`;
+                            window.open(`https://wa.me/21651992184?text=${encodeURIComponent(text)}`, '_blank');
+                        },
+                    }"
+                    class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3"
+                >
+                    <label class="mb-1 block text-sm font-black text-emerald-900">Demande de correction au manager (WhatsApp)</label>
+                    <textarea x-model="message" rows="3" class="block w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" placeholder="Ex.: J'ai oublie de pointer la sortie du 15/03. Sortie a 23:30."></textarea>
+                    <button type="button" class="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2 text-sm font-bold text-white transition hover:bg-green-600" @click="sendWhatsapp()">
+                        <span>💬</span>
+                        <span>Envoyer au manager via WhatsApp</span>
+                    </button>
+
+                    <div x-show="errorOpen" x-cloak x-transition.opacity class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" @click.self="errorOpen = false">
+                        <div class="w-full max-w-sm rounded-xl border border-rose-200 bg-white p-4 shadow-xl">
+                            <h3 class="text-base font-bold text-rose-700">Erreur de saisie</h3>
+                            <p class="mt-2 text-sm text-slate-700">Veuillez saisir le contenu de la correction avant l'envoi.</p>
+                            <button type="button" class="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700" @click="errorOpen = false">
+                                Fermer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
         @endif
-    </div>
 
-    @if ($staff)
-        <div class="modal fade" id="modalClockOut" tabindex="-1" aria-labelledby="modalClockOutLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content rounded-4">
-                    <div class="modal-header border-0">
-                        <h2 class="modal-title fs-5" id="modalClockOutLabel">退勤時間の編集</h2>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+        @if ($staff)
+            <div x-show="outOpen" x-cloak class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 p-4">
+                <div class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h2 class="text-lg font-bold text-slate-900">Modifier les heures de sortie</h2>
+                        <button type="button" class="text-slate-500 hover:text-slate-700" @click="outOpen = false">✕</button>
                     </div>
                     <form method="post" action="{{ route('mypage.attendance.update') }}">
                         @csrf
                         <input type="hidden" name="mode" value="out">
-                        <input type="hidden" name="attendance_id" id="out_attendance_id" value="">
+                        <input type="hidden" name="attendance_id" :value="outData.id">
                         <input type="hidden" name="staff_id" value="{{ $staff->id }}">
-                        <div class="modal-body pt-0">
-                            <p class="text-secondary small">本人の PIN のみで保存できます。</p>
-                            <div class="mb-3">
-                                <label class="form-label small fw-semibold">ランチ退勤</label>
-                                <input type="time" name="lunch_out" id="out_lunch_out" class="form-control form-control-lg font-monospace text-center rounded-4 py-3">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-semibold">ディナー退勤</label>
-                                <input type="time" name="dinner_out" id="out_dinner_out" class="form-control form-control-lg font-monospace text-center rounded-4 py-3">
-                            </div>
-                            <div class="mb-0">
-                                <label class="form-label small fw-semibold">本人 PIN（4桁）</label>
-                                <input type="password" name="pin_code" inputmode="numeric" maxlength="4" required class="form-control form-control-lg font-monospace text-center rounded-4 py-3" placeholder="••••" autocomplete="one-time-code">
-                            </div>
+                        <input type="hidden" name="month" value="{{ $monthStart->format('Y-m') }}">
+                        <p class="mb-3 text-xs text-slate-500">Enregistrement avec le PIN personnel uniquement.</p>
+                        <p class="-mt-2 mb-3 text-[10px] text-slate-400">本人PINのみ</p>
+                        <div class="mb-3">
+                            <label class="mb-1 block text-sm font-semibold text-slate-700">Sortie dejeuner</label>
+                            <input type="time" name="lunch_out" :value="outData.lunchOut" class="block w-full rounded-lg border border-slate-300 px-3 py-3 text-center font-mono">
                         </div>
-                        <div class="modal-footer border-0 flex-column gap-2">
-                            <button type="submit" class="btn btn-primary btn-lg w-100 rounded-4 py-3">保存する</button>
+                        <div class="mb-3">
+                            <label class="mb-1 block text-sm font-semibold text-slate-700">Sortie diner</label>
+                            <input type="time" name="dinner_out" :value="outData.dinnerOut" class="block w-full rounded-lg border border-slate-300 px-3 py-3 text-center font-mono">
                         </div>
+                        <div class="mb-4">
+                            <label class="mb-1 block text-sm font-semibold text-slate-700">PIN personnel (4 chiffres)</label>
+                            <input type="password" name="pin_code" inputmode="numeric" maxlength="4" required class="block w-full rounded-lg border border-slate-300 px-3 py-3 text-center font-mono" placeholder="••••" autocomplete="one-time-code">
+                        </div>
+                        <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">Enregistrer</button>
                     </form>
                 </div>
             </div>
-        </div>
 
-        <div class="modal fade" id="modalClockIn" tabindex="-1" aria-labelledby="modalClockInLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content rounded-4">
-                    <div class="modal-header border-0">
-                        <h2 class="modal-title fs-5" id="modalClockInLabel">出勤時間の編集</h2>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            <div x-show="inOpen" x-cloak class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 p-4">
+                <div class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h2 class="text-lg font-bold text-slate-900">Modifier les heures d'entree</h2>
+                        <button type="button" class="text-slate-500 hover:text-slate-700" @click="inOpen = false">✕</button>
                     </div>
                     <form method="post" action="{{ route('mypage.attendance.update') }}">
                         @csrf
                         <input type="hidden" name="mode" value="in">
-                        <input type="hidden" name="attendance_id" id="in_attendance_id" value="">
+                        <input type="hidden" name="attendance_id" :value="inData.id">
                         <input type="hidden" name="staff_id" value="{{ $staff->id }}">
-                        <div class="modal-body pt-0">
-                            <p class="text-secondary small">出勤の変更は「マネージャー」PIN の承認が必要です。</p>
-                            <div class="mb-3">
-                                <label class="form-label small fw-semibold">ランチ出勤</label>
-                                <input type="time" name="lunch_in" id="in_lunch_in" class="form-control form-control-lg font-monospace text-center rounded-4 py-3">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-semibold">ディナー出勤</label>
-                                <input type="time" name="dinner_in" id="in_dinner_in" class="form-control form-control-lg font-monospace text-center rounded-4 py-3">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-semibold">本人 PIN（4桁）</label>
-                                <input type="password" name="pin_code" inputmode="numeric" maxlength="4" required class="form-control form-control-lg font-monospace text-center rounded-4 py-3" placeholder="••••" autocomplete="one-time-code">
-                            </div>
-                            <div class="mb-0">
-                                <label class="form-label small fw-semibold">マネージャー PIN（4桁）</label>
-                                <input type="password" name="manager_pin" inputmode="numeric" maxlength="4" required class="form-control form-control-lg font-monospace text-center rounded-4 py-3 border-danger" placeholder="••••" autocomplete="one-time-code">
-                            </div>
+                        <input type="hidden" name="month" value="{{ $monthStart->format('Y-m') }}">
+                        <p class="mb-3 text-xs text-slate-500">La modification des entrees exige l'approbation PIN manager.</p>
+                        <p class="-mt-2 mb-3 text-[10px] text-slate-400">管理者承認が必要</p>
+                        <div class="mb-3">
+                            <label class="mb-1 block text-sm font-semibold text-slate-700">Entree dejeuner</label>
+                            <input type="time" name="lunch_in" :value="inData.lunchIn" class="block w-full rounded-lg border border-slate-300 px-3 py-3 text-center font-mono">
                         </div>
-                        <div class="modal-footer border-0 flex-column gap-2">
-                            <button type="submit" class="btn btn-primary btn-lg w-100 rounded-4 py-3">保存する</button>
+                        <div class="mb-3">
+                            <label class="mb-1 block text-sm font-semibold text-slate-700">Entree diner</label>
+                            <input type="time" name="dinner_in" :value="inData.dinnerIn" class="block w-full rounded-lg border border-slate-300 px-3 py-3 text-center font-mono">
                         </div>
+                        <div class="mb-3">
+                            <label class="mb-1 block text-sm font-semibold text-slate-700">PIN personnel (4 chiffres)</label>
+                            <input type="password" name="pin_code" inputmode="numeric" maxlength="4" required class="block w-full rounded-lg border border-slate-300 px-3 py-3 text-center font-mono" placeholder="••••" autocomplete="one-time-code">
+                        </div>
+                        <div class="mb-4">
+                            <label class="mb-1 block text-sm font-semibold text-slate-700">PIN manager (4 chiffres)</label>
+                            <input type="password" name="manager_pin" inputmode="numeric" maxlength="4" required class="block w-full rounded-lg border border-rose-300 px-3 py-3 text-center font-mono" placeholder="••••" autocomplete="one-time-code">
+                        </div>
+                        <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">Enregistrer</button>
                     </form>
                 </div>
             </div>
-        </div>
-    @endif
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
-    @if ($staff)
-        <script>
-            (function () {
-                function bindModal(modalId, hiddenId, fieldMap) {
-                    const modal = document.getElementById(modalId);
-                    if (!modal) return;
-                    modal.addEventListener('show.bs.modal', function (event) {
-                        const btn = event.relatedTarget;
-                        if (!btn) return;
-                        const hid = document.getElementById(hiddenId);
-                        if (hid) hid.value = btn.getAttribute('data-attendance-id') || '';
-                        Object.keys(fieldMap).forEach(function (inputId) {
-                            const inp = document.getElementById(inputId);
-                            if (!inp) return;
-                            inp.value = btn.getAttribute(fieldMap[inputId]) || '';
-                        });
-                    });
-                }
-                bindModal('modalClockOut', 'out_attendance_id', {
-                    out_lunch_out: 'data-lunch-out',
-                    out_dinner_out: 'data-dinner-out',
-                });
-                bindModal('modalClockIn', 'in_attendance_id', {
-                    in_lunch_in: 'data-lunch-in',
-                    in_dinner_in: 'data-dinner-in',
-                });
-            })();
-        </script>
-    @endif
+        @endif
+    </div>
 </body>
 </html>

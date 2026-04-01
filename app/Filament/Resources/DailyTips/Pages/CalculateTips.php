@@ -5,6 +5,7 @@ namespace App\Filament\Resources\DailyTips\Pages;
 use App\Filament\Resources\DailyTips\DailyTipResource;
 use App\Models\Attendance;
 use App\Models\DailyTip;
+use App\Models\Finance;
 use App\Models\Staff;
 use App\Support\DailyTipAuditContext;
 use App\Support\DailyTipAuditLogger;
@@ -20,6 +21,8 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\ValidationException;
 
 class CalculateTips extends Page
 {
@@ -47,6 +50,12 @@ class CalculateTips extends Page
     /** @var array<int, array<string, mixed>> */
     public array $recent_averages = [];
 
+    public bool $managerPinVerified = false;
+
+    public ?int $managerStaffId = null;
+
+    public string $managerPinInput = '';
+
     public function mount(): void
     {
         $this->form->fill([
@@ -54,8 +63,11 @@ class CalculateTips extends Page
             'shift' => 'lunch',
             'total_amount' => '0',
             'selected_staff_id' => null,
+            'manager_staff_id' => null,
+            'manager_pin' => '',
         ]);
         $this->loadRows();
+        $this->hydrateTipAmountFromFinance();
         $this->recalculateRows();
         $this->refreshAnalytics();
     }
@@ -77,7 +89,7 @@ class CalculateTips extends Page
                             ->compact()
                             ->schema([
                                 DatePicker::make('business_date')
-                                    ->label('営業日')
+                                    ->label('Date')
                                     ->required()
                                     ->native(true)
                                     ->live(debounce: 500)
@@ -92,10 +104,10 @@ class CalculateTips extends Page
                             ->compact()
                             ->schema([
                                 Select::make('shift')
-                                    ->label('シフト')
+                                    ->label('Shift')
                                     ->options([
-                                        'lunch' => 'ランチ（L）',
-                                        'dinner' => 'ディナー（D）',
+                                        'lunch' => 'Midi (L)',
+                                        'dinner' => 'Soir (D)',
                                     ])
                                     ->required()
                                     ->native(true)
@@ -112,7 +124,7 @@ class CalculateTips extends Page
                     ->compact()
                     ->schema([
                         TextInput::make('total_amount')
-                            ->label('チップ総額（TND）')
+                            ->label('Tip total (DT)')
                             ->numeric()
                             ->minValue(0)
                             ->step(0.001)
@@ -132,8 +144,29 @@ class CalculateTips extends Page
                     ->heading(null)
                     ->compact()
                     ->schema([
+                        Select::make('manager_staff_id')
+                            ->label('Manager')
+                            ->options(fn (): array => $this->managerStaffOptions())
+                            ->placeholder('Choisir')
+                            ->native(true)
+                            ->visible(fn () => $this->needsManagerPin())
+                            ->live(debounce: 500)
+                            ->afterStateUpdated(function (mixed $state): void {
+                                $this->managerStaffId = $state === '' || $state === null ? null : (int) $state;
+                                $this->managerPinVerified = false;
+                            }),
+                        TextInput::make('manager_pin')
+                            ->label('PIN manager')
+                            ->password()
+                            ->maxLength(4)
+                            ->visible(fn () => $this->needsManagerPin())
+                            ->live(debounce: 500)
+                            ->afterStateUpdated(function (mixed $state): void {
+                                $this->managerPinInput = (string) ($state ?? '');
+                                $this->managerPinVerified = false;
+                            }),
                         Select::make('selected_staff_id')
-                            ->label('スタッフを追加')
+                            ->label('Ajouter staff')
                             ->options(fn (): array => $this->availableStaffOptions)
                             ->placeholder('— 追加 —')
                             ->native(true)
@@ -171,6 +204,7 @@ class CalculateTips extends Page
     protected function afterConditionChanged(): void
     {
         $this->loadRows();
+        $this->hydrateTipAmountFromFinance();
         $this->recalculateRows();
         $this->refreshAnalytics();
     }
@@ -205,7 +239,7 @@ class CalculateTips extends Page
 
         $rawWeight = $staff->jobLevel?->default_weight;
         $base = $rawWeight === null
-            ? 10.0
+            ? TipCalculationService::DEFAULT_DISTRIBUTION_WEIGHT
             : (float) TipCalculationService::normalizeWeightScalar($rawWeight);
         $defaultWeight = $this->snapTipWeightToMasterGrid($base);
 
@@ -261,6 +295,10 @@ class CalculateTips extends Page
 
         $savedTotal = $this->normalizedTotalAmount();
 
+        if ($this->needsManagerPin()) {
+            $this->verifyManagerPinOrFail();
+        }
+
         DB::transaction(function () use ($savedTotal): void {
             $tip = DailyTip::query()->updateOrCreate(
                 [
@@ -311,7 +349,7 @@ class CalculateTips extends Page
         });
 
         Notification::make()
-            ->title('チップ配分を確定しました')
+            ->title('Répartition enregistrée')
             ->success()
             ->send();
 
@@ -347,7 +385,7 @@ class CalculateTips extends Page
 
             $rawWeight = $attendance->staff->jobLevel?->default_weight;
             $base = $rawWeight === null
-                ? 10.0
+                ? TipCalculationService::DEFAULT_DISTRIBUTION_WEIGHT
                 : (float) TipCalculationService::normalizeWeightScalar($rawWeight);
             $defaultWeight = $isTardy ? 0.0 : $this->snapTipWeightToMasterGrid($base);
 
@@ -390,6 +428,13 @@ class CalculateTips extends Page
 
         $this->rows = $out;
         $this->distributed_total = round($sum, 3);
+        if (! $this->needsManagerPin()) {
+            $this->managerPinVerified = false;
+            $this->managerStaffId = null;
+            $this->managerPinInput = '';
+            $this->data['manager_staff_id'] = null;
+            $this->data['manager_pin'] = '';
+        }
     }
 
     /**
@@ -460,5 +505,100 @@ class CalculateTips extends Page
     protected function tipService(): TipCalculationService
     {
         return app(TipCalculationService::class);
+    }
+
+    public function needsManagerPin(): bool
+    {
+        return $this->normalizedTotalAmount() > 200.0;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function managerStaffOptions(): array
+    {
+        return Staff::query()
+            ->where('is_active', true)
+            ->where('is_manager', true)
+            ->whereNotNull('pin_code')
+            ->where('pin_code', '!=', '')
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    private function verifyManagerPinOrFail(): void
+    {
+        $this->validate([
+            'data.manager_staff_id' => ['required', 'integer', 'exists:staff,id'],
+            'data.manager_pin' => ['required', 'digits:4'],
+        ], attributes: [
+            'data.manager_staff_id' => 'Manager',
+            'data.manager_pin' => 'PIN manager',
+        ]);
+
+        $managerId = (int) ($this->data['manager_staff_id'] ?? 0);
+        $key = 'tips-manager-pin:staff:'.$managerId.':'.(request()->ip() ?? 'unknown');
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            throw ValidationException::withMessages([
+                'data.manager_pin' => 'PIN manager bloqué, attends un peu.',
+            ]);
+        }
+
+        $manager = Staff::query()
+            ->where('id', $managerId)
+            ->where('is_active', true)
+            ->where('is_manager', true)
+            ->first();
+
+        if (! $manager || ! hash_equals((string) ($manager->pin_code ?? ''), (string) ($this->data['manager_pin'] ?? ''))) {
+            RateLimiter::hit($key, 300);
+            throw ValidationException::withMessages([
+                'data.manager_pin' => 'PIN manager invalide.',
+            ]);
+        }
+
+        RateLimiter::clear($key);
+        $this->managerPinVerified = true;
+    }
+
+    private function hydrateTipAmountFromFinance(): void
+    {
+        $businessDate = (string) ($this->data['business_date'] ?? '');
+        $shift = (string) ($this->data['shift'] ?? 'lunch');
+
+        if ($businessDate === '') {
+            return;
+        }
+
+        $finance = Finance::query()
+            ->whereDate('business_date', $businessDate)
+            ->where('shift', $shift)
+            ->where('close_status', 'success')
+            ->latest('id')
+            ->first();
+
+        if (! $finance) {
+            return;
+        }
+
+        $tip = (float) ($finance->final_tip_amount ?? $finance->chips ?? 0);
+        $this->data['total_amount'] = (string) round(max(0, $tip), 3);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Finance>
+     */
+    public function recentFinanceHistory()
+    {
+        $from = Carbon::parse($this->data['business_date'] ?? BusinessDate::current()->toDateString())
+            ->subDays(2)
+            ->toDateString();
+
+        return Finance::query()
+            ->whereDate('business_date', '>=', $from)
+            ->orderByDesc('business_date')
+            ->orderByRaw("FIELD(shift, 'dinner', 'lunch')")
+            ->get();
     }
 }
