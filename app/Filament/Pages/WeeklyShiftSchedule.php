@@ -33,6 +33,17 @@ class WeeklyShiftSchedule extends AdminOnlyPage
         'sunday' => 'Dim (日)',
     ];
 
+    /** モバイル用・曜日の短縮（1行ヘッダ） */
+    private const DAY_SHORT_LABELS = [
+        'monday' => 'Lun',
+        'tuesday' => 'Mar',
+        'wednesday' => 'Mer',
+        'thursday' => 'Jeu',
+        'friday' => 'Ven',
+        'saturday' => 'Sam',
+        'sunday' => 'Dim',
+    ];
+
     /** @var list<string> */
     private const DAY_KEYS = [
         'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -67,6 +78,7 @@ class WeeklyShiftSchedule extends AdminOnlyPage
             'staffs' => $staffs,
             'shiftGrid' => $shiftGrid,
             'dayLabels' => self::DAY_LABELS,
+            'dayShortLabels' => self::DAY_SHORT_LABELS,
             'todayDayKey' => $todayDayKey,
             'attendancesToday' => $attendancesToday,
             'liveByStaff' => $liveByStaff,
@@ -149,6 +161,12 @@ class WeeklyShiftSchedule extends AdminOnlyPage
         }
 
         usort($assignments, function (array $a, array $b): int {
+            $ta = $this->shiftSlotStartMinutes($a['shift'] ?? null);
+            $tb = $this->shiftSlotStartMinutes($b['shift'] ?? null);
+            if ($ta !== $tb) {
+                return $ta <=> $tb;
+            }
+
             $order = ['kitchen' => 0, 'hall' => 1, 'other' => 2];
             $ca = $order[$a['category']] ?? 2;
             $cb = $order[$b['category']] ?? 2;
@@ -199,11 +217,43 @@ class WeeklyShiftSchedule extends AdminOnlyPage
             }
         }
 
+        usort($liveExtras, function (array $a, array $b): int {
+            $ta = $a['in_at']?->getTimestamp() ?? 0;
+            $tb = $b['in_at']?->getTimestamp() ?? 0;
+
+            return $ta <=> $tb;
+        });
+
         return [
             'assignments' => $assignments,
             'counts' => $counts,
             'live_extras' => $liveExtras,
         ];
+    }
+
+    /**
+     * シフト先頭時刻（slot[0]）を分単位にし、早い順ソート用。
+     */
+    private function shiftSlotStartMinutes(?array $shift): int
+    {
+        if (! is_array($shift) || ! isset($shift[0]) || ! is_string($shift[0])) {
+            return 24 * 60 + 1;
+        }
+
+        $raw = trim($shift[0]);
+        if ($raw === '') {
+            return 24 * 60 + 1;
+        }
+
+        if (preg_match('/^(\d{1,2}):(\d{2})/', $raw, $m)) {
+            return ((int) $m[1]) * 60 + (int) $m[2];
+        }
+
+        if (preg_match('/^(\d{1,2})h(\d{2})$/i', $raw, $m)) {
+            return ((int) $m[1]) * 60 + (int) $m[2];
+        }
+
+        return 24 * 60 + 1;
     }
 
     /**

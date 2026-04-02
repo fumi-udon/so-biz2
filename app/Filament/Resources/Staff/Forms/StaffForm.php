@@ -2,15 +2,18 @@
 
 namespace App\Filament\Resources\Staff\Forms;
 
-use App\Models\Setting;
 use App\Models\JobLevel;
+use App\Models\Setting;
+use App\Support\FixedShiftsJson;
 use Closure;
+use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Illuminate\Validation\ValidationException;
 
 class StaffForm
 {
@@ -88,51 +91,37 @@ class StaffForm
                     ->description('Horaires théoriques par jour (détection de retard au pointage : tolérance 10 minutes).')
                     ->schema([
                         Textarea::make('fixed_shifts')
-                            ->json()
-                            ->formatStateUsing(function ($state) {
-                                $data = is_string($state) ? json_decode($state, true) : $state;
-                                if (! is_array($data)) {
-                                    return is_string($state)
-                                        ? $state
-                                        : json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-                                }
-
-                                $ordered = [];
-                                $expectedDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-                                foreach ($expectedDays as $day) {
-                                    if (array_key_exists($day, $data)) {
-                                        $ordered[$day] = $data[$day];
-                                    }
-                                }
-
-                                return json_encode($ordered, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-                            })
+                            ->hiddenLabel()
+                            ->default(fn () => FixedShiftsJson::toPrettyJsonString(null))
+                            ->formatStateUsing(fn ($state): string => FixedShiftsJson::toPrettyJsonString($state))
                             ->dehydrateStateUsing(function ($state) {
-                                $data = is_string($state) ? json_decode($state, true) : $state;
-                                if (! is_array($data)) {
-                                    return $data;
+                                $result = FixedShiftsJson::toPersistedArray($state);
+                                if ($result === null) {
+                                    throw ValidationException::withMessages([
+                                        'fixed_shifts' => '有効なJSON文字列を入力してください。',
+                                    ]);
                                 }
 
-                                $ordered = [];
-                                $expectedDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-                                foreach ($expectedDays as $day) {
-                                    if (array_key_exists($day, $data)) {
-                                        $ordered[$day] = $data[$day];
-                                    }
-                                }
-
-                                return $ordered;
+                                return $result;
                             })
-                            ->rows(15)
-                            ->hintAction(
-                                \Filament\Forms\Components\Actions\Action::make('how_to_use')
+                            ->rows(18)
+                            ->live(debounce: 500)
+                            ->extraInputAttributes([
+                                'class' => 'font-mono text-xs sm:text-sm leading-relaxed',
+                                'spellcheck' => 'false',
+                                'autocomplete' => 'off',
+                                'autocorrect' => 'off',
+                                'autocapitalize' => 'off',
+                            ])
+                            ->hintActions([
+                                Action::make('how_to_use')
                                     ->label('書き方のサンプル（説明書）')
                                     ->icon('heroicon-m-question-mark-circle')
                                     ->modalHeading('シフト（JSON）の書き方ルール')
                                     ->modalSubmitAction(false)
                                     ->modalCancelActionLabel('閉じる')
                                     ->modalContent(fn () => new \Illuminate\Support\HtmlString('
-                                        <div class="text-sm" style="line-height: 1.6;">
+                                        <div class="text-sm leading-relaxed text-gray-950 dark:text-gray-100">
                                             <p>曜日（英語小文字）をキーにし、lunchとdinnerの時間を指定します。<br>時間は <b>["開始", "終了"]</b> の形式、休みのシフトは <b>null</b> を指定してください。</p>
                                             <ul class="list-disc pl-5 mt-2 mb-4">
                                                 <li><b>両方勤務:</b> <code>"lunch": ["11:00", "15:00"], "dinner": ["18:00", "23:00"]</code></li>
@@ -141,23 +130,26 @@ class StaffForm
                                                 <li><b>休み:</b> <code>"lunch": null, "dinner": null</code></li>
                                             </ul>
                                             <p><b>【コピペ用テンプレート】</b></p>
-                                            <pre style="background: #111827; color: #fff; padding: 10px; border-radius: 5px; overflow-x: auto;"><code>{
-  "monday": { "lunch": ["11:00", "15:00"], "dinner": ["18:00", "23:00"] },
-  "tuesday": { "lunch": ["11:00", "15:00"], "dinner": null },
-  "wednesday": { "lunch": null, "dinner": ["18:00", "23:00"] },
-  "thursday": { "lunch": null, "dinner": null },
-  "friday": { "lunch": null, "dinner": null },
-  "saturday": { "lunch": null, "dinner": null },
-  "sunday": { "lunch": null, "dinner": null }
-}</code></pre>
+                                            <pre class="overflow-x-auto rounded-md bg-gray-900 p-3 text-gray-100 dark:bg-gray-950"><code>'.e(FixedShiftsJson::toPrettyJsonString(null)).'</code></pre>
                                         </div>
-                                    '))
-                            )
-                            ->default('{"monday":{"lunch":["10:00","15:00"],"dinner":null},"tuesday":{"lunch":null,"dinner":["18:00","23:30"]},"wednesday":{"lunch":["10:00","15:00"],"dinner":["18:00","23:30"]},"thursday":{"lunch":null,"dinner":null},"friday":{"lunch":null,"dinner":null},"saturday":{"lunch":null,"dinner":null},"sunday":{"lunch":null,"dinner":null}}')
+                                    ')),
+                                Action::make('format_json')
+                                    ->label('JSONを整形')
+                                    ->icon('heroicon-m-sparkles')
+                                    ->action(function (\Filament\Forms\Get $get, \Filament\Forms\Set $set): void {
+                                        $raw = $get('fixed_shifts');
+                                        if (! is_string($raw)) {
+                                            $set('fixed_shifts', FixedShiftsJson::toPrettyJsonString($raw));
+
+                                            return;
+                                        }
+                                        $set('fixed_shifts', FixedShiftsJson::tryPrettyPrint($raw));
+                                    }),
+                            ])
                             ->columnSpanFull()
                             ->rules([
                                 function (): Closure {
-                                    return function (string $attribute, mixed $value, Closure $fail): void {
+                                    return function (mixed $attribute, mixed $value, Closure $fail): void {
                                         try {
                                             if (is_string($value)) {
                                                 $decoded = json_decode($value, true, 512, JSON_THROW_ON_ERROR);

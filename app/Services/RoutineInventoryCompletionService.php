@@ -22,18 +22,15 @@ class RoutineInventoryCompletionService
     {
         $dateString ??= BusinessDate::toDateString();
 
-        $tasks = RoutineTask::query()
+        return RoutineTask::query()
             ->where('assigned_staff_id', $staff->id)
             ->where('shop_id', $staff->shop_id)
             ->where('is_active', true)
-            ->get();
-
-        return $tasks->filter(function (RoutineTask $task) use ($dateString): bool {
-            return ! RoutineTaskLog::query()
-                ->where('routine_task_id', $task->id)
-                ->whereDate('date', $dateString)
-                ->exists();
-        })->values();
+            ->whereDoesntHave('logs', function ($query) use ($dateString): void {
+                $query->whereDate('date', $dateString);
+            })
+            ->get()
+            ->values();
     }
 
     /**
@@ -45,18 +42,15 @@ class RoutineInventoryCompletionService
     {
         $dateString ??= BusinessDate::toDateString();
 
-        $items = InventoryItem::query()
+        return InventoryItem::query()
             ->where('assigned_staff_id', $staff->id)
             ->where('shop_id', $staff->shop_id)
             ->where('is_active', true)
-            ->get();
-
-        return $items->filter(function (InventoryItem $item) use ($dateString): bool {
-            return ! InventoryRecord::query()
-                ->where('inventory_item_id', $item->id)
-                ->whereDate('date', $dateString)
-                ->exists();
-        })->values();
+            ->whereDoesntHave('records', function ($query) use ($dateString): void {
+                $query->whereDate('date', $dateString);
+            })
+            ->get()
+            ->values();
     }
 
     public function staffHasAllRoutineAndInventoryDone(Staff $staff, ?string $dateString = null): bool

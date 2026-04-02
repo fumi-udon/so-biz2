@@ -1,15 +1,13 @@
 <div class="space-y-3">
-    <header class="rounded-2xl border-4 border-black bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 p-5 text-center shadow-[0_10px_0_0_rgba(0,0,0,1)]">
+    <header class="rounded-2xl border-4 border-black bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 p-4 text-center shadow-[0_10px_0_0_rgba(0,0,0,1)]">
         <p class="mb-1 text-sm font-black uppercase tracking-[0.2em] text-black">TIME ATTACK</p>
-        <h1 class="mb-2 text-3xl font-black tracking-widest text-black">BATAILLE DE POINTAGE</h1>
-        <p class="mb-1 text-sm text-gray-500">
+        <h1 class="mb-1 text-3xl font-black tracking-widest text-black">BATAILLE DE POINTAGE</h1>
+        <p class="text-sm text-gray-700">
             Date de service
-            <time class="font-mono font-semibold text-gray-800" datetime="{{ $targetBusinessDate->toDateString() }}">
+            <time class="font-mono font-semibold text-gray-900" datetime="{{ $targetBusinessDate->toDateString() }}">
                 {{ $targetBusinessDate->format('Y/m/d') }}
             </time>
         </p>
-        <p class="text-sm font-semibold text-black/80">Les pointages avant 06:00 sont enregistres sur le jour d'exploitation precedent.</p>
-        <p class="text-[10px] text-black/60">早朝打刻は前営業日扱い</p>
     </header>
 
     @if ($bannerSuccess)
@@ -78,14 +76,22 @@
         </div>
     @else
         <div class="rounded-2xl border-4 border-black bg-gradient-to-r from-cyan-200 to-blue-200 px-4 py-4 text-center shadow-[0_8px_0_0_rgba(0,0,0,1)]">
-            <p class="text-xl font-black text-sky-950">
-                Bon courage, {{ $authenticatedStaffName }}
-            </p>
+            @if ($hasShiftToday)
+                <p class="text-xl font-black text-sky-950">
+                    Bon courage, {{ $authenticatedStaffName }}
+                </p>
+            @else
+                <p class="text-xl font-black text-sky-950">
+                    Bonjour, {{ $authenticatedStaffName }}
+                </p>
+            @endif
             <button type="button" wire:click="backToAuth" class="mt-2 text-sm font-medium text-sky-700 underline underline-offset-2">
                 Changer de personnel
             </button>
         </div>
 
+        {{-- hasShiftToday = poste prevu ce jour (fixed_shifts / pointage en cours) ; distinct de la ligne DB `attendance` qui peut etre creee au 1er pointage --}}
+        @if ($hasShiftToday)
         @php
             $s = $shiftState;
             $showLunchBlock = $s['lunch_scheduled'] || $s['lunch_in'];
@@ -220,6 +226,61 @@
                 @endif
             </div>
         </div>
+        @else
+            <div class="space-y-3">
+                <div
+                    class="rounded border border-gray-300 bg-white px-3 py-4 text-center shadow-sm dark:border-gray-700 dark:bg-gray-900"
+                    role="alert"
+                >
+                    <p class="text-base font-bold uppercase tracking-wider text-gray-950 dark:text-white">NO SHIFT TODAY</p>
+                    <p class="mt-1 text-xs font-medium uppercase tracking-wide text-gray-700 dark:text-gray-300">(AUCUN POSTE PRÉVU AUJOURD'HUI)</p>
+                </div>
+
+                <section
+                    class="rounded-md border-2 border-blue-400/90 bg-gradient-to-br from-sky-50 via-blue-100 to-indigo-200 p-3 shadow-[0_2px_16px_rgba(0,127,255,0.12)] dark:border-blue-500/70 dark:bg-gradient-to-br dark:from-blue-950 dark:via-blue-900 dark:to-indigo-950"
+                    aria-label="Weekly mission"
+                >
+                    <div class="mb-2 text-center">
+                        <p class="text-sm font-extrabold uppercase tracking-[0.33em] text-blue-800 drop-shadow dark:text-yellow-200/90">WEEKLY MISSION</p>
+                        <p class="mt-1 text-[11px] font-semibold uppercase tracking-wider text-blue-600/90 dark:text-cyan-300/80">(PLANNING DE LA SEMAINE · LUN–DIM)</p>
+                    </div>
+                    <div class="flex max-w-full flex-col gap-1.5">
+                        @foreach ($weeklyMissionRows as $row)
+                            <div
+                                @class([
+                                    'flex min-w-0 flex-col gap-1 border px-2 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2',
+                                    'border-blue-300 bg-sky-100/70 dark:border-blue-900/80 dark:bg-blue-950/70' => ! $row['is_today'],
+                                    'border-yellow-400 bg-yellow-50 ring-2 ring-blue-300/30 dark:border-yellow-300 dark:bg-yellow-900/30 dark:ring-yellow-500/50' => $row['is_today'],
+                                ])
+                            >
+                                <div class="min-w-0 shrink-0">
+                                    <p class="font-mono text-[11px] font-black uppercase leading-tight text-orange-400 dark:text-orange-300">
+                                        {{ $row['label_fr'] }}
+                                        <span class="text-emerald-700 dark:text-emerald-200 font-extrabold">· {{ $row['date_label'] }}</span>
+                                        @if ($row['is_today'])
+                                            <span class="ml-1 inline-block rounded-sm border border-amber-500/80 bg-amber-500/60 px-1 py-0.5 text-[9px] font-black uppercase text-gray-950 dark:border-amber-400 dark:bg-amber-400/80 dark:text-gray-900">TODAY</span>
+                                        @endif
+                                    </p>
+                                </div>
+                                <div class="flex min-w-0 flex-1 flex-col gap-0.5 text-left sm:max-w-[60%] sm:text-right">
+                                    <p class="break-words font-mono text-[10px]">
+                                        <span class="text-orange-600 font-bold dark:text-orange-200">L</span>
+                                        <span class="text-gray-950 font-extrabold dark:text-white tracking-tight">{{ $row['lunch'] }}</span>
+                                    </p>
+                                    <p class="break-words font-mono text-[10px]">
+                                        <span class="text-orange-600 font-bold dark:text-orange-200">D</span>
+                                        <span class="text-gray-950 font-extrabold dark:text-white tracking-tight">{{ $row['dinner'] }}</span>
+                                    </p>
+                                    <p class="break-words font-mono text-[9px] text-orange-700/90 font-semibold dark:text-orange-200/90">
+                                        SCH <span class="text-gray-900 font-extrabold dark:text-white tracking-tight">{{ $row['scheduled_in'] }}</span>
+                                    </p>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </section>
+            </div>
+        @endif
     @endif
 
     <x-filament::modal
@@ -238,7 +299,7 @@
                     wire:click="applyForTip"
                     class="w-full rounded-lg bg-black/85 px-3 py-2 text-sm font-extrabold text-yellow-200"
                 >
-                    🪙 Recevoir le droit au tip
+                    🪙 Get Your Tip!
                 </button>
             </div>
         @elseif ($tipModalState === 'LOSE')

@@ -2,7 +2,14 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Widgets\HeadquartersAttendanceArcadeWidget;
+use App\Filament\Widgets\HeadquartersCloseHistoryWidget;
+use App\Filament\Widgets\HeadquartersStaffPayrollWidget;
+use App\Filament\Widgets\HeadquartersStatsWidget;
+use App\Filament\Widgets\HeadquartersTodayRosterWidget;
+use App\Filament\Widgets\LowStockAlertWidget;
 use Filament\Pages\Dashboard;
+use Filament\Widgets\AccountWidget;
 
 class HeadquartersDashboard extends Dashboard
 {
@@ -27,5 +34,32 @@ class HeadquartersDashboard extends Dashboard
         if (auth()->user()?->isCashier() === true) {
             $this->redirectRoute('filament.admin.pages.daily-close-check', navigate: true);
         }
+    }
+
+    /**
+     * @return array<int, class-string<\Filament\Widgets\Widget>>
+     */
+    public function getWidgets(): array
+    {
+        return [
+            HeadquartersStatsWidget::class,
+            HeadquartersTodayRosterWidget::class,
+            HeadquartersCloseHistoryWidget::class,
+            HeadquartersAttendanceArcadeWidget::class,
+            HeadquartersStaffPayrollWidget::class,
+            LowStockAlertWidget::class,
+            AccountWidget::class,
+        ];
+    }
+
+    /**
+     * @return int | string | array<string, int | string | null>
+     */
+    public function getColumns(): int | string | array
+    {
+        return [
+            'default' => 1,
+            'lg' => 2,
+        ];
     }
 }

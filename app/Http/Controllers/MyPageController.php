@@ -218,20 +218,14 @@ class MyPageController extends Controller
                 ->get();
 
             $tipHistoryRaw = StaffTip::query()
-                ->where('staff_id', $staff->id)
+                ->where('daily_tip_distributions.staff_id', $staff->id)
+                ->join('daily_tips', 'daily_tip_distributions.daily_tip_id', '=', 'daily_tips.id')
+                ->orderByDesc('daily_tips.business_date')
+                ->orderByDesc('daily_tip_distributions.id')
+                ->select('daily_tip_distributions.*')
+                ->limit(10)
                 ->with('dailyTip')
-                ->get()
-                ->sort(function (StaffTip $a, StaffTip $b): int {
-                    $ad = optional($a->dailyTip?->business_date)?->getTimestamp() ?? 0;
-                    $bd = optional($b->dailyTip?->business_date)?->getTimestamp() ?? 0;
-                    if ($ad !== $bd) {
-                        return $bd <=> $ad;
-                    }
-
-                    return $b->id <=> $a->id;
-                })
-                ->take(10)
-                ->values();
+                ->get();
 
             $previous = null;
             $tipHistory = $tipHistoryRaw->map(function (StaffTip $tip, int $index) use (&$previous): array {

@@ -8,6 +8,7 @@ use App\Services\TimecardPinValidator;
 use App\Services\TimecardPunchOutcome;
 use App\Services\TimecardPunchService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Layout;
@@ -59,6 +60,9 @@ class TimecardForm extends Component
 
     public ?string $punchCompleteLabel = null;
 
+    /** Aujourd'hui: aucun creneau dejeuner/diner prevu dans fixed_shifts (hors pointage en cours). */
+    public bool $noWorkDataToday = false;
+
     public function mount(): void
     {
         request()->session()->forget('mypage_staff_id');
@@ -72,7 +76,7 @@ class TimecardForm extends Component
             ->all();
     }
 
-    public function authenticate(): void
+    public function authenticate(): mixed
     {
         $this->bannerError = null;
         $this->bannerSuccess = null;
@@ -93,7 +97,7 @@ class TimecardForm extends Component
         if (! $staff) {
             $this->addError('selectedStaffId', 'Personnel introuvable.');
 
-            return;
+            return null;
         }
 
         $pinError = app(TimecardPinValidator::class)->validate($staff, $this->pinCode);
@@ -101,15 +105,25 @@ class TimecardForm extends Component
         if ($pinError !== null) {
             $this->addError('pinCode', $pinError);
 
-            return;
+            return null;
         }
+
+        $this->pinCode = '';
+        $this->refreshShiftState($staff);
+
+        $s = $this->shiftState;
+        $noScheduleToday = ! $s['lunch_scheduled'] && ! $s['dinner_scheduled'];
+        $openLunch = $s['lunch_in'] && ! $s['lunch_out'];
+        $openDinner = $s['dinner_in'] && ! $s['dinner_out'];
+
+        $this->noWorkDataToday = $noScheduleToday && ! $openLunch && ! $openDinner;
 
         $this->authenticatedStaffId = $staff->id;
         $this->authenticatedStaffName = $staff->name;
-        $this->pinCode = '';
-        $this->refreshShiftState($staff);
         $this->syncExtraMealDefault();
         $this->step = 2;
+
+        return null;
     }
 
     public function punch(string $action): void
@@ -118,6 +132,10 @@ class TimecardForm extends Component
         $this->bannerSuccess = null;
 
         if ($this->step !== 2 || $this->authenticatedStaffId === null) {
+            return;
+        }
+
+        if ($this->noWorkDataToday) {
             return;
         }
 
@@ -170,6 +188,10 @@ class TimecardForm extends Component
         $this->bannerSuccess = null;
 
         if ($this->step !== 2 || $this->authenticatedStaffId === null) {
+            return;
+        }
+
+        if ($this->noWorkDataToday) {
             return;
         }
 
@@ -330,10 +352,95 @@ class TimecardForm extends Component
     public function render(): View
     {
         $targetDate = app(TimecardPunchService::class)->resolveTargetBusinessDate();
+        $weeklyMissionRows = [];
+        $todayAttendance = null;
 
+        if ($this->authenticatedStaffId !== null) {
+            $weeklyMissionRows = $this->buildWeeklyMissionRows($this->authenticatedStaffId);
+            $todayAttendance = Attendance::query()
+                ->where('staff_id', $this->authenticatedStaffId)
+                ->where('date', $targetDate->toDateString())
+                ->first();
+        }
+
+        // hasShiftToday: poste prevu aujourd'hui (inverse de noWorkDataToday). La ligne Attendance peut n'exister qu'apres le premier pointage.
         return view('livewire.timecard-form', [
             'targetBusinessDate' => $targetDate,
+            'weeklyMissionRows' => $weeklyMissionRows,
+            'attendance' => $todayAttendance,
+            'hasShiftToday' => $this->authenticatedStaffId !== null && ! $this->noWorkDataToday,
         ]);
+    }
+
+    /**
+     * Semaine du lundi au dimanche (now()): pointages enregistres dans `attendances`.
+     *
+     * @return list<array{label_fr: string, date_label: string, is_today: bool, lunch: string, dinner: string, scheduled_in: string}>
+     */
+    private function buildWeeklyMissionRows(int $staffId): array
+    {
+        $weekStart = now()->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
+        $weekEnd = now()->copy()->endOfWeek(Carbon::SUNDAY)->startOfDay();
+
+        $attendances = Attendance::query()
+            ->where('staff_id', $staffId)
+            ->whereBetween('date', [$weekStart->toDateString(), $weekEnd->toDateString()])
+            ->orderBy('date')
+            ->get()
+            ->keyBy(fn (Attendance $a): string => $a->date->toDateString());
+
+        $businessToday = app(TimecardPunchService::class)->resolveTargetBusinessDate()->startOfDay();
+        $labelsFr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+        $rows = [];
+
+        for ($i = 0; $i < 7; $i++) {
+            $day = $weekStart->copy()->addDays($i);
+            $ds = $day->toDateString();
+            $att = $attendances->get($ds);
+            $rows[] = [
+                'label_fr' => $labelsFr[$i],
+                'date_label' => $day->format('d/m'),
+                'is_today' => $day->isSameDay($businessToday),
+                'lunch' => $this->formatAttendanceMealRange($att, 'lunch'),
+                'dinner' => $this->formatAttendanceMealRange($att, 'dinner'),
+                'scheduled_in' => $att?->scheduled_in_at !== null ? $att->scheduled_in_at->format('d/m H:i') : '—',
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  'lunch'|'dinner'  $meal
+     */
+    private function formatAttendanceMealRange(?Attendance $att, string $meal): string
+    {
+        if ($att === null) {
+            return '—';
+        }
+
+        return match ($meal) {
+            'lunch' => $this->formatAttendanceClockPair($att->lunch_in_at, $att->lunch_out_at),
+            'dinner' => $this->formatAttendanceClockPair($att->dinner_in_at, $att->dinner_out_at),
+            default => '—',
+        };
+    }
+
+    private function formatAttendanceClockPair(?Carbon $in, ?Carbon $out): string
+    {
+        if ($in === null && $out === null) {
+            return '—';
+        }
+
+        if ($in !== null && $out !== null) {
+            return $in->format('H:i').'–'.$out->format('H:i');
+        }
+
+        if ($in !== null) {
+            return 'IN '.$in->format('H:i');
+        }
+
+        return '—';
     }
 
     private function refreshShiftState(Staff $staff): void
@@ -423,6 +530,7 @@ class TimecardForm extends Component
         $this->extraReason = '';
         $this->showPunchCompleteModal = false;
         $this->punchCompleteLabel = null;
+        $this->noWorkDataToday = false;
         $this->resetTipModalState();
     }
 }
