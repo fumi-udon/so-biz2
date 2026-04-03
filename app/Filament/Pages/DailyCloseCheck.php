@@ -808,13 +808,14 @@ class DailyCloseCheck extends Page
      */
     public function staffOptions(): array
     {
+        // jobLevel > 3 のみ取得に修正
         return Staff::query()
             ->where('is_active', true)
             ->whereNotNull('pin_code')
             ->where('pin_code', '!=', '')
             ->whereHas(
                 'jobLevel',
-                fn ($query) => $query->where('level', '>=', self::MIN_CLOSE_GATE_JOB_LEVEL),
+                fn ($query) => $query->where('level', '>', 2),
             )
             ->orderBy('name')
             ->pluck('name', 'id')

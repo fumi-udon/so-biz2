@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    <div wire:init="openSessionGateOnBoot" class="space-y-3">
+    <div class="space-y-3">
         <x-filament::modal
             id="daily-close-session-gate"
             :close-button="false"
