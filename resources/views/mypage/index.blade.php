@@ -96,55 +96,63 @@
                             <span class="truncate text-base font-extrabold tracking-wide text-indigo-800 dark:text-indigo-100">{{ $staff->name }}</span>
                             <span class="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-300 via-orange-300 to-pink-300 px-2 py-0.5 text-[11px] font-extrabold text-gray-900 ring-1 ring-amber-200/70">
                                 <span>{{ $levelIcon }}</span>
-                                <span>Lv.{{ $motivationLevel }}</span>
+                                <span>Lv.  {{ $staff->jobLevel?->name }}</span>
                             </span>
                         </div>
                     </div>
-                    <div class="mt-1 rounded-lg border border-amber-300/70 bg-white/80 p-1.5 dark:border-amber-500/30 dark:bg-white/5">
-                        <div class="mb-1 text-xs font-extrabold text-amber-700 dark:text-amber-200">🪙 Statut tip du jour</div>
-                        <div class="space-y-1 text-xs leading-relaxed">
-                            <p class="{{ $lunchApplied ? 'font-semibold text-emerald-300' : ($lunchWorked && $todayLate ? 'text-slate-300/80' : 'text-yellow-200/90') }}">
-                                @if (! $lunchWorked)
-                                        <span class="text-slate-500/90 dark:text-slate-300/70">😶‍🌫️ {{ $todayLabel }} Dejeuner tip -- (absent)</span>
-                                @elseif ($lunchApplied)
-                                    <span class="inline-flex items-center gap-1 rounded border border-emerald-300/70 bg-white px-1.5 py-0.5 text-sm font-black text-emerald-700">
-                                        <span>✅</span>
-                                        <span>{{ $todayLabel }} Dejeuner: demande tip Bravo terminee</span>
-                                    </span>
-                                @elseif ($todayLate)
-                                    <span class="inline-flex items-center gap-1 rounded border border-slate-300/60 bg-slate-100/90 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
-                                        <span>📋</span>
-                                        <span>{{ $todayLabel }} Dejeuner: tip non autorise (retard)</span>
-                                    </span>
-                                @else
-                                    <span class="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2 py-1 text-sm font-black text-emerald-700 shadow-sm ring-1 ring-emerald-200/70">
-                                        <span class="rounded bg-emerald-600 px-1 py-0.5 text-xs font-extrabold tracking-wide text-white">BRAVO</span>
-                                        <span>🎉 {{ $todayLabel }} Dejeuner: en attente de reception du tip</span>
-                                    </span>
-                                @endif
-                            </p>
-                            <p class="{{ $dinnerApplied ? 'font-semibold text-emerald-300' : ($dinnerWorked && $todayLate ? 'text-slate-300/80' : 'text-yellow-200/90') }}">
-                                @if (! $dinnerWorked)
-                                    <span class="text-slate-500/90 dark:text-slate-300/70">😶‍🌫️ {{ $todayLabel }} Diner tip -- (absent)</span>
-                                @elseif ($dinnerApplied)
-                                    <span class="inline-flex items-center gap-1 rounded border border-emerald-300/70 bg-white px-1.5 py-0.5 text-sm font-black text-emerald-700">
-                                        <span>✅</span>
-                                        <span>{{ $todayLabel }} Diner: demande tip Bravo terminee</span>
-                                    </span>
-                                @elseif ($todayLate)
-                                    <span class="inline-flex items-center gap-1 rounded border border-slate-300/60 bg-slate-100/90 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
-                                        <span>📋</span>
-                                        <span>{{ $todayLabel }} Diner: tip non autorise (retard)</span>
-                                    </span>
-                                @else
-                                    <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-300 bg-white px-2 py-1 text-sm font-black text-sky-700 shadow-sm ring-1 ring-sky-200/70">
-                                        <span class="rounded bg-sky-600 px-1 py-0.5 text-xs font-extrabold tracking-wide text-white">BRAVO</span>
-                                        <span>🎊✅ {{ $todayLabel }} Diner: demande tip validee</span>
-                                    </span>
-                                @endif
-                            </p>
+                    @if (($staff->jobLevel?->level ?? 0) != 0)
+                        <div class="mt-1 rounded-lg border border-amber-300/70 bg-white/80 p-1.5 dark:border-amber-500/30 dark:bg-white/5">
+                            <div class="mb-1 text-xs font-extrabold text-amber-700 dark:text-amber-200">🪙 Statut tip du jour</div>
+                            <div class="space-y-1 text-xs leading-relaxed">
+                                <p class="{{ $lunchApplied ? 'font-semibold text-emerald-300' : ($lunchWorked && $todayLate ? 'text-slate-300/80' : 'text-yellow-200/90') }}">
+                                    @if (! $lunchWorked)
+                                            <span class="text-slate-500/90 dark:text-slate-300/70">😶‍🌫️ {{ $todayLabel }} Déjeuner tip -- (absent)</span>
+                                    @elseif ($lunchApplied)
+                                        <span class="inline-flex items-center gap-1 rounded border border-emerald-300/70 bg-white px-1.5 py-0.5 text-sm font-black text-emerald-700">
+                                            <span>✅</span>
+                                            <span>{{ $todayLabel }} Déjeuner : demande tip Bravo terminée</span>
+                                        </span>
+                                    @elseif ($todayLate)
+                                        <span class="inline-flex items-center gap-1 rounded border border-slate-300/60 bg-slate-100/90 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
+                                            <span>📋</span>
+                                            <span>{{ $todayLabel }} Déjeuner : tip non autorisé (retard)</span>
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2 py-1 text-sm font-black text-emerald-700 shadow-sm ring-1 ring-emerald-200/70">
+                                            <span class="rounded bg-emerald-600 px-1 py-0.5 text-xs font-extrabold tracking-wide text-white">BRAVO</span>
+                                            <span>🎉 {{ $todayLabel }} Déjeuner : en attente de réception du tip</span>
+                                        </span>
+                                    @endif
+                                </p>
+                                <p class="{{ $dinnerApplied ? 'font-semibold text-emerald-300' : ($dinnerWorked && $todayLate ? 'text-slate-300/80' : 'text-yellow-200/90') }}">
+                                    @if (! $dinnerWorked)
+                                        <span class="text-slate-500/90 dark:text-slate-300/70">😶‍🌫️ {{ $todayLabel }} Dîner tip -- (absent)</span>
+                                    @elseif ($dinnerApplied)
+                                        <span class="inline-flex items-center gap-1 rounded border border-emerald-300/70 bg-white px-1.5 py-0.5 text-sm font-black text-emerald-700">
+                                            <span>✅</span>
+                                            <span>{{ $todayLabel }} Dîner : demande tip Bravo terminée</span>
+                                        </span>
+                                    @elseif ($todayLate)
+                                        <span class="inline-flex items-center gap-1 rounded border border-slate-300/60 bg-slate-100/90 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
+                                            <span>📋</span>
+                                            <span>{{ $todayLabel }} Dîner : tip non autorisé (retard)</span>
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-300 bg-white px-2 py-1 text-sm font-black text-sky-700 shadow-sm ring-1 ring-sky-200/70">
+                                            <span class="rounded bg-sky-600 px-1 py-0.5 text-xs font-extrabold tracking-wide text-white">BRAVO</span>
+                                            <span>🎊✅ {{ $todayLabel }} Dîner : demande tip validée</span>
+                                        </span>
+                                    @endif
+                                </p>
+                            </div>
                         </div>
-                    </div>
+                    @else
+                        <div class="mt-1 rounded-lg border border-amber-300/70 bg-white/80 p-1.5 dark:border-amber-500/30 dark:bg-white/5 flex items-center">
+                            <span class="text-xs font-extrabold text-amber-700 dark:text-amber-200">
+                                Continuez vos efforts, vous pourrez bientôt recevoir des pourboires. Merci pour votre travail !
+                            </span>
+                        </div>
+                    @endif
                     <div class="mt-1 rounded-lg border border-indigo-300/70 bg-white/80 p-1 dark:border-indigo-400/20 dark:bg-white/5">
                         <div class="mb-1 flex items-center gap-1 text-xs font-extrabold text-indigo-700 dark:text-indigo-200">
                             <span>💠</span>

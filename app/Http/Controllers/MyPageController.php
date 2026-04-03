@@ -418,7 +418,7 @@ class MyPageController extends Controller
             }
         }
         $routinesAllComplete = $staff && ($routineTasks->isEmpty() || $routinesPendingCount === 0);
-
+// dd($staff);
         return view('mypage.index', [
             'staffList' => $staffList,
             'staff' => $staff,
@@ -462,8 +462,9 @@ class MyPageController extends Controller
 
     public function autoLogout(Request $request): JsonResponse
     {
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        // Mon espace の本人確認のみ解除する。session()->invalidate() すると pagehide の fetch と
+        // トップ（welcome）の @csrf がレースし、次の POST（mypage.open）が 419 になりやすい。
+        $request->session()->forget('mypage_staff_id');
 
         return response()->json(['ok' => true]);
     }
