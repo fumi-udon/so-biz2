@@ -140,7 +140,7 @@
                                     @else
                                         <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-300 bg-white px-2 py-1 text-sm font-black text-sky-700 shadow-sm ring-1 ring-sky-200/70">
                                             <span class="rounded bg-sky-600 px-1 py-0.5 text-xs font-extrabold tracking-wide text-white">BRAVO</span>
-                                            <span>🎊✅ {{ $todayLabel }} Dîner : demande tip validée</span>
+                                            <span>🎊✅ {{ $todayLabel }} Dîner : Tip validée</span>
                                         </span>
                                     @endif
                                 </p>

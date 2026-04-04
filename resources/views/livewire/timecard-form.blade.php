@@ -292,7 +292,7 @@
     >
         @if ($tipModalState === 'WIN')
             <div class="rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 p-4 text-gray-950">
-                <p class="mb-2 text-lg font-black">🎉 YOU WIN!</p>
+                <p class="mb-2 text-lg font-black">🎉 Bonjour 🎉</p>
                 <p class="mb-4 text-sm font-bold">Arrivee a l'heure. Droit de demande de tip obtenu !</p>
                 <button
                     type="button"
@@ -304,14 +304,13 @@
             </div>
         @elseif ($tipModalState === 'LOSE')
             <div class="rounded-xl bg-gradient-to-r from-red-800 to-gray-900 p-4 text-gray-100">
-                <p class="mb-2 text-lg font-black">💀 YOU LOSE...</p>
-                <p class="mb-4 text-sm font-bold">Retard constate. Le droit au tip pour ce shift est perdu.</p>
+                <p class="mb-2 text-lg font-black">⚠️ Retard enregistré.</p>
                 <button
                     type="button"
                     wire:click="declineTipAndRedirect"
                     class="w-full rounded-lg bg-gray-600 px-3 py-2 text-sm font-extrabold text-gray-100"
                 >
-                    Fermer
+                    My page (retour)
                 </button>
             </div>
         @endif

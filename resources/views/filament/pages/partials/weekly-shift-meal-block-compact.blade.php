@@ -24,21 +24,18 @@
                     <x-filament::icon icon="heroicon-m-moon" class="h-3 w-3 shrink-0 text-indigo-700 dark:text-indigo-300" />
                 @endif
                 @if($counts['kitchen'] > 0)
-                    <span class="inline-flex items-center gap-0.5 text-red-700 dark:text-red-300" title="Kitchen">
-                        <x-filament::icon icon="heroicon-m-fire" class="h-2.5 w-2.5 shrink-0" />
-                        <span class="text-[9px] font-black tabular-nums">{{ $counts['kitchen'] }}</span>
+                    <span class="inline-flex items-center gap-1 text-red-700 dark:text-red-300" title="Kitchen">
+                        <span class="text-[9px] font-black tabular-nums">Kit:{{ $counts['kitchen'] }}</span>
                     </span>
                 @endif
                 @if($counts['hall'] > 0)
                     <span class="inline-flex items-center gap-0.5 text-emerald-800 dark:text-emerald-300" title="Hall">
-                        <x-filament::icon icon="heroicon-m-user" class="h-2.5 w-2.5 shrink-0" />
-                        <span class="text-[9px] font-black tabular-nums">{{ $counts['hall'] }}</span>
+                        <span class="text-[9px] font-black tabular-nums">Ser:{{ $counts['hall'] }}</span>
                     </span>
                 @endif
                 @if($counts['other'] > 0)
                     <span class="inline-flex items-center gap-0.5 text-gray-700 dark:text-gray-300" title="Autre">
-                        <x-filament::icon icon="heroicon-m-clipboard-document" class="h-2.5 w-2.5 shrink-0" />
-                        <span class="text-[9px] font-black tabular-nums">{{ $counts['other'] }}</span>
+                        <span class="text-[9px] font-black tabular-nums">Mgt:{{ $counts['other'] }}</span>
                     </span>
                 @endif
             </div>

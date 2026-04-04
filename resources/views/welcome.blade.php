@@ -24,7 +24,6 @@
             <div class="rounded-[14px] bg-black/90 px-3 py-2">
                 <p class="text-sm font-black tracking-[0.14em] text-yellow-200">BATTLE READY BUSINESS MENU</p>
                 <p class="text-xs font-semibold text-slate-300">Lancez les operations essentielles en un geste.</p>
-                <p class="text-[10px] text-slate-400">業務開始の入口</p>
             </div>
         </section>
 
@@ -41,15 +40,21 @@
                 <p class="text-xs font-semibold text-black/75">Acces par PIN</p>
             </button>
 
+            <a href="{{ url('/mypage/attendance') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-yellow-300 via-amber-300 to-yellow-500 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+                <p class="text-lg">📊</p>
+                <p class="text-sm font-black tracking-wide text-white">PRESENCE</p>
+                <p class="text-xs font-semibold text-white/80">Controle mensuel des presences</p>
+            </a>
+<!-- 
             <a href="{{ route('inventory.index') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-cyan-400 to-sky-300 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
                 <p class="text-lg">📦</p>
                 <p class="text-sm font-black tracking-wide text-black">Inventaire</p>
                 <p class="text-xs font-semibold text-black/75">Saisie du stock</p>
-            </a>
+            </a> -->
 
             <a href="{{ route('close-check.index') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-rose-500 to-red-400 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
                 <p class="text-lg">🔒</p>
-                <p class="text-sm font-black tracking-wide text-white">Cloture</p>
+                <p class="text-sm font-black tracking-wide text-white">Close check</p>
                 <p class="text-xs font-semibold text-white/80">Verification de fin de service</p>
             </a>
 
@@ -59,11 +64,11 @@
                 <p class="text-xs font-semibold text-white/80">レジ締め</p>
             </a>
 
-            <a href="{{ route('mypage.attendance') }}" class="rounded-xl border-2 border-black bg-gradient-to-br from-violet-500 to-purple-400 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+            <!-- <a href="{{ route('mypage.attendance') }}" class="rounded-xl border-2 border-black bg-gradient-to-br from-violet-500 to-purple-400 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
                 <p class="text-lg">📊</p>
                 <p class="text-sm font-black tracking-wide text-white">Suivi des heures</p>
                 <p class="text-xs font-semibold text-white/80">Consulter les presences</p>
-            </a>
+            </a> -->
 
             <a href="{{ url('/admin') }}" class="rounded-xl border-2 border-black bg-gradient-to-br from-slate-800 to-slate-600 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
                 <p class="text-lg">⚙️</p>
@@ -71,24 +76,23 @@
                 <p class="text-xs font-semibold text-slate-300">Parametrage</p>
             </a>
 
-            <div class="rounded-xl border-2 border-dashed border-slate-400 bg-white/70 p-2">
+            <!-- <div class="rounded-xl border-2 border-dashed border-slate-400 bg-white/70 p-2">
                 <p class="text-lg">🧾</p>
                 <p class="text-sm font-black tracking-wide text-slate-700">Rapport journalier</p>
                 <p class="text-xs font-semibold text-slate-500">Bientot disponible</p>
-            </div>
+            </div> -->
 
-            <div class="rounded-xl border-2 border-dashed border-slate-400 bg-white/70 p-2">
+            <!-- <div class="rounded-xl border-2 border-dashed border-slate-400 bg-white/70 p-2">
                 <p class="text-lg">📣</p>
                 <p class="text-sm font-black tracking-wide text-slate-700">Messages</p>
                 <p class="text-xs font-semibold text-slate-500">Bientot disponible</p>
-            </div>
+            </div> -->
         </section>
     </main>
 
     <footer class="mt-3 border-t border-slate-300 py-2 text-center text-xs font-medium text-slate-500">
         &copy; {{ date('Y') }} {{ config('app.name') }} System.
     </footer>
-
     <div
         x-show="openMyPageModal"
         x-cloak

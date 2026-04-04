@@ -93,10 +93,10 @@
                         <thead class="border-b border-slate-200 bg-slate-50">
                             <tr>
                                 <th class="px-3 py-2 text-left font-black text-slate-700">Date</th>
-                                <th class="px-3 py-2 text-left font-black text-slate-700">L Entree</th>
-                                <th class="px-3 py-2 text-left font-black text-slate-700">L Sortie</th>
-                                <th class="px-3 py-2 text-left font-black text-slate-700">D Entree</th>
-                                <th class="px-3 py-2 text-left font-black text-slate-700">D Sortie</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">☀️IN</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">☀️OUT</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">🌙IN</th>
+                                <th class="px-3 py-2 text-left font-black text-slate-700">🌙OUT</th>
                                 <th class="px-3 py-2 text-right font-black text-slate-700">Action</th>
                             </tr>
                         </thead>

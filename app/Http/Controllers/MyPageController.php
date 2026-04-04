@@ -418,7 +418,7 @@ class MyPageController extends Controller
             }
         }
         $routinesAllComplete = $staff && ($routineTasks->isEmpty() || $routinesPendingCount === 0);
-// dd($staff);
+ dd($monthAttendances);
         return view('mypage.index', [
             'staffList' => $staffList,
             'staff' => $staff,

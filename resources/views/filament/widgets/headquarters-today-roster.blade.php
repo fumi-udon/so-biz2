@@ -70,7 +70,8 @@
                                                 'flex items-center gap-1 rounded-sm px-1 py-0.5',
                                                 'animate-pulse ring-1 ring-emerald-500 dark:ring-emerald-400' => $rowPulse,
                                             ])>
-                                                <span class="max-w-[80px] truncate font-bold text-[10px] text-gray-900 dark:text-gray-100 sm:max-w-[120px]" title="{{ $staff->name }}">
+                                                {{-- スタッフ名の文字サイズを text-[9px] に小さく調整（ここ！） --}}
+                                                <span class="max-w-[80px] truncate text-[9px] text-gray-900 dark:text-gray-100 sm:max-w-[120px]" title="{{ $staff->name }}">
                                                     {{ $staff->name }}
                                                 </span>
                                                 

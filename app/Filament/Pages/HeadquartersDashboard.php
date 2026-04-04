@@ -42,7 +42,7 @@ class HeadquartersDashboard extends Dashboard
     public function getWidgets(): array
     {
         return [
-            HeadquartersStatsWidget::class,
+            //HeadquartersStatsWidget::class,
             HeadquartersTodayRosterWidget::class,
             HeadquartersCloseHistoryWidget::class,
             HeadquartersAttendanceArcadeWidget::class,

@@ -25,16 +25,19 @@
                                 <th class="whitespace-nowrap py-1 pr-2 font-semibold">日付</th>
                                 <th class="whitespace-nowrap py-1 pr-2 font-semibold">Shift</th>
                                 <th class="whitespace-nowrap py-1 pr-2 font-semibold">売上</th>
+                                <th class="whitespace-nowrap py-1 pr-2 font-semibold">チップ</th>
                                 <th class="whitespace-nowrap py-1 pr-2 font-semibold">差額</th>
                                 <th class="whitespace-nowrap py-1 font-semibold">判定</th>
                             </tr>
                         </thead>
+                        
                         <tbody class="divide-y divide-gray-100 dark:divide-white/5">
                             @foreach ($financeRows as $f)
                                 <tr>
                                     <td class="py-1 pr-2 font-mono tabular-nums">{{ $f->business_date?->format('m/d') ?? '—' }}</td>
                                     <td class="py-1 pr-2">{{ $f->shift ?? '—' }}</td>
                                     <td class="py-1 pr-2 font-mono tabular-nums">{{ number_format((float) ($f->recettes ?? 0), 0, '.', ' ') }}</td>
+                                    <td class="py-1 pr-2 font-mono tabular-nums">{{ number_format((float) ($f->final_tip_amount ?? 0), 0, '.', ' ') }}</td>
                                     <td class="py-1 pr-2 font-mono tabular-nums">{{ number_format((float) ($f->final_difference ?? 0), 0, '.', ' ') }}</td>
                                     <td class="py-1 font-medium">{{ $f->verdict ?? '—' }}</td>
                                 </tr>
