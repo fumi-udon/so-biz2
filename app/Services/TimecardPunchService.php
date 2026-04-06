@@ -3,9 +3,9 @@
 namespace App\Services;
 
 use App\Models\Attendance;
-use App\Models\Setting;
 use App\Models\Staff;
 use App\Models\User;
+use App\Support\AttendanceLateCalculator;
 use App\Support\BusinessDate;
 use Filament\Notifications\Notification;
 use Illuminate\Database\QueryException;
@@ -58,59 +58,35 @@ final class TimecardPunchService
         return $planned !== null && $planned !== '';
     }
 
-    private function scheduledDateTimeToday(string $timeString, Carbon $clockAt): ?Carbon
+    /**
+     * 打刻アクションに対応する食事の予定だけをスナップショットする。
+     * ランチ打刻でディナー予定を固定しない（ディナー打刻前のシフト変更を反映するため）。
+     *
+     * @param  'lunch_in'|'lunch_out'|'dinner_in'|'dinner_out'  $punchAction
+     */
+    private function ensureScheduledSnapshotsForPunch(Attendance $attendance, Staff $staff, Carbon $businessDate, string $punchAction): void
     {
-        return BusinessDate::parseTimeForBusinessDate($timeString, $clockAt);
-    }
+        $snaps = AttendanceLateCalculator::snapshotScheduledTimesFromFixedShifts($staff, $businessDate);
 
-    private function lateMinutesForClockIn(Staff $staff, string $action, Carbon $clockAt): ?int
-    {
-        $mealKey = match ($action) {
-            'lunch_in' => 'lunch',
-            'dinner_in' => 'dinner',
+        $lane = match ($punchAction) {
+            'lunch_in', 'lunch_out' => 'lunch',
+            'dinner_in', 'dinner_out' => 'dinner',
             default => null,
         };
 
-        if ($mealKey === null) {
-            return null;
+        if ($lane === 'lunch') {
+            if ($attendance->scheduled_in_at === null && $this->isMealScheduled($staff, $businessDate, 'lunch')) {
+                $attendance->scheduled_in_at = $snaps['scheduled_in_at'];
+            }
+
+            return;
         }
 
-        $shifts = $staff->fixed_shifts;
-
-        if (! is_array($shifts)) {
-            return null;
+        if ($lane === 'dinner') {
+            if ($attendance->scheduled_dinner_at === null && $this->isMealScheduled($staff, $businessDate, 'dinner')) {
+                $attendance->scheduled_dinner_at = $snaps['scheduled_dinner_at'];
+            }
         }
-
-        $dayKey = $this->englishDayKey($this->resolveTargetBusinessDate());
-        $dayShifts = $shifts[$dayKey] ?? null;
-
-        if (! is_array($dayShifts)) {
-            return null;
-        }
-
-        $mealShift = $dayShifts[$mealKey] ?? null;
-        $planned = is_array($mealShift) ? ($mealShift[0] ?? null) : null;
-
-        if ($planned === null || $planned === '') {
-            return null;
-        }
-
-        $scheduledAt = $this->scheduledDateTimeToday((string) $planned, $clockAt);
-
-        if ($scheduledAt === null) {
-            return null;
-        }
-
-        $tolerance = Setting::getValue('late_tolerance_minutes', 10);
-        $graceMinutes = is_numeric($tolerance) ? (int) $tolerance : 10;
-
-        $graceEnd = $scheduledAt->copy()->addMinutes($graceMinutes);
-
-        if ($clockAt->lessThanOrEqualTo($graceEnd)) {
-            return 0;
-        }
-
-        return (int) $scheduledAt->diffInMinutes($clockAt);
     }
 
     /**
@@ -152,12 +128,12 @@ final class TimecardPunchService
 
         $column = self::ACTION_TO_COLUMN[$action];
         $clockAt = now();
-        $lateDelta = $this->lateMinutesForClockIn($staff, $action, $clockAt);
 
         $recordedLate = false;
+        $lateDelta = 0;
 
         try {
-            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $lateDelta, &$recordedLate): void {
+            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $targetDate, $action, &$recordedLate, &$lateDelta): void {
                 $attendance = Attendance::query()->firstOrCreate(
                     [
                         'staff_id' => $staff->id,
@@ -180,12 +156,15 @@ final class TimecardPunchService
                     throw new \RuntimeException('Ce pointage est deja enregistre.');
                 }
 
-                $attendance->{$column} = $clockAt;
+                $beforeLate = (int) ($attendance->late_minutes ?? 0);
 
-                if ($lateDelta !== null && $lateDelta > 0) {
-                    $attendance->late_minutes = (int) ($attendance->late_minutes ?? 0) + $lateDelta;
-                    $recordedLate = true;
-                }
+                $this->ensureScheduledSnapshotsForPunch($attendance, $staff, $targetDate, $action);
+
+                $attendance->{$column} = $clockAt;
+                $attendance->late_minutes = AttendanceLateCalculator::totalLateMinutes($attendance);
+
+                $lateDelta = max(0, $attendance->late_minutes - $beforeLate);
+                $recordedLate = $attendance->late_minutes > $beforeLate;
 
                 $attendance->save();
             });
@@ -204,7 +183,7 @@ final class TimecardPunchService
         $isClockIn = in_array($action, ['lunch_in', 'dinner_in'], true);
 
         if ($isClockIn) {
-            if ($recordedLate) {
+            if ($recordedLate && $lateDelta > 0) {
                 return new TimecardPunchOutcome(true, null, 'mypage_late', $lateDelta);
             }
 
@@ -233,7 +212,7 @@ final class TimecardPunchService
         $shiftLabel = $meal === 'lunch' ? 'Dejeuner' : 'Diner';
 
         try {
-            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $shiftLabel, $reasonTrim): void {
+            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $shiftLabel, $reasonTrim, $targetDate, $action): void {
                 $attendance = Attendance::query()->firstOrCreate(
                     [
                         'staff_id' => $staff->id,
@@ -256,7 +235,10 @@ final class TimecardPunchService
                     throw new \RuntimeException('Ce pointage est deja enregistre.');
                 }
 
+                $this->ensureScheduledSnapshotsForPunch($attendance, $staff, $targetDate, $action);
+
                 $attendance->{$column} = $clockAt;
+                $attendance->late_minutes = AttendanceLateCalculator::totalLateMinutes($attendance);
 
                 $line = sprintf(
                     '[%s] [Entree exceptionnelle] Aide %s%s',

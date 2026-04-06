@@ -11,6 +11,7 @@ use App\Support\DailyTipAuditContext;
 use App\Support\DailyTipAuditLogger;
 use App\Services\TipCalculationService;
 use App\Support\BusinessDate;
+use App\Support\TipAttendanceScope;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
@@ -192,10 +193,19 @@ class CalculateTips extends Page
     public function getAvailableStaffOptionsProperty(): array
     {
         $selected = array_map(fn (array $row): int => (int) $row['staff_id'], $this->rows);
+        $businessDate = $this->data['business_date'] ?? BusinessDate::current()->toDateString();
+        $shift = $this->data['shift'] ?? 'lunch';
+
+        $eligibleIds = TipAttendanceScope::applyGoldenFormula(
+            Attendance::query()->whereDate('date', $businessDate),
+            $shift === 'dinner' ? 'dinner' : 'lunch',
+        )
+            ->whereNotIn('staff_id', $selected)
+            ->pluck('staff_id');
 
         return Staff::query()
             ->where('is_active', true)
-            ->whereNotIn('id', $selected)
+            ->whereIn('id', $eligibleIds)
             ->orderBy('name')
             ->pluck('name', 'id')
             ->all();
@@ -237,7 +247,23 @@ class CalculateTips extends Page
             return;
         }
 
-        $rawWeight = $staff->jobLevel?->default_weight;
+        // tip_weight_override があれば優先、なければ jobLevel.default_weight にフォールバック
+        $businessDate = $this->data['business_date'] ?? BusinessDate::current()->toDateString();
+        $shift = $this->data['shift'] ?? 'lunch';
+        $attendance = Attendance::query()
+            ->where('staff_id', $staffId)
+            ->whereDate('date', $businessDate)
+            ->first();
+
+        $eligible = $shift === 'lunch'
+            ? ($attendance && TipAttendanceScope::lunchEligible($attendance))
+            : ($attendance && TipAttendanceScope::dinnerEligible($attendance));
+        if (! $eligible) {
+            return;
+        }
+
+        $rawWeight = $attendance?->tip_weight_override
+            ?? $staff->jobLevel?->default_weight;
         $base = $rawWeight === null
             ? TipCalculationService::DEFAULT_DISTRIBUTION_WEIGHT
             : (float) TipCalculationService::normalizeWeightScalar($rawWeight);
@@ -299,11 +325,26 @@ class CalculateTips extends Page
             $this->verifyManagerPinOrFail();
         }
 
-        DB::transaction(function () use ($savedTotal): void {
+        $businessDate = $this->data['business_date'] ?? null;
+        $shift        = $this->data['shift'] ?? 'lunch';
+        $flagField    = $shift === 'lunch' ? 'is_lunch_tip_applied' : 'is_dinner_tip_applied';
+        $denyField    = $shift === 'lunch' ? 'is_lunch_tip_denied'  : 'is_dinner_tip_denied';
+        $rowStaffIds  = array_map(fn (array $r): int => (int) $r['staff_id'], $this->rows);
+
+        // staff_id => 確定 weight (0-100 整数) のマップ（tip_weight_override として Attendance に書き戻す用）
+        $rowWeightMap = [];
+        foreach ($this->rows as $row) {
+            $w = $this->snapTipWeightToMasterGrid(
+                (float) TipCalculationService::normalizeWeightScalar($row['weight'] ?? 0)
+            );
+            $rowWeightMap[(int) $row['staff_id']] = (int) round($w);
+        }
+
+        DB::transaction(function () use ($savedTotal, $businessDate, $shift, $flagField, $denyField, $rowStaffIds, $rowWeightMap): void {
             $tip = DailyTip::query()->updateOrCreate(
                 [
-                    'business_date' => $this->data['business_date'] ?? null,
-                    'shift' => $this->data['shift'] ?? 'lunch',
+                    'business_date' => $businessDate,
+                    'shift' => $shift,
                 ],
                 [
                     'total_amount' => $savedTotal,
@@ -335,6 +376,39 @@ class CalculateTips extends Page
                 DailyTipAuditContext::suppressDistributionAudit(false);
             }
 
+            // --- Attendance フラグ同期 ---
+            // 確定前時点で pool に含まれていたスタッフ（打刻あり OR flag=true, かつ deny=false）を取得し revoke 対象を特定する。
+            // flag=true のみ取得すると打刻のみ pool 入りスタッフが除外できないため、loadRows と同じ条件で取得する。
+            $flaggedBefore = TipAttendanceScope::applyGoldenFormula(
+                Attendance::query()->whereDate('date', $businessDate),
+                $shift === 'dinner' ? 'dinner' : 'lunch',
+            )
+                ->pluck('staff_id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+
+            // $rows にいるスタッフ: flag を true に、deny をクリア（Attendance がなければ新規作成）。
+            // 確定 weight を tip_weight_override として書き戻し、次回 loadRows 時に一致させる。
+            foreach ($rowStaffIds as $staffId) {
+                Attendance::query()->updateOrCreate(
+                    ['staff_id' => $staffId, 'date' => $businessDate],
+                    [
+                        $flagField            => true,
+                        $denyField            => false,
+                        'tip_weight_override' => $rowWeightMap[$staffId] ?? null,
+                    ]
+                );
+            }
+
+            // $rows にいないが以前 pool にいたスタッフ: flag を false, deny を true に。
+            $toRevoke = array_values(array_diff($flaggedBefore, $rowStaffIds));
+            if ($toRevoke !== []) {
+                Attendance::query()
+                    ->whereDate('date', $businessDate)
+                    ->whereIn('staff_id', $toRevoke)
+                    ->update([$flagField => false, $denyField => true]);
+            }
+
             DailyTipAuditLogger::write(
                 'distribution_recalculated',
                 $tip->business_date?->toDateString(),
@@ -344,6 +418,16 @@ class CalculateTips extends Page
                     'removed_count' => $beforeCount,
                     'created_count' => $createdCount,
                     'final_total_amount' => (float) $tip->total_amount,
+                ]
+            );
+
+            DailyTipAuditLogger::write(
+                'attendance_tip_flag_synced',
+                $businessDate,
+                $shift,
+                [
+                    'flagged_staff_ids' => $rowStaffIds,
+                    'revoked_staff_ids' => $toRevoke,
                 ]
             );
         });
@@ -361,13 +445,10 @@ class CalculateTips extends Page
         $businessDate = $this->data['business_date'] ?? BusinessDate::current()->toDateString();
         $shift = $this->data['shift'] ?? 'lunch';
 
-        $attendances = Attendance::query()
-            ->whereDate('date', $businessDate)
-            ->when(
-                $shift === 'lunch',
-                fn ($query) => $query->whereNotNull('lunch_in_at'),
-                fn ($query) => $query->whereNotNull('dinner_in_at')
-            )
+        $attendances = TipAttendanceScope::applyGoldenFormula(
+            Attendance::query()->whereDate('date', $businessDate),
+            $shift === 'dinner' ? 'dinner' : 'lunch',
+        )
             ->whereHas('staff')
             ->with(['staff' => fn ($query) => $query->with('jobLevel')])
             ->get()
@@ -376,18 +457,12 @@ class CalculateTips extends Page
             ->values();
 
         $this->rows = $attendances->map(function (Attendance $attendance): array {
-            $lateMinutes = (int) ($attendance->late_minutes ?? 0);
-            $isTardy = $lateMinutes > 0;
-
-            if ((bool) ($attendance->is_edited_by_admin ?? false) && $lateMinutes === 0) {
-                $isTardy = false;
-            }
-
-            $rawWeight = $attendance->staff->jobLevel?->default_weight;
+            $rawWeight = $attendance->tip_weight_override
+                ?? $attendance->staff->jobLevel?->default_weight;
             $base = $rawWeight === null
                 ? TipCalculationService::DEFAULT_DISTRIBUTION_WEIGHT
                 : (float) TipCalculationService::normalizeWeightScalar($rawWeight);
-            $defaultWeight = $isTardy ? 0.0 : $this->snapTipWeightToMasterGrid($base);
+            $defaultWeight = $this->snapTipWeightToMasterGrid($base);
 
             return [
                 'staff_id' => (int) $attendance->staff_id,
@@ -395,7 +470,7 @@ class CalculateTips extends Page
                 'job_level' => (string) ($attendance->staff->jobLevel?->name ?? 'Unassigned'),
                 'weight' => $defaultWeight,
                 'amount' => 0.0,
-                'is_tardy_deprived' => $isTardy,
+                'is_tardy_deprived' => false,
                 'is_manual_added' => false,
                 'note' => null,
             ];

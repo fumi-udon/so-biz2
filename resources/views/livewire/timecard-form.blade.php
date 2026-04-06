@@ -313,6 +313,18 @@
                     My page (retour)
                 </button>
             </div>
+        @elseif ($tipModalState === 'SKIP')
+            <div class="rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 p-4 text-gray-100">
+                <p class="mb-2 text-lg font-black">✅ Pointage enregistre !</p>
+                <p class="mb-4 text-sm font-bold">Merci pour votre ponctualite !</p>
+                <button
+                    type="button"
+                    wire:click="declineTipAndRedirect"
+                    class="w-full rounded-lg bg-slate-500 px-3 py-2 text-sm font-extrabold text-gray-100 hover:bg-slate-400 active:scale-95 transition-all"
+                >
+                    ▶ Mon espace
+                </button>
+            </div>
         @endif
     </x-filament::modal>
 

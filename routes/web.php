@@ -3,6 +3,7 @@
 use App\Http\Controllers\ClientInventoryController;
 use App\Http\Controllers\CloseCheckController;
 use App\Http\Controllers\MyPageController;
+use App\Http\Controllers\NewsNoteController;
 use App\Livewire\TimecardForm;
 use App\Livewire\ClientOrderForm;
 use App\Models\User;
@@ -13,7 +14,107 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function (Request $request) {
     $request->session()->forget('mypage_staff_id');
 
-    return view('welcome');
+    // ── スタッフリスト（MyPage モーダル / Note モーダル用） ─────────────
+    $mypageStaffList = \App\Models\Staff::query()->where('is_active', true)->orderBy('name')->get();
+    $recentNews      = \App\Models\NewsNote::recentDays(5);
+
+    // ── 当日チップ対象者（打刻 + 申請 + 非剥奪） ─────────────────────────
+    $today = \App\Support\BusinessDate::current()->toDateString();
+    $tipLunchAppliers = \App\Support\TipAttendanceScope::applyGoldenFormula(
+        \App\Models\Attendance::query()->whereDate('date', $today),
+        'lunch',
+    )
+        ->with('staff:id,name')
+        ->get()
+        ->pluck('staff')
+        ->filter()
+        ->values();
+    $tipDinnerAppliers = \App\Support\TipAttendanceScope::applyGoldenFormula(
+        \App\Models\Attendance::query()->whereDate('date', $today),
+        'dinner',
+    )
+        ->with('staff:id,name')
+        ->get()
+        ->pluck('staff')
+        ->filter()
+        ->values();
+
+    // ── 勤怠ガント用集計 ─────────────────────────────────────────────────
+    $bd              = \App\Support\BusinessDate::current();
+    $ganttMonthStart = $bd->copy()->startOfMonth()->toDateString();
+    $ganttMonthEnd   = $bd->copy()->toDateString();
+    $ganttMonthLabel = $bd->copy()->format('M Y');
+
+    $ganttAllStaff = \App\Models\Staff::query()
+        ->where('is_active', true)
+        ->whereHas('jobLevel', fn ($q) => $q->where('level', '!=', 10))
+        ->with('jobLevel')
+        ->orderBy('name')
+        ->get();
+
+    // 当月 Attendance を一括取得してスタッフ別 + 日付別にインデックス
+    $ganttAllAttendances = \App\Models\Attendance::query()
+        ->whereIn('staff_id', $ganttAllStaff->pluck('id'))
+        ->whereBetween('date', [$ganttMonthStart, $ganttMonthEnd])
+        ->get();
+
+    $ganttAttendanceMap = [];
+    foreach ($ganttAllAttendances as $att) {
+        $dateStr = \Illuminate\Support\Carbon::parse($att->date)->toDateString();
+        $ganttAttendanceMap[$att->staff_id][$dateStr] = $att;
+    }
+
+    $ganttHolidaySet = \App\Support\StoreHolidaySetting::dateSet();
+    $ganttStaffIds   = $ganttAllStaff->pluck('id')->all();
+    $ganttAbsenceMap = \App\Support\AbsenceScope::loadAbsenceMapForStaffInRange($ganttStaffIds, $ganttMonthStart, $ganttMonthEnd);
+
+    $ganttRows = $ganttAllStaff->map(function ($s) use ($ganttAttendanceMap, $ganttMonthStart, $ganttMonthEnd, $ganttHolidaySet, $ganttAbsenceMap) {
+        $staffAttByDate = $ganttAttendanceMap[$s->id] ?? [];
+
+        // 遅刻カウント
+        $late = collect($staffAttByDate)->filter(fn ($r) => (int) ($r->late_minutes ?? 0) > 0)->count();
+
+        // 欠勤カウント（AbsenceScope: 休業日・出勤・確定欠勤）
+        $absent      = 0;
+        $absentDates = [];
+        $cursor      = \Illuminate\Support\Carbon::parse($ganttMonthStart);
+        $endCarbon   = \Illuminate\Support\Carbon::parse($ganttMonthEnd);
+        while ($cursor->lte($endCarbon)) {
+            $d   = $cursor->toDateString();
+            $row = $staffAttByDate[$d] ?? null;
+            $hasAbs = isset($ganttAbsenceMap[$s->id][$d]);
+            if (\App\Support\AbsenceScope::resolveDay($d, $row, $ganttHolidaySet, $hasAbs) === \App\Support\AbsenceScope::STATUS_ABSENT) {
+                $absent++;
+                $absentDates[] = $d;
+            }
+            $cursor->addDay();
+        }
+
+        return [
+            'staff'        => $s,
+            'late'         => $late,
+            'absent'       => $absent,
+            'absent_dates' => $absentDates,
+            'total'        => $late + $absent,
+        ];
+    })->sortByDesc('total')->values();
+
+    $ganttBravo       = $ganttRows->filter(fn ($r) => $r['total'] === 0)->values();
+    $ganttProblematic = $ganttRows->filter(fn ($r) => $r['total'] > 0)->values();
+    $ganttMaxVal      = max((int) ($ganttProblematic->max('total') ?? 0), 1);
+
+    return view('welcome', compact(
+        'mypageStaffList',
+        'recentNews',
+        'today',
+        'tipLunchAppliers',
+        'tipDinnerAppliers',
+        'ganttMonthLabel',
+        'ganttRows',
+        'ganttBravo',
+        'ganttProblematic',
+        'ganttMaxVal',
+    ));
 })->name('home');
 
 Route::get('/order/{table_number}', ClientOrderForm::class)->name('order.table');
@@ -32,6 +133,16 @@ Route::post('/mypage', [MyPageController::class, 'store'])->name('mypage.store')
 Route::post('/mypage/auto-logout', [MyPageController::class, 'autoLogout'])->name('mypage.auto-logout');
 Route::get('/mypage/attendance', [MyPageController::class, 'attendance'])->name('mypage.attendance');
 Route::post('/mypage/attendance', [MyPageController::class, 'updateAttendance'])->name('mypage.attendance.update');
+Route::post('/mypage/attendance/authorize-edit', [MyPageController::class, 'authorizeEdit'])->name('mypage.attendance.authorize-edit');
+Route::post('/mypage/attendance/patch', [MyPageController::class, 'patchAttendance'])->name('mypage.attendance.patch');
+
+// 固定パスを {id} の前に並べること（ルータは上から順にマッチするため）
+Route::post('/news/auth', [NewsNoteController::class, 'auth'])->name('news.auth');
+Route::post('/news/logout', [NewsNoteController::class, 'logout'])->name('news.logout');
+Route::get('/news/manage', [NewsNoteController::class, 'manage'])->name('news.manage');
+Route::post('/news', [NewsNoteController::class, 'store'])->name('news.store');
+Route::post('/news/{id}', [NewsNoteController::class, 'update'])->name('news.update');
+Route::post('/news/{id}/delete', [NewsNoteController::class, 'destroy'])->name('news.destroy');
 
 Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/', [ClientInventoryController::class, 'index'])->name('index');

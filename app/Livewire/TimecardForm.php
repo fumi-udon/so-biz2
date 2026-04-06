@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Attendance;
 use App\Models\Staff;
+use App\Services\TipCalculationService;
 use App\Services\TimecardPinValidator;
 use App\Services\TimecardPunchOutcome;
 use App\Services\TimecardPunchService;
@@ -150,6 +151,7 @@ class TimecardForm extends Component
         }
 
         $staff = Staff::query()
+            ->with('jobLevel')
             ->where('id', $this->authenticatedStaffId)
             ->where('is_active', true)
             ->first();
@@ -173,8 +175,9 @@ class TimecardForm extends Component
         $this->syncExtraMealDefault();
 
         if (in_array($action, ['lunch_in', 'dinner_in'], true)) {
-            $isLate = $outcome->postFlow === 'mypage_late' && ($outcome->lateMinutes ?? 0) > 0;
-            $this->openTipResultModal($action, $isLate);
+            $isLate      = $outcome->postFlow === 'mypage_late' && ($outcome->lateMinutes ?? 0) > 0;
+            $isZeroWeight = TipCalculationService::normalizeWeightScalar($staff->jobLevel?->default_weight) <= 0.0;
+            $this->openTipResultModal($action, $isLate, $isZeroWeight);
 
             return;
         }
@@ -217,6 +220,7 @@ class TimecardForm extends Component
         ]);
 
         $staff = Staff::query()
+            ->with('jobLevel')
             ->where('id', $this->authenticatedStaffId)
             ->where('is_active', true)
             ->first();
@@ -244,8 +248,9 @@ class TimecardForm extends Component
         $this->refreshShiftState($staff);
         $this->syncExtraMealDefault();
 
-        $action = $this->extraMeal === 'lunch' ? 'lunch_in' : 'dinner_in';
-        $this->openTipResultModal($action, false);
+        $action       = $this->extraMeal === 'lunch' ? 'lunch_in' : 'dinner_in';
+        $isZeroWeight = TipCalculationService::normalizeWeightScalar($staff->jobLevel?->default_weight) <= 0.0;
+        $this->openTipResultModal($action, false, $isZeroWeight);
     }
 
     public function resetAfterPunch(): void
@@ -273,6 +278,20 @@ class TimecardForm extends Component
     {
         if ($this->authenticatedStaffId === null || $this->tipTargetShift === null) {
             return redirect()->route('mypage.index');
+        }
+
+        // weight = 0 のスタッフは自己申請不可（Manager 手動付与経路のみ許可）
+        $staffForWeight = Staff::query()
+            ->with('jobLevel')
+            ->where('id', $this->authenticatedStaffId)
+            ->where('is_active', true)
+            ->first();
+
+        if (TipCalculationService::normalizeWeightScalar($staffForWeight?->jobLevel?->default_weight) <= 0.0) {
+            session()->put('mypage_staff_id', $this->authenticatedStaffId);
+            $this->resetTipModalState();
+
+            return redirect()->route('mypage.index', ['staff_id' => $this->authenticatedStaffId]);
         }
 
         $dateString = app(TimecardPunchService::class)->resolveTargetBusinessDate()->toDateString();
@@ -375,7 +394,7 @@ class TimecardForm extends Component
     /**
      * Semaine du lundi au dimanche (now()): pointages enregistres dans `attendances`.
      *
-     * @return list<array{label_fr: string, date_label: string, is_today: bool, lunch: string, dinner: string, scheduled_in: string}>
+     * @return list<array{label_fr: string, date_label: string, is_today: bool, lunch: string, dinner: string, scheduled_in: string}> scheduled_in: L/D 予定スナップショット
      */
     private function buildWeeklyMissionRows(int $staffId): array
     {
@@ -403,11 +422,28 @@ class TimecardForm extends Component
                 'is_today' => $day->isSameDay($businessToday),
                 'lunch' => $this->formatAttendanceMealRange($att, 'lunch'),
                 'dinner' => $this->formatAttendanceMealRange($att, 'dinner'),
-                'scheduled_in' => $att?->scheduled_in_at !== null ? $att->scheduled_in_at->format('d/m H:i') : '—',
+                'scheduled_in' => $this->formatScheduledSnapshotsForRow($att),
             ];
         }
 
         return $rows;
+    }
+
+    private function formatScheduledSnapshotsForRow(?Attendance $att): string
+    {
+        if ($att === null) {
+            return '—';
+        }
+
+        $parts = [];
+        if ($att->scheduled_in_at !== null) {
+            $parts[] = 'L '.$att->scheduled_in_at->format('H:i');
+        }
+        if ($att->scheduled_dinner_at !== null) {
+            $parts[] = 'D '.$att->scheduled_dinner_at->format('H:i');
+        }
+
+        return $parts === [] ? '—' : implode(' · ', $parts);
     }
 
     /**
@@ -496,11 +532,11 @@ class TimecardForm extends Component
         $this->js('setTimeout(() => $wire.closePunchCompleteModal(), 4200)');
     }
 
-    private function openTipResultModal(string $action, bool $isLate): void
+    private function openTipResultModal(string $action, bool $isLate, bool $isZeroWeight = false): void
     {
         $this->tipTargetShift = $action === 'lunch_in' ? 'lunch' : 'dinner';
-        $this->tipModalState = $isLate ? 'LOSE' : 'WIN';
-        $this->showTipModal = true;
+        $this->tipModalState  = $isZeroWeight ? 'SKIP' : ($isLate ? 'LOSE' : 'WIN');
+        $this->showTipModal   = true;
         $this->dispatch('open-modal', id: 'tip-result-modal');
     }
 

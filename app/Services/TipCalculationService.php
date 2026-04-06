@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\DailyTip;
+use App\Support\TipAttendanceScope;
 use Illuminate\Support\Facades\DB;
 
 class TipCalculationService
@@ -67,13 +68,10 @@ class TipCalculationService
     {
         $dailyTip->loadMissing('distributions');
 
-        $attendances = Attendance::query()
-            ->whereDate('date', $dailyTip->business_date)
-            ->when(
-                $dailyTip->shift === 'lunch',
-                fn ($query) => $query->whereNotNull('lunch_in_at'),
-                fn ($query) => $query->whereNotNull('dinner_in_at'),
-            )
+        $attendances = TipAttendanceScope::applyGoldenFormula(
+            Attendance::query()->whereDate('date', $dailyTip->business_date),
+            $dailyTip->shift === 'dinner' ? 'dinner' : 'lunch',
+        )
             ->with(['staff' => fn ($query) => $query->withTrashed()->with('jobLevel')])
             ->get()
             ->filter(fn (Attendance $attendance): bool => $attendance->staff !== null)
@@ -89,24 +87,15 @@ class TipCalculationService
                 continue;
             }
 
-            $rawWeight = $attendance->staff->jobLevel?->default_weight;
+            $rawWeight = $attendance->tip_weight_override
+                ?? $attendance->staff->jobLevel?->default_weight;
             $weight = $rawWeight === null ? self::DEFAULT_DISTRIBUTION_WEIGHT : self::normalizeWeightScalar($rawWeight);
-            $lateMinutes = (int) ($attendance->late_minutes ?? 0);
-            $isTardy = $lateMinutes > 0;
-
-            if ((bool) ($attendance->is_edited_by_admin ?? false) && $lateMinutes === 0) {
-                $isTardy = false;
-            }
-
-            if ($isTardy) {
-                $weight = 0.0;
-            }
 
             $inserts[] = [
                 'staff_id' => $attendance->staff_id,
                 'weight' => $weight,
                 'amount' => 0,
-                'is_tardy_deprived' => $isTardy,
+                'is_tardy_deprived' => false,
                 'is_manual_added' => false,
                 'note' => null,
             ];

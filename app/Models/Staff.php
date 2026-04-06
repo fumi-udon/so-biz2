@@ -79,6 +79,14 @@ class Staff extends Model
     }
 
     /**
+     * @return HasMany<StaffAbsence, $this>
+     */
+    public function staffAbsences(): HasMany
+    {
+        return $this->hasMany(StaffAbsence::class);
+    }
+
+    /**
      * @return HasMany<RoutineTask, $this>
      */
     public function assignedRoutineTasks(): HasMany

@@ -70,11 +70,22 @@
         @php
             $todayLabel = \App\Support\BusinessDate::current()->format('d/m');
             $todayAttendanceRow = $todayAttendance ?? null;
-            $todayLate = (int) ($todayAttendanceRow?->late_minutes ?? 0) > 0;
             $lunchWorked = $todayAttendanceRow?->lunch_in_at !== null;
             $dinnerWorked = $todayAttendanceRow?->dinner_in_at !== null;
-            $lunchApplied = (bool) ($todayAttendanceRow?->is_lunch_tip_applied ?? false);
-            $dinnerApplied = (bool) ($todayAttendanceRow?->is_dinner_tip_applied ?? false);
+            $lunchFlagApplied  = (bool) ($todayAttendanceRow?->is_lunch_tip_applied ?? false);
+            $dinnerFlagApplied = (bool) ($todayAttendanceRow?->is_dinner_tip_applied ?? false);
+            $lunchDenied  = (bool) ($todayAttendanceRow?->is_lunch_tip_denied ?? false);
+            $dinnerDenied = (bool) ($todayAttendanceRow?->is_dinner_tip_denied ?? false);
+            // TipAttendanceScope（打刻 + 申請 + 非剥奪）= チップ配分対象
+            $lunchTipEligible = $todayAttendanceRow
+                ? \App\Support\TipAttendanceScope::lunchEligible($todayAttendanceRow)
+                : false;
+            $dinnerTipEligible = $todayAttendanceRow
+                ? \App\Support\TipAttendanceScope::dinnerEligible($todayAttendanceRow)
+                : false;
+            // レガシー: 打刻なし・apply のみ（旧データ）
+            $lunchTipOnly  = ! $lunchWorked && $lunchFlagApplied && ! $lunchDenied;
+            $dinnerTipOnly = ! $dinnerWorked && $dinnerFlagApplied && ! $dinnerDenied;
         @endphp
         <section class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <article class="rounded-2xl border-2 border-black bg-gradient-to-br from-indigo-100 via-sky-100 to-cyan-100 p-2 text-gray-900 shadow-[0_6px_0_0_rgba(0,0,0,1)] dark:border-slate-500/40 dark:from-gray-900 dark:via-indigo-950/40 dark:to-slate-900 dark:text-gray-100">
@@ -104,18 +115,42 @@
                         <div class="mt-1 rounded-lg border border-amber-300/70 bg-white/80 p-1.5 dark:border-amber-500/30 dark:bg-white/5">
                             <div class="mb-1 text-xs font-extrabold text-amber-700 dark:text-amber-200">🪙 Statut tip du jour</div>
                             <div class="space-y-1 text-xs leading-relaxed">
-                                <p class="{{ $lunchApplied ? 'font-semibold text-emerald-300' : ($lunchWorked && $todayLate ? 'text-slate-300/80' : 'text-yellow-200/90') }}">
-                                    @if (! $lunchWorked)
-                                            <span class="text-slate-500/90 dark:text-slate-300/70">😶‍🌫️ {{ $todayLabel }} Déjeuner tip -- (absent)</span>
-                                    @elseif ($lunchApplied)
+                                <p class="
+                                    @if ($lunchDenied)
+                                        text-rose-300/90
+                                    @elseif ($lunchTipOnly)
+                                        font-semibold text-emerald-300
+                                    @elseif (! $lunchWorked)
+                                        text-slate-500/90 dark:text-slate-300/70
+                                    @elseif ($lunchLate)
+                                        text-slate-300/80
+                                    @elseif ($lunchTipEligible)
+                                        font-semibold text-emerald-300
+                                    @else
+                                        text-yellow-200/90
+                                    @endif
+                                ">
+                                    @if ($lunchDenied)
+                                        <span class="inline-flex items-center gap-1 rounded border border-rose-300/70 bg-white px-1.5 py-0.5 text-xs font-semibold text-rose-800">
+                                            <span>⛔</span>
+                                            <span>{{ $todayLabel }} Déjeuner : tip exclu (manager)</span>
+                                        </span>
+                                    @elseif ($lunchTipOnly)
                                         <span class="inline-flex items-center gap-1 rounded border border-emerald-300/70 bg-white px-1.5 py-0.5 text-sm font-black text-emerald-700">
                                             <span>✅</span>
-                                            <span>{{ $todayLabel }} Déjeuner : demande tip Bravo terminée</span>
+                                            <span>{{ $todayLabel }} Déjeuner : tip accordé par manager</span>
                                         </span>
-                                    @elseif ($todayLate)
+                                    @elseif (! $lunchWorked)
+                                        <span class="text-slate-500/90 dark:text-slate-300/70">😶‍🌫️ {{ $todayLabel }} Déjeuner tip -- (absent)</span>
+                                    @elseif ($lunchLate)
                                         <span class="inline-flex items-center gap-1 rounded border border-slate-300/60 bg-slate-100/90 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
                                             <span>📋</span>
                                             <span>{{ $todayLabel }} Déjeuner : tip non autorisé (retard)</span>
+                                        </span>
+                                    @elseif ($lunchTipEligible)
+                                        <span class="inline-flex items-center gap-1 rounded border border-emerald-300/70 bg-white px-1.5 py-0.5 text-sm font-black text-emerald-700">
+                                            <span>✅</span>
+                                            <span>{{ $todayLabel }} Déjeuner : demande tip Bravo terminée</span>
                                         </span>
                                     @else
                                         <span class="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2 py-1 text-sm font-black text-emerald-700 shadow-sm ring-1 ring-emerald-200/70">
@@ -124,23 +159,47 @@
                                         </span>
                                     @endif
                                 </p>
-                                <p class="{{ $dinnerApplied ? 'font-semibold text-emerald-300' : ($dinnerWorked && $todayLate ? 'text-slate-300/80' : 'text-yellow-200/90') }}">
-                                    @if (! $dinnerWorked)
-                                        <span class="text-slate-500/90 dark:text-slate-300/70">😶‍🌫️ {{ $todayLabel }} Dîner tip -- (absent)</span>
-                                    @elseif ($dinnerApplied)
+                                <p class="
+                                    @if ($dinnerDenied)
+                                        text-rose-300/90
+                                    @elseif ($dinnerTipOnly)
+                                        font-semibold text-emerald-300
+                                    @elseif (! $dinnerWorked)
+                                        text-slate-500/90 dark:text-slate-300/70
+                                    @elseif ($dinnerLate)
+                                        text-slate-300/80
+                                    @elseif ($dinnerTipEligible)
+                                        font-semibold text-emerald-300
+                                    @else
+                                        text-yellow-200/90
+                                    @endif
+                                ">
+                                    @if ($dinnerDenied)
+                                        <span class="inline-flex items-center gap-1 rounded border border-rose-300/70 bg-white px-1.5 py-0.5 text-xs font-semibold text-rose-800">
+                                            <span>⛔</span>
+                                            <span>{{ $todayLabel }} Dîner : tip exclu (manager)</span>
+                                        </span>
+                                    @elseif ($dinnerTipOnly)
                                         <span class="inline-flex items-center gap-1 rounded border border-emerald-300/70 bg-white px-1.5 py-0.5 text-sm font-black text-emerald-700">
                                             <span>✅</span>
-                                            <span>{{ $todayLabel }} Dîner : demande tip Bravo terminée</span>
+                                            <span>{{ $todayLabel }} Dîner : tip accordé par manager</span>
                                         </span>
-                                    @elseif ($todayLate)
+                                    @elseif (! $dinnerWorked)
+                                        <span class="text-slate-500/90 dark:text-slate-300/70">😶‍🌫️ {{ $todayLabel }} Dîner tip -- (absent)</span>
+                                    @elseif ($dinnerLate)
                                         <span class="inline-flex items-center gap-1 rounded border border-slate-300/60 bg-slate-100/90 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
                                             <span>📋</span>
                                             <span>{{ $todayLabel }} Dîner : tip non autorisé (retard)</span>
                                         </span>
+                                    @elseif ($dinnerTipEligible)
+                                        <span class="inline-flex items-center gap-1 rounded border border-emerald-300/70 bg-white px-1.5 py-0.5 text-sm font-black text-emerald-700">
+                                            <span>✅</span>
+                                            <span>{{ $todayLabel }} Dîner : demande tip Bravo terminée</span>
+                                        </span>
                                     @else
                                         <span class="inline-flex items-center gap-1.5 rounded-md border border-sky-300 bg-white px-2 py-1 text-sm font-black text-sky-700 shadow-sm ring-1 ring-sky-200/70">
                                             <span class="rounded bg-sky-600 px-1 py-0.5 text-xs font-extrabold tracking-wide text-white">BRAVO</span>
-                                            <span>🎊✅ {{ $todayLabel }} Dîner : Tip validée</span>
+                                            <span>🎊✅ {{ $todayLabel }} Dîner : en attente de réception du tip</span>
                                         </span>
                                     @endif
                                 </p>
@@ -153,24 +212,24 @@
                             </span>
                         </div>
                     @endif
-                    <div class="mt-1 rounded-lg border border-indigo-300/70 bg-white/80 p-1 dark:border-indigo-400/20 dark:bg-white/5">
-                        <div class="mb-1 flex items-center gap-1 text-xs font-extrabold text-indigo-700 dark:text-indigo-200">
+                    <div class="mt-1 rounded-lg border border-indigo-300/70 bg-white/80 p-1.5 dark:border-indigo-400/20 dark:bg-white/5">
+                        <div class="mb-1 flex items-center gap-1.5 text-xs font-extrabold text-indigo-700 dark:text-indigo-200">
                             <span>💠</span>
                             <span>Historique tip</span>
-                            <span class="ml-auto rounded-full border border-indigo-200 bg-white/80 px-1.5 py-0.5 text-xs font-bold text-indigo-700 dark:border-indigo-500/30 dark:bg-white/10 dark:text-indigo-200">Last 3</span>
                         </div>
-                        <table class="w-full text-xs">
-                            <thead>
-                                <tr class="border-b border-indigo-200/80 dark:border-indigo-500/20">
-                                    <th class="px-1 py-0.5 text-left font-semibold">📅 Date</th>
-                                    <th class="px-1 py-0.5 text-right font-semibold">☀️ Lunch</th>
-                                    <th class="px-1 py-0.5 text-right font-semibold">🌙 Dinner</th>
-                                    <th class="px-1 py-0.5 text-right font-semibold">💎 Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse (($tipRecentNonZero3 ?? collect()) as $d)
-                                    <tr class="tip-row border-b border-indigo-100/90 odd:bg-white/70 even:bg-indigo-50/70 dark:border-indigo-500/10 dark:odd:bg-white/5 dark:even:bg-indigo-900/10 last:border-b-0">
+                        <div class="overflow-x-auto">
+                            <table class="w-full min-w-[350px] border-separate border-spacing-0 text-xs">
+                                <thead>
+                                    <tr>
+                                        <th class="sticky left-0 z-10 bg-white/80 dark:bg-white/5 px-2 py-1 text-left text-indigo-800 dark:text-indigo-100 font-bold border-b border-indigo-200/80 dark:border-indigo-500/20 rounded-tl-lg">📅 Date</th>
+                                        <th class="px-2 py-1 text-right text-indigo-700 dark:text-indigo-200 font-semibold border-b border-indigo-200/80 dark:border-indigo-500/20">☀️ Lunch</th>
+                                        <th class="px-2 py-1 text-right text-indigo-700 dark:text-indigo-200 font-semibold border-b border-indigo-200/80 dark:border-indigo-500/20">🌙 Dinner</th>
+                                        <th class="px-2 py-1 text-right text-indigo-900 dark:text-indigo-50 font-bold border-b border-indigo-200/80 dark:border-indigo-500/20 rounded-tr-lg">💎 Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse (($tipRecentNonZero3 ?? collect()) as $d)
+                                        <tr class="tip-row border-b border-indigo-100/80 odd:bg-white even:bg-indigo-50 dark:border-indigo-500/10 dark:odd:bg-white/5 dark:even:bg-indigo-950/10 last:border-b-0">
                                         <td class="px-1 py-0.5 font-mono">{{ $d['date'] }}</td>
                                         <td class="px-1 py-0.5 text-right font-mono">{{ number_format((float) ($d['lunch'] ?? 0), 1) }}</td>
                                         <td class="px-1 py-0.5 text-right font-mono">{{ number_format((float) ($d['dinner'] ?? 0), 1) }}</td>
@@ -285,7 +344,7 @@
             @php
                 $todayBusinessDate = \App\Support\BusinessDate::current()->toDateString();
             @endphp
-            <section class="mt-2 rounded-2xl border border-slate-300/80 bg-white/80 p-2 shadow-sm dark:border-slate-600/40 dark:bg-slate-900/60">
+            <!-- <section class="mt-2 rounded-2xl border border-slate-300/80 bg-white/80 p-2 shadow-sm dark:border-slate-600/40 dark:bg-slate-900/60">
                 <h3 class="mb-2 text-sm font-bold text-slate-800 dark:text-slate-100">📊 Resultats mensuels de presence</h3>
                 <div class="overflow-x-auto">
                     <table class="min-w-full text-[11px]">
@@ -385,7 +444,7 @@
                         </div>
                     </div>
                 </div>
-            </section>
+            </section> -->
         @endif
     </main>
 

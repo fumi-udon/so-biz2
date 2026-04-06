@@ -4,7 +4,9 @@ namespace App\Filament\Resources\Attendances\Widgets;
 
 use App\Models\Attendance;
 use App\Models\Staff;
+use App\Support\AbsenceScope;
 use App\Support\BusinessDate;
+use App\Support\StoreHolidaySetting;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Collection;
 
@@ -21,7 +23,7 @@ class TodayAttendanceWidget extends Widget
     /**
      * @return array{
      *     businessDate: string,
-     *     staffRows: Collection<int, array{staff: Staff, attendance: Attendance|null, status: string}>
+     *     staffRows: Collection<int, array{staff: Staff, attendance: Attendance|null, status: 'working'|'off'|'absent'|'pending'|'holiday'}>
      * }
      */
     protected function getViewData(): array
@@ -39,14 +41,26 @@ class TodayAttendanceWidget extends Widget
             ->get()
             ->keyBy('staff_id');
 
-        $rows = $staff->map(function (Staff $s) use ($attendances): array {
+        $holidaySet = StoreHolidaySetting::dateSet();
+        $staffIds = $staff->pluck('id')->all();
+        $absenceMap = AbsenceScope::loadAbsenceMapForStaffInRange($staffIds, $dateString, $dateString);
+
+        $rows = $staff->map(function (Staff $s) use ($attendances, $holidaySet, $absenceMap, $dateString): array {
             /** @var Attendance|null $att */
             $att = $attendances->get($s->id);
-            $status = 'absent';
+            $status = 'pending';
             if ($att !== null) {
                 $workingLunch = $att->lunch_in_at && ! $att->lunch_out_at;
                 $workingDinner = $att->dinner_in_at && ! $att->dinner_out_at;
                 $status = ($workingLunch || $workingDinner) ? 'working' : 'off';
+            } else {
+                $hasAbs = isset($absenceMap[$s->id][$dateString]);
+                $resolved = AbsenceScope::resolveDay($dateString, null, $holidaySet, $hasAbs);
+                $status = match ($resolved) {
+                    AbsenceScope::STATUS_NOT_ABSENT => 'holiday',
+                    AbsenceScope::STATUS_ABSENT => 'absent',
+                    default => 'pending',
+                };
             }
 
             return [

@@ -17,6 +17,7 @@ class Attendance extends Model
         'shift_type',
         'status',
         'scheduled_in_at',
+        'scheduled_dinner_at',
         'lunch_in_at',
         'lunch_out_at',
         'dinner_in_at',
@@ -24,11 +25,14 @@ class Attendance extends Model
         'late_minutes',
         'is_tip_eligible',
         'is_lunch_tip_applied',
+        'is_lunch_tip_denied',
         'is_dinner_tip_applied',
+        'is_dinner_tip_denied',
         'is_edited_by_admin',
         'admin_note',
         'in_note',
         'out_note',
+        'tip_weight_override',
     ];
 
     /**
@@ -39,14 +43,18 @@ class Attendance extends Model
         return [
             'date' => 'date',
             'scheduled_in_at' => 'datetime',
+            'scheduled_dinner_at' => 'datetime',
             'lunch_in_at' => 'datetime',
             'lunch_out_at' => 'datetime',
             'dinner_in_at' => 'datetime',
             'dinner_out_at' => 'datetime',
             'is_tip_eligible' => 'boolean',
             'is_lunch_tip_applied' => 'boolean',
+            'is_lunch_tip_denied' => 'boolean',
             'is_dinner_tip_applied' => 'boolean',
+            'is_dinner_tip_denied' => 'boolean',
             'is_edited_by_admin' => 'boolean',
+            'tip_weight_override' => 'integer',
         ];
     }
 

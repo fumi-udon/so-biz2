@@ -4,8 +4,11 @@ namespace App\Filament\Widgets;
 
 use App\Models\Attendance;
 use App\Models\Staff;
+use App\Support\AbsenceScope;
+use App\Support\StoreHolidaySetting;
 use App\Support\BusinessDate;
 use Filament\Widgets\Widget;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class HeadquartersAttendanceArcadeWidget extends Widget
@@ -34,26 +37,8 @@ class HeadquartersAttendanceArcadeWidget extends Widget
     {
         $bd = BusinessDate::current();
         $start = $bd->copy()->startOfMonth()->toDateString();
-        $end = $bd->copy()->endOfMonth()->toDateString();
+        $end = $bd->copy()->toDateString();
         $monthLabel = $bd->translatedFormat('Y-m');
-
-        $lateCounts = Attendance::query()
-            ->selectRaw('staff_id, COUNT(*) as c')
-            ->whereBetween('date', [$start, $end])
-            ->where('late_minutes', '>', 0)
-            ->groupBy('staff_id')
-            ->pluck('c', 'staff_id');
-
-        $noPunchCounts = Attendance::query()
-            ->selectRaw('staff_id, COUNT(*) as c')
-            ->whereBetween('date', [$start, $end])
-            ->whereNull('lunch_in_at')
-            ->whereNull('dinner_in_at')
-            ->where(function ($q): void {
-                $q->whereNull('late_minutes')->orWhere('late_minutes', '=', 0);
-            })
-            ->groupBy('staff_id')
-            ->pluck('c', 'staff_id');
 
         $staffList = Staff::query()
             ->where('is_active', true)
@@ -61,9 +46,48 @@ class HeadquartersAttendanceArcadeWidget extends Widget
             ->orderBy('name')
             ->get();
 
-        $rows = $staffList->map(function (Staff $staff) use ($lateCounts, $noPunchCounts): array {
+        // 当月分 Attendance を一括取得し、スタッフ別 + 日付別にインデックス
+        $allAttendances = Attendance::query()
+            ->whereIn('staff_id', $staffList->pluck('id'))
+            ->whereBetween('date', [$start, $end])
+            ->get();
+
+        // [staff_id => [date_string => Attendance]]
+        $attendanceMap = [];
+        foreach ($allAttendances as $att) {
+            $dateStr = Carbon::parse($att->date)->toDateString();
+            $attendanceMap[$att->staff_id][$dateStr] = $att;
+        }
+
+        // 遅刻カウント: late_minutes > 0 の行数
+        $lateCounts = $allAttendances
+            ->filter(fn (Attendance $a) => (int) ($a->late_minutes ?? 0) > 0)
+            ->groupBy('staff_id')
+            ->map(fn (Collection $g) => $g->count());
+
+        $startCarbon = Carbon::parse($start);
+        $endCarbon   = Carbon::parse($end);
+
+        $holidaySet = StoreHolidaySetting::dateSet();
+        $staffIds = $staffList->pluck('id')->all();
+        $absenceMapByStaff = AbsenceScope::loadAbsenceMapForStaffInRange($staffIds, $start, $end);
+
+        $rows = $staffList->map(function (Staff $staff) use ($lateCounts, $attendanceMap, $startCarbon, $endCarbon, $holidaySet, $absenceMapByStaff): array {
             $late = (int) ($lateCounts[$staff->id] ?? 0);
-            $absentEquiv = (int) ($noPunchCounts[$staff->id] ?? 0);
+
+            $absentEquiv = 0;
+            $cursor = $startCarbon->copy();
+            $staffAttByDate = $attendanceMap[$staff->id] ?? [];
+            while ($cursor->lte($endCarbon)) {
+                $d = $cursor->toDateString();
+                $row = $staffAttByDate[$d] ?? null;
+                $hasAbs = isset($absenceMapByStaff[$staff->id][$d]);
+                if (AbsenceScope::resolveDay($d, $row, $holidaySet, $hasAbs) === AbsenceScope::STATUS_ABSENT) {
+                    $absentEquiv++;
+                }
+                $cursor->addDay();
+            }
+
             $warn = $late >= 3 || $absentEquiv >= 2;
 
             return [

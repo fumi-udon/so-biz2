@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Attendances\Widgets;
 use App\Models\Attendance;
 use App\Models\Staff;
 use App\Support\BusinessDate;
+use App\Support\FixedShiftSchedule;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -60,12 +61,12 @@ class TodayAttendanceRosterWidget extends Widget
             ->where('is_active', true)
             ->orderBy('id')
             ->get()
-            ->filter(fn (Staff $staff) => $attendances->has($staff->id) || self::staffHasShiftOnWeekday($staff, $dayKey))
+            ->filter(fn (Staff $staff) => $attendances->has($staff->id) || FixedShiftSchedule::hasShiftOnDay($staff, $dayKey))
             ->map(function (Staff $staff) use ($attendances, $dayKey, $businessStart): array {
                 $att = $attendances->get($staff->id);
 
-                $lunchScheduledStart = self::scheduledStartFromFixedShifts($staff, $dayKey, 'lunch');
-                $dinnerScheduledStart = self::scheduledStartFromFixedShifts($staff, $dayKey, 'dinner');
+                $lunchScheduledStart = FixedShiftSchedule::start($staff, $dayKey, 'lunch');
+                $dinnerScheduledStart = FixedShiftSchedule::start($staff, $dayKey, 'dinner');
 
                 $lunchStatusData = self::resolveMealLiveStatus(
                     $businessStart,
@@ -142,31 +143,6 @@ class TodayAttendanceRosterWidget extends Widget
     }
 
     /**
-     * シフト開始時刻（slot[0]）を返す。
-     */
-    private static function scheduledStartFromFixedShifts(Staff $staff, string $dayKey, string $mealKey): ?string
-    {
-        $fixed = $staff->fixed_shifts;
-        if (! is_array($fixed)) {
-            return null;
-        }
-
-        $dayShift = $fixed[$dayKey] ?? null;
-        if (! is_array($dayShift)) {
-            return null;
-        }
-
-        $slot = $dayShift[$mealKey] ?? null;
-        if (! is_array($slot) || ! isset($slot[0]) || ! is_string($slot[0])) {
-            return null;
-        }
-
-        $start = trim($slot[0]);
-
-        return $start === '' ? null : $start;
-    }
-
-    /**
      * @return array{status: string, in_time: string|null}
      */
     private static function resolveMealLiveStatus(Carbon $businessStart, ?string $scheduledStart, ?Carbon $inAt): array
@@ -228,28 +204,6 @@ class TodayAttendanceRosterWidget extends Widget
         return 'other';
     }
 
-    private static function staffHasShiftOnWeekday(Staff $staff, string $dayKey): bool
-    {
-        $fixed = $staff->fixed_shifts;
-        if (! is_array($fixed)) {
-            return false;
-        }
-
-        $dayShift = $fixed[$dayKey] ?? null;
-        if (! is_array($dayShift)) {
-            return false;
-        }
-
-        foreach (['lunch', 'dinner'] as $meal) {
-            $slot = $dayShift[$meal] ?? null;
-            if (is_array($slot) && isset($slot[0]) && is_string($slot[0]) && trim($slot[0]) !== '') {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static function formatShiftPlan(Staff $staff, string $dayKey, string $mealKey): string
     {
         $fixed = $staff->fixed_shifts;
@@ -281,7 +235,7 @@ class TodayAttendanceRosterWidget extends Widget
      */
     private static function resolveStatus(Staff $staff, ?Attendance $att, string $dayKey): array
     {
-        $scheduled = self::staffHasShiftOnWeekday($staff, $dayKey);
+        $scheduled = FixedShiftSchedule::hasShiftOnDay($staff, $dayKey);
 
         if ($att === null) {
             return ['no_show', '⚠ 未打刻（予定あり）', 'warning'];

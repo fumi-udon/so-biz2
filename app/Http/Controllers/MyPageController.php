@@ -11,8 +11,13 @@ use App\Models\RoutineTaskLog;
 use App\Models\Staff;
 use App\Models\StaffTip;
 use App\Services\AttendanceStatusResolver;
+use App\Support\AttendanceLateCalculator;
+use App\Support\AbsenceScope;
+use App\Support\StoreHolidaySetting;
 use App\Support\BusinessDate;
+use App\Support\TipAttendanceScope;
 use App\Support\InventorySettingOptions;
+use App\Models\AttendanceEditLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -93,6 +98,8 @@ class MyPageController extends Controller
         $dinnerStatus = 'none';
         $lunchInTime = null;
         $dinnerInTime = null;
+        $lunchLate = false;
+        $dinnerLate = false;
         $totalTipAmount = 0.0;
         $recentTips = collect();
         $tipHistory = collect();
@@ -121,12 +128,22 @@ class MyPageController extends Controller
                 ->first();
             $todayAttendance = $attendance;
 
-            $lunchScheduledStart = $this->scheduledStartFromFixedShifts($staff, $dayKey, 'lunch');
-            $dinnerScheduledStart = $this->scheduledStartFromFixedShifts($staff, $dayKey, 'dinner');
+            $lunchScheduledStart = $attendance?->scheduled_in_at
+                ? $attendance->scheduled_in_at->format('H:i')
+                : null;
+            $dinnerScheduledStart = $attendance?->scheduled_dinner_at
+                ? $attendance->scheduled_dinner_at->format('H:i')
+                : null;
             $lunchStatus = $statusResolver->resolveMealStatus($businessDate, $lunchScheduledStart, $attendance?->lunch_in_at);
             $dinnerStatus = $statusResolver->resolveMealStatus($businessDate, $dinnerScheduledStart, $attendance?->dinner_in_at);
             $lunchInTime = $attendance?->lunch_in_at?->format('H:i');
             $dinnerInTime = $attendance?->dinner_in_at?->format('H:i');
+
+            // 遅刻表示は保存済みスナップショットのみ（DB の late_minutes と同一ロジック）
+            $lunchLate = $attendance !== null
+                && AttendanceLateCalculator::lateMinutesForMeal($attendance->lunch_in_at, $attendance->scheduled_in_at) > 0;
+            $dinnerLate = $attendance !== null
+                && AttendanceLateCalculator::lateMinutesForMeal($attendance->dinner_in_at, $attendance->scheduled_dinner_at) > 0;
 
             $roleCategory = $this->roleCategory((string) ($staff->role ?? ''));
             $roleLabel = match ($roleCategory) {
@@ -324,6 +341,10 @@ class MyPageController extends Controller
                 ->where('staff_id', $staff->id)
                 ->with('dailyTip')
                 ->whereHas('dailyTip')
+                ->whereHas('dailyTip', function ($query) use ($businessDate) {
+                    // 3日前より前の日付
+                    $query->where('business_date', '<', $businessDate->copy()->subDays(3)->toDateString());
+                })
                 ->get()
                 ->groupBy(function (StaffTip $tip): string {
                     return optional($tip->dailyTip?->business_date)?->toDateString() ?? '';
@@ -333,7 +354,6 @@ class MyPageController extends Controller
                     $lunch = (float) $rows
                         ->filter(function (StaffTip $tip): bool {
                             $shift = strtolower((string) ($tip->dailyTip?->shift ?? ''));
-
                             return str_contains($shift, 'lunch');
                         })
                         ->sum('amount');
@@ -341,7 +361,6 @@ class MyPageController extends Controller
                     $dinner = (float) $rows
                         ->filter(function (StaffTip $tip): bool {
                             $shift = strtolower((string) ($tip->dailyTip?->shift ?? ''));
-
                             return str_contains($shift, 'dinner');
                         })
                         ->sum('amount');
@@ -358,10 +377,9 @@ class MyPageController extends Controller
                 })
                 ->filter(fn (array $row): bool => ((float) ($row['total'] ?? 0.0)) >= 0.1)
                 ->sortByDesc(fn (array $row): string => (string) ($row['date_key'] ?? ''))
-                ->take(3)
+                ->take(5)
                 ->map(function (array $row): array {
                     unset($row['date_key']);
-
                     return $row;
                 })
                 ->values();
@@ -383,27 +401,32 @@ class MyPageController extends Controller
                 ->values();
             $monthLateCount = $monthLateDates->count();
 
-            $monthAbsentDates = $monthlyAttendances
-                ->filter(function (Attendance $row) use ($staff): bool {
-                    $workDate = Carbon::parse($row->date);
-                    $dayKeyForRow = strtolower($workDate->englishDayOfWeek);
-                    $hasPlannedShift = filled($this->scheduledStartFromFixedShifts($staff, $dayKeyForRow, 'lunch'))
-                        || filled($this->scheduledStartFromFixedShifts($staff, $dayKeyForRow, 'dinner'));
-                    $hasAnyClockIn = $row->lunch_in_at !== null || $row->dinner_in_at !== null;
-
-                    return $hasPlannedShift && ! $hasAnyClockIn;
-                })
-                ->map(function (Attendance $row): string {
-                    return Carbon::parse($row->date)->format('m/d').' absence';
-                })
-                ->values();
+            // AbsenceScope: 休業日・出勤実績・確定欠勤（StaffAbsence）に基づくリスト
+            $attendanceByDate = $monthlyAttendances->keyBy(fn (Attendance $r) => Carbon::parse($r->date)->toDateString());
+            $holidaySet = StoreHolidaySetting::dateSet();
+            $absenceMap = AbsenceScope::loadAbsenceMapForStaffInRange([$staff->id], $monthStart, $monthEnd);
+            $monthAbsentDates = collect();
+            $cursor = Carbon::parse($monthStart);
+            $cursorEnd = Carbon::parse($monthEnd);
+            while ($cursor->lte($cursorEnd)) {
+                $d = $cursor->toDateString();
+                $rowForDay = $attendanceByDate->get($d);
+                $hasAbs = isset($absenceMap[$staff->id][$d]);
+                if (AbsenceScope::resolveDay($d, $rowForDay, $holidaySet, $hasAbs) === AbsenceScope::STATUS_ABSENT) {
+                    $monthAbsentDates->push($cursor->format('m/d').' absence');
+                }
+                $cursor->addDay();
+            }
+            $monthAbsentDates = $monthAbsentDates->values();
             $monthAbsentCount = $monthAbsentDates->count();
             $monthDamageCount = $monthLateCount;
+            // TipAttendanceScope（打刻 + 申請 + 非剥奪）と同一
             $monthTipWinCount = $monthlyAttendances->reduce(
                 function (int $carry, Attendance $row): int {
-                    return $carry
-                        + ((bool) ($row->is_lunch_tip_applied ?? false) ? 1 : 0)
-                        + ((bool) ($row->is_dinner_tip_applied ?? false) ? 1 : 0);
+                    $lunchWin  = TipAttendanceScope::lunchEligible($row);
+                    $dinnerWin = TipAttendanceScope::dinnerEligible($row);
+
+                    return $carry + ($lunchWin ? 1 : 0) + ($dinnerWin ? 1 : 0);
                 },
                 0,
             );
@@ -418,7 +441,7 @@ class MyPageController extends Controller
             }
         }
         $routinesAllComplete = $staff && ($routineTasks->isEmpty() || $routinesPendingCount === 0);
- dd($monthAttendances);
+ 
         return view('mypage.index', [
             'staffList' => $staffList,
             'staff' => $staff,
@@ -441,6 +464,8 @@ class MyPageController extends Controller
             'dinnerStatus' => $dinnerStatus,
             'lunchInTime' => $lunchInTime,
             'dinnerInTime' => $dinnerInTime,
+            'lunchLate' => $lunchLate,
+            'dinnerLate' => $dinnerLate,
             'totalTipAmount' => $totalTipAmount,
             'recentTips' => $recentTips,
             'tipHistory' => $tipHistory,
@@ -685,6 +710,7 @@ class MyPageController extends Controller
     {
         $staffList = Staff::query()
             ->where('is_active', true)
+            ->with('jobLevel')
             ->orderBy('name')
             ->get();
 
@@ -730,6 +756,19 @@ class MyPageController extends Controller
             }
         }
 
+        $editLogs = $staff
+            ? AttendanceEditLog::query()
+                ->where('target_staff_id', $staff->id)
+                ->where('created_at', '>=', now()->subMonth())
+                ->with([
+                    'editorStaff:id,name',
+                    'attendance:id,date',
+                ])
+                ->orderByDesc('created_at')
+                ->paginate(10)
+                ->withQueryString()
+            : null;
+
         return view('mypage.attendance', [
             'staffList' => $staffList,
             'staff' => $staff,
@@ -739,181 +778,18 @@ class MyPageController extends Controller
             'weekMinutes' => $weekMinutes,
             'monthMinutes' => $monthMinutes,
             'monthLateCount' => $monthLateCount,
+            'editLogs' => $editLogs,
         ]);
     }
 
     public function updateAttendance(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'mode' => ['required', 'in:out,in'],
-            'attendance_id' => ['required', 'integer', 'exists:attendances,id'],
-            'staff_id' => ['required', 'integer', 'exists:staff,id'],
-            'pin_code' => ['required', 'string', 'digits:4'],
-            'lunch_in' => ['nullable', 'date_format:H:i'],
-            'lunch_out' => ['nullable', 'date_format:H:i'],
-            'dinner_in' => ['nullable', 'date_format:H:i'],
-            'dinner_out' => ['nullable', 'date_format:H:i'],
-            'manager_pin' => ['nullable', 'string', 'digits:4'],
-        ]);
-        $monthParam = $request->input('month');
-        $requestedMonth = is_string($monthParam) && preg_match('/^\d{4}-\d{2}$/', $monthParam)
-            ? $monthParam
-            : null;
-
-        $staff = Staff::query()
-            ->where('id', $validated['staff_id'])
-            ->where('is_active', true)
-            ->first();
-
-        if (! $staff) {
-            return redirect()
-                ->route('mypage.attendance', array_filter([
-                    'staff_id' => $validated['staff_id'] ?? null,
-                    'month' => $requestedMonth,
-                ]))
-                ->with('error', 'Personnel introuvable.');
-        }
-
-        if ($staff->pin_code === null || $staff->pin_code === '') {
-            return redirect()
-                ->route('mypage.attendance', array_filter([
-                    'staff_id' => $staff->id,
-                    'month' => $requestedMonth,
-                ]))
-                ->with('error', 'PIN non configure.');
-        }
-
-        $pinKey = 'pin-attempt:staff:'.$staff->id.':'.(request()->ip() ?? 'unknown');
-
-        if (RateLimiter::tooManyAttempts($pinKey, 5)) {
-            return redirect()
-                ->route('mypage.attendance', array_filter([
-                    'staff_id' => $staff->id,
-                    'month' => $requestedMonth,
-                ]))
-                ->with('error', 'Trop de tentatives PIN incorrectes. Veuillez patienter 1 minute.');
-        }
-
-        if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
-            RateLimiter::hit($pinKey, 60);
-
-            return redirect()
-                ->route('mypage.attendance', array_filter([
-                    'staff_id' => $staff->id,
-                    'month' => $requestedMonth,
-                ]))
-                ->withInput($request->except(['pin_code', 'manager_pin']))
-                ->with('error', 'Le PIN personnel est incorrect.');
-        }
-
-        RateLimiter::clear($pinKey);
-
-        /** @var Attendance|null $attendance */
-        $attendance = Attendance::query()->whereKey($validated['attendance_id'])->first();
-
-        if (! $attendance || $attendance->staff_id !== $staff->id) {
-            return redirect()
-                ->route('mypage.attendance', array_filter([
-                    'staff_id' => $staff->id,
-                    'month' => $requestedMonth,
-                ]))
-                ->with('error', 'Donnees de presence invalides.');
-        }
-
-        $date = $attendance->date instanceof Carbon
-            ? $attendance->date->copy()->startOfDay()
-            : Carbon::parse($attendance->date)->startOfDay();
-
-        if ($validated['mode'] === 'out') {
-            $lunchOut = $this->parseShiftOutTime($validated['lunch_out'] ?? null, $date, $attendance->lunch_in_at);
-            $dinnerOut = $this->parseShiftOutTime($validated['dinner_out'] ?? null, $date, $attendance->dinner_in_at);
-
-            foreach ([$lunchOut, $dinnerOut] as $parsedTime) {
-                if ($parsedTime && $parsedTime->isFuture()) {
-                    return redirect()
-                        ->route('mypage.attendance', [
-                            'staff_id' => $staff->id,
-                            'month' => $date->format('Y-m'),
-                        ])
-                        ->withInput($request->except(['pin_code', 'manager_pin']))
-                        ->with('error', 'Une heure future ne peut pas etre saisie.');
-                }
-            }
-
-            $attendance->lunch_out_at = $lunchOut;
-            $attendance->dinner_out_at = $dinnerOut;
-            $attendance->is_edited_by_admin = false;
-
-            $attendance->save();
-
-            return redirect()
-                ->route('mypage.attendance', [
-                    'staff_id' => $staff->id,
-                    'month' => $date->format('Y-m'),
-                ])
-                ->with('status', 'Heures de sortie mises a jour.');
-        }
-
-        $managerPin = $validated['manager_pin'] ?? null;
-
-        if (blank($managerPin)) {
-            return redirect()
-                ->route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $date->format('Y-m')])
-                ->withInput($request->except(['pin_code', 'manager_pin']))
-                ->with('error', 'Le PIN manager est requis pour modifier l\'heure d\'entree.');
-        }
-
-        $manager = Staff::query()
-            ->where('is_manager', true)
-            ->where('is_active', true)
-            ->whereNotNull('pin_code')
-            ->get()
-            ->first(fn (Staff $m): bool => hash_equals((string) $m->pin_code, (string) $managerPin));
-
-        if (! $manager) {
-            return redirect()
-                ->route('mypage.attendance', ['staff_id' => $staff->id, 'month' => $date->format('Y-m')])
-                ->withInput($request->except(['pin_code', 'manager_pin']))
-                ->with('error', 'PIN manager invalide ou autorisation insuffisante.');
-        }
-
-        $lunchIn = $this->parseShiftInTime($validated['lunch_in'] ?? null, $date);
-        $dinnerIn = $this->parseShiftInTime($validated['dinner_in'] ?? null, $date);
-
-        foreach ([$lunchIn, $dinnerIn] as $parsedTime) {
-            if ($parsedTime && $parsedTime->isFuture()) {
-                return redirect()
-                    ->route('mypage.attendance', [
-                        'staff_id' => $staff->id,
-                        'month' => $date->format('Y-m'),
-                    ])
-                    ->withInput($request->except(['pin_code', 'manager_pin']))
-                    ->with('error', 'Une heure future ne peut pas etre saisie.');
-            }
-        }
-
-        $attendance->lunch_in_at = $lunchIn;
-        $attendance->dinner_in_at = $dinnerIn;
-        $attendance->approved_by_manager_id = $manager->id;
-        $attendance->is_edited_by_admin = false;
-        $attendance->save();
-
         return redirect()
-            ->route('mypage.attendance', [
-                'staff_id' => $staff->id,
-                'month' => $date->format('Y-m'),
-            ])
-            ->with('status', 'Heures d\'entree mises a jour (approuve par manager).');
-    }
-
-    protected function parseShiftInTime(?string $value, Carbon $date): ?Carbon
-    {
-        return \App\Support\BusinessDate::parseTimeForBusinessDate($value, $date);
-    }
-
-    protected function parseShiftOutTime(?string $value, Carbon $date, ?Carbon $inAt): ?Carbon
-    {
-        return \App\Support\BusinessDate::parseTimeForBusinessDate($value, $date);
+            ->route('mypage.attendance', array_filter([
+                'staff_id' => $request->input('staff_id'),
+                'month' => $request->input('month'),
+            ]))
+            ->with('error', 'La modification depuis Mon espace est désactivée. Contactez un manager (admin Filament).');
     }
 
     private function roleCategory(string $role): string
@@ -941,16 +817,25 @@ class MyPageController extends Controller
         return 'other';
     }
 
-    private function scheduledStartFromFixedShifts(Staff $staff, string $dayKey, string $mealKey): ?string
+    /**
+     * Mon espace からの勤怠編集は廃止（Filament のみ）。互換のためルートは残す。
+     */
+    public function authorizeEdit(Request $request): JsonResponse
     {
-        $slot = data_get($staff->fixed_shifts, "{$dayKey}.{$mealKey}");
-        if (! is_array($slot) || ! isset($slot[0]) || ! is_string($slot[0])) {
-            return null;
-        }
-
-        $start = trim($slot[0]);
-
-        return $start !== '' ? $start : null;
+        return response()->json([
+            'ok' => false,
+            'message' => 'Edition desactivee. Utilisez l\'admin Filament (manager).',
+        ], 403);
     }
 
+    /**
+     * Mon espace からの勤怠編集は廃止（Filament のみ）。互換のためルートは残す。
+     */
+    public function patchAttendance(Request $request): JsonResponse
+    {
+        return response()->json([
+            'ok' => false,
+            'message' => 'Edition desactivee. Utilisez l\'admin Filament (manager).',
+        ], 403);
+    }
 }

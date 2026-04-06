@@ -25,6 +25,17 @@ class Setting extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saved(function (Setting $m): void {
+            app()->forgetInstance('setting_cache_'.$m->key);
+        });
+
+        static::deleted(function (Setting $m): void {
+            app()->forgetInstance('setting_cache_'.$m->key);
+        });
+    }
+
     public static function getValue(string $key, mixed $default = null): mixed
     {
         $cacheKey = 'setting_cache_'.$key;

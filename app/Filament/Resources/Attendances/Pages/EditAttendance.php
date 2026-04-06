@@ -30,7 +30,10 @@ class EditAttendance extends EditRecord
     {
         /** @var Attendance $record */
         $record = $this->record;
+        $data = AttendanceFormSaveData::normalizeForRecord($record, $data);
+        $data = AttendanceFormSaveData::finalizeForSave($data, $record);
+        AttendanceFormSaveData::assertAtLeastOneMealClockIn($data);
 
-        return AttendanceFormSaveData::normalizeForRecord($record, $data);
+        return $data;
     }
 }

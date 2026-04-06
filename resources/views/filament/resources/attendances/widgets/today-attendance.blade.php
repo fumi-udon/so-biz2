@@ -24,7 +24,10 @@
                 </td>
                 <td style="vertical-align:bottom; text-align:right; white-space:nowrap; padding:0 0 0 12px; font-size:12px; color:#57534e;">
                     <span style="display:inline-block; margin-left:12px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; vertical-align:middle; margin-right:6px;"></span>勤務中</span>
-                    <span style="display:inline-block; margin-left:12px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#a8a29e; vertical-align:middle; margin-right:6px;"></span>退勤済・未出勤</span>
+                    <span style="display:inline-block; margin-left:12px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#a8a29e; vertical-align:middle; margin-right:6px;"></span>退勤済</span>
+                    <span style="display:inline-block; margin-left:12px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#0ea5e9; vertical-align:middle; margin-right:6px;"></span>休業日</span>
+                    <span style="display:inline-block; margin-left:12px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#f59e0b; vertical-align:middle; margin-right:6px;"></span>未確定</span>
+                    <span style="display:inline-block; margin-left:12px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#dc2626; vertical-align:middle; margin-right:6px;"></span>欠勤</span>
                 </td>
             </tr>
         </table>
@@ -38,16 +41,23 @@
                 @foreach ($staffRows as $row)
                     @php
                         $isWorking = $row['status'] === 'working';
+                        $st = $row['status'];
                     @endphp
                     <article style="flex:0 0 auto; width:min(256px, 85vw); min-width:220px; max-width:280px; box-sizing:border-box; border-radius:12px; border:1px solid {{ $isWorking ? 'rgba(16,185,129,0.55)' : '#d6d3d1' }}; padding:14px; background:{{ $isWorking ? 'linear-gradient(145deg,#ecfdf5,#ffffff)' : '#f5f5f4' }}; box-shadow:{{ $isWorking ? '0 0 0 1px rgba(16,185,129,0.15)' : 'none' }};">
                         <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">
                             <tr>
                                 <td style="vertical-align:top; padding:0; font-size:14px; font-weight:600; color:#0c0a09; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ $row['staff']->name }}">{{ $row['staff']->name }}</td>
                                 <td style="vertical-align:top; text-align:right; padding:0 0 0 8px; white-space:nowrap;">
-                                    @if ($isWorking)
+                                    @if ($st === 'working')
                                         <span style="display:inline-block; padding:3px 8px; border-radius:6px; background:#059669; color:#fff; font-size:10px; font-weight:700; letter-spacing:0.04em;">勤務中</span>
-                                    @else
+                                    @elseif ($st === 'off')
                                         <span style="display:inline-block; padding:3px 8px; border-radius:6px; background:#a8a29e; color:#fff; font-size:10px; font-weight:700; letter-spacing:0.04em;">退勤済</span>
+                                    @elseif ($st === 'holiday')
+                                        <span style="display:inline-block; padding:3px 8px; border-radius:6px; background:#0284c7; color:#fff; font-size:10px; font-weight:700; letter-spacing:0.04em;">休業日</span>
+                                    @elseif ($st === 'absent')
+                                        <span style="display:inline-block; padding:3px 8px; border-radius:6px; background:#b91c1c; color:#fff; font-size:10px; font-weight:700; letter-spacing:0.04em;">欠勤</span>
+                                    @else
+                                        <span style="display:inline-block; padding:3px 8px; border-radius:6px; background:#d97706; color:#fff; font-size:10px; font-weight:700; letter-spacing:0.04em;">未確定</span>
                                     @endif
                                 </td>
                             </tr>
@@ -73,7 +83,13 @@
                             </table>
                         @else
                             <p style="margin:12px 0 0 0; padding-top:12px; border-top:1px dashed #d6d3d1; font-size:12px; color:#78716c;">
-                                本日の打刻なし
+                                @if ($st === 'holiday')
+                                    店舗休業日（打刻なし）
+                                @elseif ($st === 'absent')
+                                    確定欠勤（打刻なし）
+                                @else
+                                    打刻なし・未確定（欠勤登録がない場合は確定しません）
+                                @endif
                             </p>
                         @endif
                     </article>
