@@ -17,6 +17,6 @@ class HeadquartersTodayRosterWidget extends TodayAttendanceRosterWidget
     {
         $u = auth()->user();
 
-        return $u?->isAdmin() === true || $u?->isCashier() === true;
+        return $u?->isAdmin() === true || $u?->isCashier() === true || $u?->isPiloteOnly() === true;
     }
 }

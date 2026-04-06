@@ -12,6 +12,11 @@ use Illuminate\Support\Collection;
 
 class WeeklyShiftSchedule extends AdminOnlyPage
 {
+    protected static function piloteCanAccessThisPage(): bool
+    {
+        return true;
+    }
+
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
     protected static ?string $navigationGroup = '店舗・勤怠管理';

@@ -19,6 +19,15 @@ class UserResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
+    public static function canAccess(): bool
+    {
+        if (auth()->user()?->isPiloteOnly()) {
+            return false;
+        }
+
+        return parent::canAccess();
+    }
+
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->with('roles');

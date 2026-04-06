@@ -20,13 +20,21 @@ class HeadquartersDashboard extends Dashboard
     public static function canAccess(): bool
     {
         $user = auth()->user();
+        if ($user?->isPiloteOnly()) {
+            return true;
+        }
 
         return $user?->isAdmin() === true || $user?->isCashier() === true;
     }
 
     public static function shouldRegisterNavigation(): bool
     {
-        return auth()->user()?->isAdmin() === true;
+        $user = auth()->user();
+        if ($user?->isPiloteOnly()) {
+            return true;
+        }
+
+        return $user?->isAdmin() === true;
     }
 
     public function mount(): void

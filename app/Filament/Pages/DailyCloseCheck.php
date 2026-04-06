@@ -61,6 +61,9 @@ class DailyCloseCheck extends Page
     public static function canAccess(): bool
     {
         $user = auth()->user();
+        if ($user?->isPiloteOnly()) {
+            return true;
+        }
 
         return $user?->isAdmin() === true || $user?->isCashier() === true;
     }

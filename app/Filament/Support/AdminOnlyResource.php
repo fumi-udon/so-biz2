@@ -8,7 +8,20 @@ abstract class AdminOnlyResource extends Resource
 {
     public static function canAccess(): bool
     {
-        return auth()->user()?->isAdmin() === true;
+        $user = auth()->user();
+        if ($user?->isPiloteOnly()) {
+            return static::piloteCanAccessThisResource();
+        }
+
+        return $user?->isAdmin() === true;
+    }
+
+    /**
+     * `pilote` に許可するリソースだけ true を返す（既定は拒否）。
+     */
+    protected static function piloteCanAccessThisResource(): bool
+    {
+        return false;
     }
 }
 

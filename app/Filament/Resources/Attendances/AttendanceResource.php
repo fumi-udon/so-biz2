@@ -15,6 +15,11 @@ use Illuminate\Database\Eloquent\Builder;
 
 class AttendanceResource extends AdminOnlyResource
 {
+    protected static function piloteCanAccessThisResource(): bool
+    {
+        return true;
+    }
+
     protected static ?string $model = Attendance::class;
 
     protected static ?string $navigationGroup = '店舗・勤怠管理';

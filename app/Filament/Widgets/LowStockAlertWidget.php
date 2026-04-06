@@ -16,6 +16,15 @@ class LowStockAlertWidget extends TableWidget
 
     protected int | string | array $columnSpan = 'full';
 
+    public static function canView(): bool
+    {
+        if (auth()->user()?->isPiloteOnly() === true) {
+            return false;
+        }
+
+        return parent::canView();
+    }
+
     public function table(Table $table): Table
     {
         $dateString = BusinessDate::toDateString();

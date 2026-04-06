@@ -21,15 +21,32 @@ class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, LogsActivity, Notifiable;
+
+    /** システム予約ロール名。DB の role レコードと必ず一致させること。 */
+    public const ROLE_PILOTE = 'pilote';
+
     protected $fillable = [
         'name',
         'email',
         'password',
         'role',
     ];
+
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->hasRole('super_admin') || $this->roles()->exists();
+        $superAdminName = config('filament-shield.super_admin.name', 'super_admin');
+
+        return $this->hasRole($superAdminName) || $this->roles()->exists();
+    }
+
+    /**
+     * Filament ホワイトリスト: ROLE_PILOTE のみで super_admin（Shield 設定名）を持たないユーザー（デモ／限定アカウント）。
+     */
+    public function isPiloteOnly(): bool
+    {
+        $superAdminName = config('filament-shield.super_admin.name', 'super_admin');
+
+        return $this->hasRole(self::ROLE_PILOTE) && ! $this->hasRole($superAdminName);
     }
 
     public function isAdmin(): bool

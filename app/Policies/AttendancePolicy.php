@@ -11,6 +11,26 @@ class AttendancePolicy
     use HandlesAuthorization;
 
     /**
+     * pilote への安全なアクションを一元管理するゲートウェイ。
+     *
+     * - 許可リスト（CRUD）に含まれる ability → true（以降のチェックをスキップして許可）
+     * - 含まれない破壊的 ability → false（以降のチェックをスキップして拒否）
+     * - pilote でないユーザー → null（Spatie の通常フローへ委譲）
+     *
+     * @return bool|null
+     */
+    public function before(User $user, string $ability): ?bool
+    {
+        if (! $user->isPiloteOnly()) {
+            return null;
+        }
+
+        $allowed = ['viewAny', 'view', 'create', 'update'];
+
+        return in_array($ability, $allowed, true) ? true : false;
+    }
+
+    /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool
