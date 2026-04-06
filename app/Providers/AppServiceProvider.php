@@ -6,8 +6,10 @@ use App\Models\DailyTip;
 use App\Models\DailyTipDistribution;
 use App\Models\StaffTip;
 use App\Models\Staff;
+use App\Models\User;
 use App\Observers\DailyTipDistributionObserver;
 use App\Observers\DailyTipObserver;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -26,6 +28,18 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::before(function ($user, string $ability): ?bool {
+            if (! $user instanceof User) {
+                return null;
+            }
+
+            if ($user->hasRole('super_admin')) {
+                return true;
+            }
+
+            return null;
+        });
+
         DailyTip::observe(DailyTipObserver::class);
         DailyTipDistribution::observe(DailyTipDistributionObserver::class);
         StaffTip::observe(DailyTipDistributionObserver::class);
