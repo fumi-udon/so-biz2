@@ -11,13 +11,16 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password', 'role'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, HasRoles, LogsActivity, Notifiable;
     protected $fillable = [
         'name',
         'email',
@@ -26,7 +29,7 @@ class User extends Authenticatable implements FilamentUser
     ];
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->isAdmin() || $this->isCashier();
+        return $this->hasRole('super_admin') || $this->roles()->exists();
     }
 
     public function isAdmin(): bool
@@ -38,6 +41,15 @@ class User extends Authenticatable implements FilamentUser
     public function isCashier(): bool
     {
         return $this->role === 'cashier';
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logFillable()
+            ->logExcept(['password', 'remember_token'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
     }
 
     /**

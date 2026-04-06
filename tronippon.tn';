@@ -1,0 +1,11 @@
+[90m= [39m[34;4mApp\Models\User[39;24m {#9177
+    [34mid[39m: [35m4[39m,
+    [34mname[39m: [32m"[39m[32mpilote[39m[32m"[39m,
+    [34memail[39m: [32m"[39m[32mpilote@bistronippon.tn[39m[32m"[39m,
+    [34memail_verified_at[39m: [36mnull[39m,
+    [34mpassword[39m: [32m"[39m\$[32m2y[39m\$[32m12[39m\$[32mQI9DHDQqXqp0XODMJtb7eePU2HvNsFrkn7BJ/OKX9c03ZHaybn6vq[39m[32m"[39m,
+    [34mrole[39m: [32m"[39m[32madmin[39m[32m"[39m,
+    [34mremember_token[39m: [32m"[39m[32mXr2XycT0mvngkCCSrt4YVFdETbFe65dHD83z83MU1kC6uAih79DpCC2CwGtY[39m[32m"[39m,
+    [34mcreated_at[39m: [32m"[39m[32m2026-04-06 13:50:36[39m[32m"[39m,
+    [34mupdated_at[39m: [32m"[39m[32m2026-04-06 14:40:21[39m[32m"[39m,
+  }
