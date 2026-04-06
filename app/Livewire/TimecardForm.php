@@ -66,6 +66,10 @@ class TimecardForm extends Component
 
     public function mount(): void
     {
+        if (app()->environment('production') && ! str_contains(request()->header('User-Agent', ''), 'Vivaldi')) {
+            abort(403, 'Pointage impossible depuis cet appareil. Veuillez utiliser la tablette dédiée du restaurant.');
+        }
+
         request()->session()->forget('mypage_staff_id');
 
         $this->staffOptions = Staff::query()
