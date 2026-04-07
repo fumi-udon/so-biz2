@@ -11,10 +11,12 @@ use App\Services\BistronipponOrdersRecettesService;
 use App\Services\FinanceCalculatorService;
 use App\Services\FinanceCloseSnapshotBuilder;
 use App\Support\BusinessDate;
+use App\Support\ShiftClockOutGate;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Actions\Action as FormAction;
+use Filament\Forms\Components\Component;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Fieldset;
 use Filament\Forms\Components\Grid;
@@ -28,17 +30,16 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Concerns\InteractsWithFormActions;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Alignment;
-use Filament\Support\Enums\VerticalAlignment;
 use Filament\Support\Enums\MaxWidth;
+use Filament\Support\Enums\VerticalAlignment;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\HtmlString;
 use Throwable;
 
@@ -119,6 +120,12 @@ class DailyCloseCheck extends Page
 
     public bool $resultModalDbSaved = false;
 
+    /** 結果モーダル用: 保存したシフト（lunch / dinner）— WhatsApp 報告文面用 */
+    public string $resultModalCloseShift = '';
+
+    /** true の間、WhatsApp 報告前は結果モーダルを閉じられない（番号未設定時は無効） */
+    public bool $closeWaReportDone = false;
+
     /** 管理者 Door 用 PIN 入力（送信後は必ずクリア） */
     public string $doorPinInput = '';
 
@@ -165,6 +172,51 @@ class DailyCloseCheck extends Page
     public function responsibleStaffDisplayName(): string
     {
         return Staff::query()->find($this->responsibleStaffId)?->name ?? '—';
+    }
+
+    public function markCloseWhatsappReportDone(): void
+    {
+        $this->closeWaReportDone = true;
+    }
+
+    public function whatsappManagerNumberDigits(): string
+    {
+        $raw = config('services.whatsapp.manager_number');
+        if ($raw === null || $raw === '') {
+            return '';
+        }
+
+        return (string) preg_replace('/\D+/', '', (string) $raw);
+    }
+
+    public function whatsappManagerConfigured(): bool
+    {
+        return $this->whatsappManagerNumberDigits() !== '';
+    }
+
+    /**
+     * WhatsApp 報告本文用（Bravo / 差額）。
+     */
+    public function closeReportResultLine(): string
+    {
+        $v = $this->resultModalCalc['verdict'] ?? '';
+        if ($v === 'bravo') {
+            return 'Bravo';
+        }
+
+        return 'Écart : '.number_format((float) ($this->resultModalCalc['final_difference'] ?? 0), 3, ',', ' ');
+    }
+
+    /**
+     * 報告用シフト表記（フランス語短縮）。
+     */
+    public function closeReportShiftLabelFr(): string
+    {
+        return match ($this->resultModalCloseShift) {
+            'lunch' => 'Midi',
+            'dinner' => 'Soir',
+            default => $this->resultModalCloseShift !== '' ? $this->resultModalCloseShift : '—',
+        };
     }
 
     public function getSubheading(): string|Htmlable|null
@@ -247,7 +299,7 @@ class DailyCloseCheck extends Page
     }
 
     /**
-     * @return array<\Filament\Forms\Components\Component>
+     * @return array<Component>
      */
     protected function getFormSchema(): array
     {
@@ -1024,6 +1076,18 @@ class DailyCloseCheck extends Page
                 $this->resultModalKind = $calc['verdict'] === 'bravo' ? 'bravo' : 'retry';
                 $this->resultModalDbSaved = false;
 
+                $closeShift = (string) ($data['shift'] ?? 'dinner');
+                $missingNames = ShiftClockOutGate::missingClockOutStaffNames($businessDate, $closeShift);
+                if ($missingNames !== []) {
+                    Notification::make()
+                        ->danger()
+                        ->title('退勤打刻漏れがあります')
+                        ->body('以下のスタッフの退勤打刻（'.$closeShift.'）が完了していません。出勤簿を修正してから再度実行してください。'."\n対象者: ".implode(', ', $missingNames))
+                        ->send();
+
+                    return;
+                }
+
                 DB::transaction(function () use ($businessDate, $data, $calc, $payload): void {
                     Finance::query()->create([
                         'business_date' => $businessDate,
@@ -1061,6 +1125,8 @@ class DailyCloseCheck extends Page
                     ]);
                 });
                 $this->resultModalDbSaved = true;
+                $this->resultModalCloseShift = (string) ($data['shift'] ?? 'dinner');
+                $this->closeWaReportDone = false;
 
                 if ($calc['verdict'] !== 'bravo') {
                     NotifyDailyCloseMismatchJob::dispatch(

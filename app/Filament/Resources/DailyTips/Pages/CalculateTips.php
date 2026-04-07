@@ -5,12 +5,14 @@ namespace App\Filament\Resources\DailyTips\Pages;
 use App\Filament\Resources\DailyTips\DailyTipResource;
 use App\Models\Attendance;
 use App\Models\DailyTip;
+use App\Models\DailyTipDistribution;
 use App\Models\Finance;
 use App\Models\Staff;
-use App\Support\DailyTipAuditContext;
-use App\Support\DailyTipAuditLogger;
 use App\Services\TipCalculationService;
 use App\Support\BusinessDate;
+use App\Support\DailyTipAuditContext;
+use App\Support\DailyTipAuditLogger;
+use App\Support\ShiftClockOutGate;
 use App\Support\TipAttendanceScope;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
@@ -21,6 +23,7 @@ use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
@@ -344,6 +347,17 @@ class CalculateTips extends Page
         }
 
         try {
+            $missingNames = ShiftClockOutGate::missingClockOutStaffNames($businessDate, $shift);
+            if ($missingNames !== []) {
+                Notification::make()
+                    ->danger()
+                    ->title('退勤打刻漏れがあります')
+                    ->body('以下のスタッフの退勤打刻（'.$shift.'）が完了していません。出勤簿を修正してから再度実行してください。'."\n対象者: ".implode(', ', $missingNames))
+                    ->send();
+
+                return;
+            }
+
             $flagField = $shift === 'lunch' ? 'is_lunch_tip_applied' : 'is_dinner_tip_applied';
             $denyField = $shift === 'lunch' ? 'is_lunch_tip_denied' : 'is_dinner_tip_denied';
             $rowStaffIds = array_map(fn (array $r): int => (int) $r['staff_id'], $this->rows);
@@ -410,8 +424,8 @@ class CalculateTips extends Page
                     Attendance::query()->updateOrCreate(
                         ['staff_id' => $staffId, 'date' => $businessDate],
                         [
-                            $flagField            => true,
-                            $denyField            => false,
+                            $flagField => true,
+                            $denyField => false,
                             'tip_weight_override' => $rowWeightMap[$staffId] ?? null,
                         ]
                     );
@@ -573,7 +587,7 @@ class CalculateTips extends Page
             ->whereBetween('business_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
             ->sum('total_amount');
 
-        $recent = \App\Models\DailyTipDistribution::query()
+        $recent = DailyTipDistribution::query()
             ->with('staff')
             ->latest('id')
             ->limit(300)
@@ -682,7 +696,7 @@ class CalculateTips extends Page
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, Finance>
+     * @return Collection<int, Finance>
      */
     public function recentFinanceHistory()
     {

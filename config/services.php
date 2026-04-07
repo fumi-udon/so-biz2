@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'whatsapp' => [
+        'manager_number' => env('WHATSAPP_MANAGER_NUMBER'),
+    ],
+
 ];

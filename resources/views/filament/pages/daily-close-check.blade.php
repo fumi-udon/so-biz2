@@ -626,8 +626,8 @@
 
     <x-filament::modal
         id="daily-close-result-modal"
-        :close-by-clicking-away="true"
-        :close-by-escaping="true"
+        :close-by-clicking-away="! ($resultModalDbSaved && $this->whatsappManagerConfigured() && ! $closeWaReportDone)"
+        :close-by-escaping="! ($resultModalDbSaved && $this->whatsappManagerConfigured() && ! $closeWaReportDone)"
         width="2xl"
     >
         @php
@@ -680,14 +680,21 @@
 
                 <p class="text-center text-xs leading-relaxed text-gray-700 dark:text-gray-300">{{ $resultModalHint }}</p>
 
-                <x-filament::button
-                    type="button"
-                    x-on:click="$dispatch('close-modal', { id: 'daily-close-result-modal' })"
-                    color="gray"
-                    class="w-full"
-                >
-                    Fermer
-                </x-filament::button>
+                @if ($resultModalDbSaved)
+                    @include('filament.pages.partials.daily-close-result-whatsapp-block', [
+                        'fermerLabel' => 'Fermer',
+                        'fermerColor' => 'gray',
+                    ])
+                @else
+                    <x-filament::button
+                        type="button"
+                        x-on:click="$dispatch('close-modal', { id: 'daily-close-result-modal' })"
+                        color="gray"
+                        class="w-full text-gray-950 dark:text-white"
+                    >
+                        Fermer
+                    </x-filament::button>
+                @endif
             </div>
         @else
             <div class="space-y-4 rounded-xl border-2 border-black bg-gradient-to-br from-amber-100 via-orange-100 to-red-100 p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)] dark:border-white/20 dark:from-amber-900/30 dark:via-orange-950/30 dark:to-red-950/30">
@@ -736,14 +743,21 @@
                     {{ $resultModalHint }}
                 </div>
 
-                <x-filament::button
-                    type="button"
-                    x-on:click="$dispatch('close-modal', { id: 'daily-close-result-modal' })"
-                    color="warning"
-                    class="w-full"
-                >
-                    Fermer et corriger
-                </x-filament::button>
+                @if ($resultModalDbSaved)
+                    @include('filament.pages.partials.daily-close-result-whatsapp-block', [
+                        'fermerLabel' => 'Fermer et corriger',
+                        'fermerColor' => 'warning',
+                    ])
+                @else
+                    <x-filament::button
+                        type="button"
+                        x-on:click="$dispatch('close-modal', { id: 'daily-close-result-modal' })"
+                        color="warning"
+                        class="w-full text-gray-950 dark:text-white"
+                    >
+                        Fermer et corriger
+                    </x-filament::button>
+                @endif
             </div>
         @endif
     </x-filament::modal>
