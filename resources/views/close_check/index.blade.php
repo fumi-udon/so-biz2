@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="fr">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>クローズチェック — {{ config('app.name', 'Laravel') }}</title>
+    <title>Clôture des tâches — {{ config('app.name', 'Laravel') }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>[x-cloak]{display:none!important;}</style>
 </head>
-<body class="min-h-screen bg-slate-100 text-slate-900">
+<body class="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
     <x-client-nav />
 
     <div
@@ -23,36 +23,42 @@
         class="mx-auto w-full max-w-6xl px-3 py-4"
     >
         <header class="mb-4 rounded-2xl border-2 border-black bg-gradient-to-r from-slate-950 via-indigo-900 to-slate-950 p-4 text-white shadow-[0_6px_0_0_rgba(0,0,0,1)]">
-            <h1 class="text-2xl font-black tracking-wide">クローズチェック</h1>
-            <p class="mt-1 text-sm font-semibold text-slate-200">閉店前の最終確認です。すべての項目を確認してから責任者承認へ進んでください。</p>
+            <h1 class="text-2xl font-black tracking-wide">Clôture des tâches</h1>
+            <p class="mt-1 text-sm font-semibold text-slate-200">
+                Vérification avant fermeture. Cochez chaque point, puis validez avec le responsable.
+            </p>
         </header>
 
         @if (! empty($incompleteLines))
-            <div class="mb-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700">
-                <p class="mb-2 font-bold">以下のタスク・棚卸しが未完了です（全員分）</p>
+            <div class="mb-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-100">
+                <p class="mb-2 font-bold">Inventaire ou tâches non terminés (toute l’équipe)</p>
                 <ul class="list-disc space-y-1 pl-5">
                     @foreach ($incompleteLines as $line)
                         <li>{{ $line }}</li>
                     @endforeach
                 </ul>
-                <p class="mt-2 font-semibold">マイページで完了させるまで、閉店の最終承認はできません。</p>
+                <p class="mt-2 font-semibold">
+                    Terminez depuis Mon espace avant la clôture finale.
+                </p>
             </div>
         @endif
 
         @if (session('error'))
-            <div class="mb-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
+            <div class="mb-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm font-semibold text-rose-900 dark:border-rose-700 dark:bg-rose-950/40 dark:text-rose-100">
                 {{ session('error') }}
             </div>
         @endif
 
         @if ($tasks->isEmpty())
-            <p class="rounded-xl border-2 border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">有効なタスクが登録されていません。</p>
+            <p class="rounded-xl border-2 border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                Aucune tâche active enregistrée.
+            </p>
         @else
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                 @foreach ($tasks as $task)
-                    <article class="overflow-hidden rounded-xl border-2 border-black bg-white shadow-[0_5px_0_0_rgba(0,0,0,1)]">
+                    <article class="overflow-hidden rounded-xl border-2 border-black bg-white shadow-[0_5px_0_0_rgba(0,0,0,1)] dark:border-slate-600 dark:bg-slate-900">
                         <div class="flex items-stretch">
-                            <div class="w-28 shrink-0 bg-slate-100">
+                            <div class="w-28 shrink-0 bg-slate-100 dark:bg-slate-800">
                                 @if ($task->image_path)
                                     <img src="{{ asset('storage/'.$task->image_path) }}" alt="" class="aspect-video h-full w-full object-cover">
                                 @else
@@ -60,16 +66,16 @@
                                 @endif
                             </div>
                             <div class="flex grow flex-col p-3">
-                                <h2 class="text-base font-bold text-slate-900">{{ $task->title }}</h2>
+                                <h2 class="text-base font-bold text-slate-900 dark:text-white">{{ $task->title }}</h2>
                                 @if ($task->description)
-                                    <p class="mt-1 line-clamp-4 text-sm text-slate-600">{{ $task->description }}</p>
+                                    <p class="mt-1 line-clamp-4 text-sm text-slate-600 dark:text-slate-300">{{ $task->description }}</p>
                                 @endif
                             </div>
                         </div>
-                        <label class="flex items-center gap-2 border-t border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-                            <input type="checkbox" x-model="checked[{{ $task->id }}]" class="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                        <label class="flex items-center gap-2 border-t border-slate-200 px-3 py-2 text-sm font-semibold text-slate-800 dark:border-slate-600 dark:text-slate-200">
+                            <input type="checkbox" x-model="checked[{{ $task->id }}]" class="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 dark:border-slate-500">
                             <span x-show="checked[{{ $task->id }}]" x-cloak>✅</span>
-                            <span>確認済み</span>
+                            <span>Vu / OK</span>
                         </label>
                     </article>
                 @endforeach
@@ -81,31 +87,31 @@
                     type="button"
                     @click="openApproval = true"
                     :disabled="{{ $blocked ? 'true' : 'false' }} || !allChecked(@json($tasks->pluck('id')->values()))"
-                    class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black bg-amber-300 px-4 py-3 text-lg font-black text-black shadow-[0_6px_0_0_rgba(0,0,0,1)] enabled:hover:bg-amber-200 enabled:active:translate-y-1 enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+                    class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black bg-amber-300 px-4 py-3 text-lg font-black text-black shadow-[0_6px_0_0_rgba(0,0,0,1)] enabled:hover:bg-amber-200 enabled:active:translate-y-1 enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-950"
                 >
-                    確認（Confirm）
+                    Valider et continuer
                 </button>
             </div>
 
             <div x-show="openApproval" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" @click.self="openApproval = false">
-                <div class="w-full max-w-md rounded-xl border-2 border-black bg-white p-4 shadow-[0_8px_0_0_rgba(0,0,0,1)]">
+                <div class="w-full max-w-md rounded-xl border-2 border-black bg-white p-4 shadow-[0_8px_0_0_rgba(0,0,0,1)] dark:border-slate-600 dark:bg-slate-900">
                     <div class="mb-3 flex items-center justify-between">
-                        <h2 class="text-lg font-black text-slate-900">最終承認</h2>
-                        <button type="button" @click="openApproval = false" class="rounded border border-slate-300 px-2 py-1 text-sm">✕</button>
+                        <h2 class="text-lg font-black text-slate-900 dark:text-white">Validation responsable</h2>
+                        <button type="button" @click="openApproval = false" class="rounded border border-slate-300 px-2 py-1 text-sm text-slate-800 dark:border-slate-600 dark:text-slate-200">✕</button>
                     </div>
                     <form action="{{ route('close-check.process') }}" method="post" class="space-y-3">
                         @csrf
                         <div>
-                            <label for="staff_id" class="mb-1 block text-sm font-bold text-slate-700">本日の責任者</label>
-                            <select name="staff_id" id="staff_id" class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm" required>
-                                <option value="">選択してください</option>
+                            <label for="staff_id" class="mb-1 block text-sm font-bold text-slate-800 dark:text-slate-200">Responsable du jour</label>
+                            <select name="staff_id" id="staff_id" class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white" required>
+                                <option value="">Choisir…</option>
                                 @foreach ($staffList as $staff)
                                     <option value="{{ $staff->id }}" @selected(old('staff_id') == $staff->id)>{{ $staff->name }}</option>
                                 @endforeach
                             </select>
                         </div>
                         <div>
-                            <label for="pin_code" class="mb-1 block text-sm font-bold text-slate-700">PIN（4桁）</label>
+                            <label for="pin_code" class="mb-1 block text-sm font-bold text-slate-800 dark:text-slate-200">Code PIN (4 chiffres)</label>
                             <input
                                 type="password"
                                 name="pin_code"
@@ -116,12 +122,12 @@
                                 autocomplete="one-time-code"
                                 required
                                 placeholder="••••"
-                                class="block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-center font-mono text-lg"
+                                class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-center font-mono text-lg text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                             >
                         </div>
                         <div class="grid grid-cols-2 gap-2">
-                            <button type="button" @click="openApproval = false" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">戻る</button>
-                            <button type="submit" class="rounded-lg border-2 border-black bg-indigo-600 px-3 py-2 text-sm font-black text-white">承認して記録する</button>
+                            <button type="button" @click="openApproval = false" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 dark:border-slate-600 dark:text-slate-200">Retour</button>
+                            <button type="submit" class="rounded-lg border-2 border-black bg-indigo-600 px-3 py-2 text-sm font-black text-white dark:border-indigo-500">Clôturer</button>
                         </div>
                     </form>
                 </div>

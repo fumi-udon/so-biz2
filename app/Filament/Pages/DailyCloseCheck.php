@@ -11,7 +11,6 @@ use App\Services\BistronipponOrdersRecettesService;
 use App\Services\FinanceCalculatorService;
 use App\Services\FinanceCloseSnapshotBuilder;
 use App\Support\BusinessDate;
-use App\Support\ShiftClockOutGate;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Actions;
@@ -73,9 +72,9 @@ class DailyCloseCheck extends Page
 
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
 
-    protected static ?string $navigationLabel = 'Cloture caisse';
+    protected static ?string $navigationLabel = 'Clôture caisse';
 
-    protected static ?string $title = 'Cloture caisse';
+    protected static ?string $title = 'Clôture caisse';
 
     protected static ?string $navigationGroup = 'Caisse';
 
@@ -119,12 +118,6 @@ class DailyCloseCheck extends Page
     public string $resultModalHint = '';
 
     public bool $resultModalDbSaved = false;
-
-    /** 結果モーダル用: 保存したシフト（lunch / dinner）— WhatsApp 報告文面用 */
-    public string $resultModalCloseShift = '';
-
-    /** true の間、WhatsApp 報告前は結果モーダルを閉じられない（番号未設定時は無効） */
-    public bool $closeWaReportDone = false;
 
     /** 管理者 Door 用 PIN 入力（送信後は必ずクリア） */
     public string $doorPinInput = '';
@@ -172,51 +165,6 @@ class DailyCloseCheck extends Page
     public function responsibleStaffDisplayName(): string
     {
         return Staff::query()->find($this->responsibleStaffId)?->name ?? '—';
-    }
-
-    public function markCloseWhatsappReportDone(): void
-    {
-        $this->closeWaReportDone = true;
-    }
-
-    public function whatsappManagerNumberDigits(): string
-    {
-        $raw = config('services.whatsapp.manager_number');
-        if ($raw === null || $raw === '') {
-            return '';
-        }
-
-        return (string) preg_replace('/\D+/', '', (string) $raw);
-    }
-
-    public function whatsappManagerConfigured(): bool
-    {
-        return $this->whatsappManagerNumberDigits() !== '';
-    }
-
-    /**
-     * WhatsApp 報告本文用（Bravo / 差額）。
-     */
-    public function closeReportResultLine(): string
-    {
-        $v = $this->resultModalCalc['verdict'] ?? '';
-        if ($v === 'bravo') {
-            return 'Bravo';
-        }
-
-        return 'Écart : '.number_format((float) ($this->resultModalCalc['final_difference'] ?? 0), 3, ',', ' ');
-    }
-
-    /**
-     * 報告用シフト表記（フランス語短縮）。
-     */
-    public function closeReportShiftLabelFr(): string
-    {
-        return match ($this->resultModalCloseShift) {
-            'lunch' => 'Midi',
-            'dinner' => 'Soir',
-            default => $this->resultModalCloseShift !== '' ? $this->resultModalCloseShift : '—',
-        };
     }
 
     public function getSubheading(): string|Htmlable|null
@@ -303,7 +251,7 @@ class DailyCloseCheck extends Page
      */
     protected function getFormSchema(): array
     {
-        $measured = 'Valeur mesuree dans la caisse.';
+        $measured = 'Valeur mesurée comptée en caisse.';
 
         $sectionShell = 'rounded-xl border-2 border-black bg-white shadow-[4px_4px_0_0_rgba(0,0,0,1)]';
         $fieldsetShell = 'rounded-lg border-2 border-black/10 bg-amber-50 p-2.5';
@@ -336,11 +284,11 @@ class DailyCloseCheck extends Page
                                 ->columnSpan(['default' => 1, 'md' => 5, 'lg' => 4]),
                             Actions::make([
                                 FormAction::make('fetch_recettes_header')
-                                    ->label('Get recettes')
+                                    ->label('Récupérer les ventes')
                                     ->icon('heroicon-m-arrow-down-tray')
                                     ->color('warning')
                                     ->button()
-                                    ->tooltip('Récupérer les ventes API (affichage en-tête, sans remplir Ventes POS)')
+                                    ->tooltip('Récupère les ventes via l’API (affichage seul, ne remplit pas Ventes POS)')
                                     ->action(fn () => $this->fetchRecettesFromApi()),
                             ])
                                 ->key('daily-close-fetch-recettes-actions')
@@ -355,17 +303,17 @@ class DailyCloseCheck extends Page
                 ])
                 ->columns(1),
             Section::make('Midi — Saisie caisse')
-                ->description('Session midi uniquement.')
+                ->description('Service du midi uniquement.')
                 ->extraAttributes(['class' => $sectionShell])
                 ->visible(fn (Get $get): bool => $get('shift') === 'lunch')
                 ->schema([
-                    Fieldset::make('Parametres')
+                    Fieldset::make('Paramètres')
                         ->columns(1)
                         ->extraAttributes(['class' => $fieldsetShell])
                         ->schema([
                             Grid::make(['default' => 1, 'md' => 3])
                                 ->schema([
-                                    $this->ventesPosTextInput('lunch', 'Ventes POS (midi)*', blankDefault: true),
+                                    $this->ventesPosTextInput('lunch', 'Ventes POS (Midi)*', blankDefault: true),
                                     $numeric(
                                         'lunch_montant_initial',
                                         'Fond de caisse',
@@ -373,8 +321,8 @@ class DailyCloseCheck extends Page
                                     )->disabled()->dehydrated(true),
                                     $numeric(
                                         'lunch_chips',
-                                        'Tip déclaré (paramètres)*',
-                                        'Saisi ici avec les ventes POS : tip déclaré + ventes POS doit égaler la mesure caisse (cash + chèque + carte).',
+                                        'Pourboire déclaré (paramètres)*',
+                                        'Saisi ici avec les ventes POS : pourboire déclaré + ventes POS doit égaler la mesure caisse (espèces + chèque + carte).',
                                     )->required(fn (Get $get): bool => $get('shift') === 'lunch'),
                                 ]),
                             Placeholder::make('lunch_params_running_total')
@@ -382,7 +330,7 @@ class DailyCloseCheck extends Page
                                 ->content(fn (Get $get): HtmlString => $this->runningTotalParamsHtml($get, 'lunch_'))
                                 ->columnSpanFull(),
                         ]),
-                    Fieldset::make('Mesure caisse (cash, chèque, carte)')
+                    Fieldset::make('Mesure caisse (espèces, chèque, carte)')
                         ->columns(1)
                         ->extraAttributes(['class' => $fieldsetShell])
                         ->schema([
@@ -390,12 +338,12 @@ class DailyCloseCheck extends Page
                                 ->schema([
                                     $numeric(
                                         'lunch_cash',
-                                        'Cash (fond de caisse exclu)*',
-                                        'Cash reel sans fond de caisse.',
+                                        'Espèces (hors fond de caisse)*',
+                                        'Espèces réelles, sans le fond de caisse.',
                                     )->required(fn (Get $get): bool => $get('shift') === 'lunch'),
                                     $numeric(
                                         'lunch_cheque',
-                                        'Cheque*',
+                                        'Chèque*',
                                         $measured,
                                     )->required(fn (Get $get): bool => $get('shift') === 'lunch'),
                                     $numeric(
@@ -411,17 +359,17 @@ class DailyCloseCheck extends Page
                         ]),
                 ]),
             Section::make('Soir — Saisie caisse')
-                ->description('Session soir uniquement.')
+                ->description('Service du soir uniquement.')
                 ->extraAttributes(['class' => $sectionShell])
                 ->visible(fn (Get $get): bool => $get('shift') === 'dinner')
                 ->schema([
-                    Fieldset::make('Parametres')
+                    Fieldset::make('Paramètres')
                         ->columns(1)
                         ->extraAttributes(['class' => $fieldsetShell])
                         ->schema([
                             Grid::make(['default' => 1, 'md' => 3])
                                 ->schema([
-                                    $this->ventesPosTextInput('dinner', 'Ventes POS (soir)*', blankDefault: false),
+                                    $this->ventesPosTextInput('dinner', 'Ventes POS (Soir)*', blankDefault: false),
                                     $numeric(
                                         'dinner_montant_initial',
                                         'Fond de caisse',
@@ -429,8 +377,8 @@ class DailyCloseCheck extends Page
                                     )->disabled()->dehydrated(true),
                                     $numeric(
                                         'dinner_chips',
-                                        'Tip déclaré (paramètres)*',
-                                        'Saisi ici avec les ventes POS : tip déclaré + ventes POS doit égaler la mesure caisse (cash + chèque + carte).',
+                                        'Pourboire déclaré (paramètres)*',
+                                        'Saisi ici avec les ventes POS : pourboire déclaré + ventes POS doit égaler la mesure caisse (espèces + chèque + carte).',
                                     )->required(fn (Get $get): bool => $get('shift') === 'dinner'),
                                 ]),
                             Placeholder::make('dinner_params_running_total')
@@ -438,7 +386,7 @@ class DailyCloseCheck extends Page
                                 ->content(fn (Get $get): HtmlString => $this->runningTotalParamsHtml($get, 'dinner_'))
                                 ->columnSpanFull(),
                         ]),
-                    Fieldset::make('Mesure caisse (cash, chèque, carte)')
+                    Fieldset::make('Mesure caisse (espèces, chèque, carte)')
                         ->columns(1)
                         ->extraAttributes(['class' => $fieldsetShell])
                         ->schema([
@@ -446,12 +394,12 @@ class DailyCloseCheck extends Page
                                 ->schema([
                                     $numeric(
                                         'dinner_cash',
-                                        'Cash (fond de caisse exclu)*',
-                                        'Cash reel sans fond de caisse.',
+                                        'Espèces (hors fond de caisse)*',
+                                        'Espèces réelles, sans le fond de caisse.',
                                     )->required(fn (Get $get): bool => $get('shift') === 'dinner'),
                                     $numeric(
                                         'dinner_cheque',
-                                        'Cheque*',
+                                        'Chèque*',
                                         $measured,
                                     )->required(fn (Get $get): bool => $get('shift') === 'dinner'),
                                     $numeric(
@@ -503,12 +451,12 @@ class DailyCloseCheck extends Page
 
         return new HtmlString(
             '<div class="mt-2 border-t border-dashed border-gray-300 pt-2 dark:border-white/15">'
-            .'<span class="text-sm font-medium text-gray-950 dark:text-white">Référence (tip déclaré + ventes POS)</span>'
+            .'<span class="text-sm font-medium text-gray-950 dark:text-white">Référence (pourboire déclaré + ventes POS)</span>'
             .'<span class="ms-1 text-xs font-normal text-gray-500 dark:text-gray-400">DT</span>'
             .'<div class="mt-1 font-mono text-lg font-bold tabular-nums text-primary-600 dark:text-primary-400">'
             .e(number_format($ref, 3, '.', ','))
             .'</div>'
-            .'<p class="mt-1 text-xs text-gray-600 dark:text-gray-400">Doit égaler le total mesure caisse (cash + chèque + carte).</p>'
+            .'<p class="mt-1 text-xs text-gray-600 dark:text-gray-400">Doit être égal au total mesuré en caisse (espèces + chèque + carte).</p>'
             .'</div>'
         );
     }
@@ -524,7 +472,7 @@ class DailyCloseCheck extends Page
 
         return new HtmlString(
             '<div class="mt-2 border-t border-dashed border-gray-300 pt-2 dark:border-white/15">'
-            .'<span class="text-sm font-medium text-gray-950 dark:text-white">Total mesure caisse (cash + chèque + carte)</span>'
+            .'<span class="text-sm font-medium text-gray-950 dark:text-white">Total mesuré en caisse (espèces + chèque + carte)</span>'
             .'<span class="ms-1 text-xs font-normal text-gray-500 dark:text-gray-400">DT</span>'
             .'<div class="mt-1 font-mono text-lg font-bold tabular-nums text-primary-600 dark:text-primary-400">'
             .e(number_format($sum, 3, '.', ','))
@@ -534,10 +482,14 @@ class DailyCloseCheck extends Page
 
     private function shiftLabel(?string $shift): string
     {
+        if ($shift === null || $shift === '') {
+            return '';
+        }
+
         return match ($shift) {
             'lunch' => 'Midi',
             'dinner' => 'Soir',
-            default => (string) $shift,
+            default => $shift,
         };
     }
 
@@ -664,8 +616,8 @@ class DailyCloseCheck extends Page
         if (RateLimiter::tooManyAttempts($key, 5)) {
             Notification::make()
                 ->danger()
-                ->title('試行制限')
-                ->body('しばらくしてから再度お試しください。')
+                ->title('Erreur')
+                ->body('Trop de tentatives. Réessayez dans quelques minutes.')
                 ->send();
 
             return;
@@ -677,8 +629,8 @@ class DailyCloseCheck extends Page
         if ($secret === '') {
             Notification::make()
                 ->warning()
-                ->title('PIN が未設定')
-                ->body('環境変数 DAILY_CLOSE_DOOR_SECRET を設定してください。')
+                ->title('Attention')
+                ->body('Code d’accès non configuré. L’administrateur doit définir DAILY_CLOSE_DOOR_SECRET.')
                 ->send();
 
             return;
@@ -688,7 +640,8 @@ class DailyCloseCheck extends Page
             $this->doorPinInput = '';
             Notification::make()
                 ->danger()
-                ->title('PIN が一致しません')
+                ->title('Erreur')
+                ->body('Le code PIN ne correspond pas.')
                 ->send();
 
             return;
@@ -702,7 +655,7 @@ class DailyCloseCheck extends Page
         $this->doorPinInput = '';
         Notification::make()
             ->success()
-            ->title('参照モードを有効にしました')
+            ->title('Mode lecture activé')
             ->send();
     }
 
@@ -711,7 +664,7 @@ class DailyCloseCheck extends Page
         session()->forget(['daily_close_door_unlocked', 'daily_close_door_unlocked_until']);
         Notification::make()
             ->success()
-            ->title('参照モードを終了しました')
+            ->title('Mode lecture désactivé')
             ->send();
     }
 
@@ -806,13 +759,13 @@ class DailyCloseCheck extends Page
     public function historyResponsibleTitle(Finance $h): ?string
     {
         if ($h->responsible_staff_id) {
-            return 'PIN 確定済みの締め責任者（スタッフ）';
+            return 'Responsable confirmé (personnel, code PIN vérifié).';
         }
         if ($h->responsible_pin_verified) {
-            return 'PIN 確定済み（ユーザー ID・移行前データの可能性）';
+            return 'Responsable confirmé (compte utilisateur — données avant migration possibles).';
         }
 
-        return '旧データ: 責任者は未記録（当時はパネル操作者のみ created_by）';
+        return 'Ancien enregistrement : responsable non enregistré.';
     }
 
     /**
@@ -834,10 +787,10 @@ class DailyCloseCheck extends Page
     public function historyVerdictLabel(Finance $h): string
     {
         return match ($h->verdict) {
-            'bravo' => 'Bravo',
+            'bravo' => 'Parfait !',
             'plus_error' => 'Erreur (+)',
             'minus_error' => 'Erreur (-)',
-            'failed' => 'Failed',
+            'failed' => 'Échec',
             default => (string) $h->verdict,
         };
     }
@@ -916,20 +869,20 @@ class DailyCloseCheck extends Page
             'gateStaffId' => 'required|integer|exists:staff,id',
             'gatePinInput' => 'required|string|digits:4',
         ], [
-            'gateShift.required' => 'Choisis Midi ou Soir.',
-            'gateStaffId.required' => 'Choisis un responsable.',
-            'gatePinInput.required' => 'Saisis un PIN a 4 chiffres.',
-            'gatePinInput.digits' => 'PIN: 4 chiffres.',
+            'gateShift.required' => 'Choisissez Midi ou Soir.',
+            'gateStaffId.required' => 'Choisissez un responsable.',
+            'gatePinInput.required' => 'Saisissez le code PIN (4 chiffres).',
+            'gatePinInput.digits' => 'Code PIN : 4 chiffres.',
         ], [
-            'gateShift' => 'Shift',
+            'gateShift' => 'Service',
             'gateStaffId' => 'Responsable',
-            'gatePinInput' => 'PIN',
+            'gatePinInput' => 'Code PIN',
         ]);
 
         $staffId = (int) $this->gateStaffId;
         $key = 'daily-close-gate-pin:staff:'.$staffId.':'.(request()->ip() ?? 'unknown');
         if (RateLimiter::tooManyAttempts($key, 5)) {
-            $this->addError('gatePinInput', 'Trop de tentatives PIN. Réessaie plus tard.');
+            $this->addError('gatePinInput', 'Trop de tentatives de code PIN. Réessayez plus tard.');
 
             return;
         }
@@ -942,13 +895,13 @@ class DailyCloseCheck extends Page
             )
             ->find($staffId);
         if ($staff === null) {
-            $this->addError('gateStaffId', 'Responsable invalide ou niveau insuffisant (niveau 4+ requis).');
+            $this->addError('gateStaffId', 'Responsable invalide ou niveau insuffisant (niveau 4 minimum).');
 
             return;
         }
 
         if ($staff->pin_code === null || $staff->pin_code === '') {
-            $this->addError('gateStaffId', 'PIN non configure pour ce staff.');
+            $this->addError('gateStaffId', 'Code PIN non enregistré pour ce collaborateur.');
 
             return;
         }
@@ -956,7 +909,7 @@ class DailyCloseCheck extends Page
         if (! hash_equals((string) $staff->pin_code, (string) $this->gatePinInput)) {
             RateLimiter::hit($key, 300);
             $this->gatePinInput = '';
-            $this->addError('gatePinInput', 'PIN incorrect.');
+            $this->addError('gatePinInput', 'Code PIN incorrect.');
 
             return;
         }
@@ -980,8 +933,8 @@ class DailyCloseCheck extends Page
 
         Notification::make()
             ->success()
-            ->title('Lock valide')
-            ->body('Responsable confirme. Continue la saisie.')
+            ->title('Code PIN accepté')
+            ->body('Responsable confirmé. Vous pouvez continuer la saisie.')
             ->send();
     }
 
@@ -1013,10 +966,10 @@ class DailyCloseCheck extends Page
     private function buildResultModalHint(array $calc): string
     {
         return match ($calc['verdict']) {
-            'bravo' => 'Bravo ! Mesure caisse = tip déclaré + ventes POS.',
-            'plus_error' => 'Mesure caisse trop haute: revérifie comptage cash/chèque/carte ou tip/ventes POS.',
-            'minus_error' => 'Mesure caisse trop basse: revérifie tickets carte/chèque ou tip/ventes POS.',
-            default => 'Vérifie et renvoie.',
+            'bravo' => 'Parfait ! La caisse correspond au pourboire déclaré + ventes POS.',
+            'plus_error' => 'Attention : total caisse trop haut. Vérifiez espèces, chèques, carte et la saisie POS / pourboire.',
+            'minus_error' => 'Attention : total caisse trop bas. Vérifiez tickets carte / chèque et la saisie POS / pourboire.',
+            default => 'Vérifiez et renvoyez.',
         };
     }
 
@@ -1044,8 +997,8 @@ class DailyCloseCheck extends Page
         if (! $this->closeSessionReady || $this->responsibleStaffId === null) {
             Notification::make()
                 ->danger()
-                ->title('Lock requis')
-                ->body('Valide d abord shift, responsable et PIN.')
+                ->title('Verrouillage requis')
+                ->body('Validez d’abord le service, le responsable et le code PIN (fenêtre au début).')
                 ->send();
 
             return;
@@ -1075,18 +1028,6 @@ class DailyCloseCheck extends Page
                 $this->resultModalHint = $this->buildResultModalHint($calc);
                 $this->resultModalKind = $calc['verdict'] === 'bravo' ? 'bravo' : 'retry';
                 $this->resultModalDbSaved = false;
-
-                $closeShift = (string) ($data['shift'] ?? 'dinner');
-                $missingNames = ShiftClockOutGate::missingClockOutStaffNames($businessDate, $closeShift);
-                if ($missingNames !== []) {
-                    Notification::make()
-                        ->danger()
-                        ->title('退勤打刻漏れがあります')
-                        ->body('以下のスタッフの退勤打刻（'.$closeShift.'）が完了していません。出勤簿を修正してから再度実行してください。'."\n対象者: ".implode(', ', $missingNames))
-                        ->send();
-
-                    return;
-                }
 
                 DB::transaction(function () use ($businessDate, $data, $calc, $payload): void {
                     Finance::query()->create([
@@ -1125,8 +1066,6 @@ class DailyCloseCheck extends Page
                     ]);
                 });
                 $this->resultModalDbSaved = true;
-                $this->resultModalCloseShift = (string) ($data['shift'] ?? 'dinner');
-                $this->closeWaReportDone = false;
 
                 if ($calc['verdict'] !== 'bravo') {
                     NotifyDailyCloseMismatchJob::dispatch(
@@ -1175,7 +1114,7 @@ class DailyCloseCheck extends Page
                 Notification::make()
                     ->danger()
                     ->title('Erreur')
-                    ->body('Enregistrement sauvegarde: état failed. Vérifie puis renvoie.')
+                    ->body('Enregistrement en base avec statut « échec ». Vérifiez puis renvoyez.')
                     ->send();
             }
         });
@@ -1184,7 +1123,7 @@ class DailyCloseCheck extends Page
             Notification::make()
                 ->warning()
                 ->title('Traitement en cours')
-                ->body('Attends la fin de l envoi puis réessaie.')
+                ->body('Attendez la fin de l’envoi, puis réessayez.')
                 ->send();
         }
     }
@@ -1196,7 +1135,7 @@ class DailyCloseCheck extends Page
     {
         return [
             Action::make('calculate')
-                ->label('Calculer et envoyer')
+                ->label('Clôturer le service')
                 ->submit('calculate')
                 ->color('warning')
                 ->extraAttributes([

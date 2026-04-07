@@ -37,4 +37,25 @@ final class ShiftClockOutGate
             ->values()
             ->all();
     }
+
+    /** Libellé affichage uniquement (ne pas utiliser pour la logique / la base). */
+    public static function shiftLabelFr(string $shift): string
+    {
+        return match ($shift) {
+            'lunch' => 'Midi',
+            'dinner' => 'Soir',
+            default => $shift,
+        };
+    }
+
+    /**
+     * @param  list<string>  $missingStaffNames
+     */
+    public static function missingClockOutUserMessage(string $shift, array $missingStaffNames): string
+    {
+        $service = self::shiftLabelFr($shift);
+        $names = implode(', ', $missingStaffNames);
+
+        return 'Les employés suivants n\'ont pas pointé leur sortie (service '.$service.'). Veuillez corriger les présences avant de clôturer.'."\n".$names;
+    }
 }

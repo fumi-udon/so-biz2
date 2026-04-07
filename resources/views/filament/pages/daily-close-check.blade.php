@@ -10,8 +10,8 @@
             width="3xl"
             icon="heroicon-o-lock-closed"
             icon-color="warning"
-            heading="Validation lock"
-            description="Choisis shift + responsable puis PIN (4 chiffres)."
+            heading="Avant la clôture"
+            description="Choisissez le service (Midi ou Soir), le responsable, puis le code PIN (4 chiffres)."
             :sticky-footer="true"
             :extra-modal-window-attribute-bag="new \Illuminate\View\ComponentAttributeBag([
                 'class' => 'daily-close-gate-window dark !bg-gradient-to-b !from-slate-950 !via-slate-900 !to-zinc-950 !text-slate-100 !shadow-2xl !ring-2 !ring-cyan-500/45',
@@ -55,9 +55,9 @@
                             class="h-4 w-4 shrink-0 text-amber-400 sm:h-5 sm:w-5"
                         />
                         <div class="min-w-0 flex-1">
-                            <p class="text-xs font-bold text-amber-200 sm:text-sm">Shift</p>
+                            <p class="text-xs font-bold text-amber-200 sm:text-sm">Service</p>
                             <p class="mt-0.5 line-clamp-2 text-[10px] leading-snug text-slate-400 sm:text-xs">
-                                Etat actif: cadre lumineux + badge "Actif".
+                                Le service choisi a un cadre lumineux et le badge « Actif ».
                             </p>
                         </div>
                     </div>
@@ -149,19 +149,18 @@
                             class="h-4 w-4 shrink-0 text-emerald-400 sm:h-5 sm:w-5"
                         />
                         <div class="min-w-0 flex-1">
-                            <p class="text-xs font-bold text-emerald-200 sm:text-sm">Responsable et PIN</p>
-                            <p class="mt-0.5 text-[10px] text-slate-400 sm:text-xs">Sans PIN, non affiché.</p>
+                            <p class="text-xs font-bold text-emerald-200 sm:text-sm">Responsable et code PIN</p>
+                            <p class="mt-0.5 text-[10px] text-slate-400 sm:text-xs">Sans code PIN enregistré, la liste est vide.</p>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-4">
                         <div class="space-y-1.5">
                             <label class="fi-fo-field-wrp-label block" for="gate-staff-select">
-                                <span class="text-xs font-medium text-slate-200 sm:text-sm">Responsable (staff)</span>
+                                <span class="text-xs font-medium text-slate-200 sm:text-sm">Responsable</span>
                             </label>
                             @if (count($this->staffOptions()) === 0)
                                 <p class="text-sm text-rose-300">
-                                    Aucun staff avec PIN. Admin doit renseigner
-                                    <span class="font-mono text-rose-200">pin_code</span>  .
+                                    Aucun collaborateur avec code PIN. L’administrateur doit l’enregistrer dans la fiche personnel.
                                 </p>
                             @else
                                 <x-filament::input.wrapper
@@ -174,7 +173,7 @@
                                         wire:model.live.debounce.500ms="gateStaffId"
                                         id="gate-staff-select"
                                     >
-                                        <option value="">Choisir</option>
+                                        <option value="">Choisir…</option>
                                         @foreach ($this->staffOptions() as $id => $name)
                                             <option value="{{ $id }}">{{ $name }}</option>
                                         @endforeach
@@ -184,7 +183,7 @@
                         </div>
                         <div class="space-y-1.5">
                             <label class="fi-fo-field-wrp-label block" for="gate-pin-input">
-                                <span class="text-xs font-medium text-slate-200 sm:text-sm">PIN (4 chiffres)</span>
+                                <span class="text-xs font-medium text-slate-200 sm:text-sm">Code PIN (4 chiffres)</span>
                             </label>
                             <x-filament::input.wrapper
                                 :valid="true"
@@ -206,9 +205,9 @@
                 </div>
 
                 <p class="text-center text-[10px] leading-tight text-slate-400 sm:text-xs">
-                    Etapes: <span class="text-cyan-300/90">Shift</span> →
+                    Étapes : <span class="text-cyan-300/90">Service</span> →
                     <span class="text-emerald-300/90">Responsable</span> →
-                    <span class="text-violet-300/90">PIN</span> →
+                    <span class="text-violet-300/90">Code PIN</span> →
                     <span class="text-amber-300/90">Valider</span>
                 </p>
             </div>
@@ -228,8 +227,8 @@
                         class="w-full font-black shadow-lg ring-1 ring-amber-300/40 sm:!py-2.5"
                         :disabled="count($this->staffOptions()) === 0"
                     >
-                        <span wire:loading.remove wire:target="confirmCloseSessionGate">Valider lock et ouvrir</span>
-                        <span wire:loading wire:target="confirmCloseSessionGate">Verification...</span>
+                        <span wire:loading.remove wire:target="confirmCloseSessionGate">Valider et ouvrir la saisie</span>
+                        <span wire:loading wire:target="confirmCloseSessionGate">Vérification…</span>
                     </x-filament::button>
                 </div>
             </x-slot>
@@ -237,14 +236,14 @@
 
         <div class="flex flex-wrap items-center gap-2">
             @if ($this->closeSessionReady)
-                <x-filament::badge color="success" size="sm">Lock OK</x-filament::badge>
+                <x-filament::badge color="success" size="sm">Verrouillage OK</x-filament::badge>
             @else
-                <x-filament::badge color="warning" size="sm">En attente lock</x-filament::badge>
+                <x-filament::badge color="warning" size="sm">En attente</x-filament::badge>
             @endif
             <span class="text-xs text-gray-500 dark:text-gray-400" aria-hidden="true">→</span>
             <span class="text-xs text-gray-600 dark:text-gray-400">Saisie caisse</span>
             <span class="text-xs text-gray-500 dark:text-gray-400" aria-hidden="true">→</span>
-            <span class="text-xs text-gray-600 dark:text-gray-400">Envoyer</span>
+            <span class="text-xs text-gray-600 dark:text-gray-400">Clôture</span>
         </div>
 
         <div class="-mt-1">
@@ -282,10 +281,10 @@
                         </div>
                         <div class="min-w-0">
                             <p class="text-[10px] font-black uppercase tracking-[0.12em] text-yellow-100 drop-shadow-[0_1px_0_rgba(0,0,0,0.8)]">
-                                {{ $lockedShift === 'lunch' ? 'Midi' : 'Soir' }} · verrouille
+                                {{ $lockedShift === 'lunch' ? 'Midi' : 'Soir' }} · verrouillé
                             </p>
                             <p class="mt-0.5 text-base font-black leading-tight text-white drop-shadow-[0_2px_0_rgba(0,0,0,0.5)] sm:text-lg">
-                                {{ $lockedShift === 'lunch' ? 'Cloture midi' : 'Cloture soir' }}
+                                {{ $lockedShift === 'lunch' ? 'Clôture midi' : 'Clôture soir' }}
                             </p>
                         </div>
                     </div>
@@ -307,7 +306,7 @@
                             size="sm"
                             class="min-h-11 w-full font-black shadow-[2px_2px_0_0_rgba(0,0,0,0.85)] md:min-h-12 md:w-auto md:px-5"
                         >
-                            Changer shift/responsable
+                            Changer service / responsable
                         </x-filament::button>
                     </div>
                 </div>
@@ -340,7 +339,7 @@
                     wire:target="fetchRecettesFromApi"
                     class="mb-2 rounded-lg border border-dashed border-gray-300 bg-gray-50/80 px-2 py-1.5 text-xs font-medium text-gray-600 dark:border-white/15 dark:bg-white/5 dark:text-gray-400"
                 >
-                    Chargement des recettes…
+                    Chargement des ventes…
                 </div>
                 <x-filament-panels::form id="form" wire:submit="calculate">
                     {{ $this->form }}
@@ -352,12 +351,12 @@
                 </x-filament-panels::form>
             @else
                 <div class="space-y-2 py-5 text-center">
-                    <p class="text-base font-semibold text-gray-900 dark:text-white">Valide le lock dans le modal</p>
+                    <p class="text-base font-semibold text-gray-900 dark:text-white">Validez le verrouillage dans la fenêtre</p>
                     <p class="mx-auto max-w-md text-sm text-gray-600 dark:text-gray-400">
-                        Choisis shift, responsable et PIN 4 chiffres pour ouvrir le formulaire.
+                        Choisissez le service, le responsable et le code PIN (4 chiffres) pour ouvrir le formulaire.
                     </p>
                     <x-filament::button type="button" wire:click="openSessionGateModal" color="primary">
-                        Ouvrir
+                        Ouvrir la fenêtre
                     </x-filament::button>
                 </div>
             @endif
@@ -368,10 +367,10 @@
         >
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-2 dark:border-white/10">
                 <div>
-                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">History</p>
-                    <p class="text-sm font-semibold text-gray-900 dark:text-white">Historique cloture (50)</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Historique</p>
+                    <p class="text-sm font-semibold text-gray-900 dark:text-white">Dernières clôtures (50)</p>
                     <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
-                        Detail: <code class="rounded bg-gray-100 px-1 font-mono text-[10px] dark:bg-white/10">close_snapshot</code>
+                        Détail technique : <code class="rounded bg-gray-100 px-1 font-mono text-[10px] dark:bg-white/10">close_snapshot</code>
                     </p>
                 </div>
                 <x-filament::button
@@ -381,7 +380,7 @@
                     size="sm"
                     outlined
                 >
-                    {{ $historyDetailOpen ? 'Masquer details' : 'Afficher details' }}
+                    {{ $historyDetailOpen ? 'Masquer le détail' : 'Afficher le détail' }}
                 </x-filament::button>
             </div>
 
@@ -395,16 +394,16 @@
                                 <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-start font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">S</th>
                                 <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Ventes</th>
                                 <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Fond</th>
-                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Cash</th>
-                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Cheque</th>
-                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">ｶｰﾄﾞ</th>
-                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">ﾁｯﾌﾟ</th>
+                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Espèces</th>
+                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Chèque</th>
+                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Carte</th>
+                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Pourboire décl.</th>
                                 <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Mesure caisse</th>
-                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Tip+POS</th>
-                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Ecart</th>
+                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">POS + pourb.</th>
+                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-end font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Écart</th>
                                 <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-start font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Statut</th>
                                 <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-start font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Responsable</th>
-                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-start font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Operateur</th>
+                                <th class="whitespace-nowrap border-e border-gray-200 px-2 py-0.5 text-start font-medium text-gray-700 dark:border-white/10 dark:text-gray-300">Opérateur</th>
                                 <th class="whitespace-nowrap px-2 py-0.5 text-start font-medium text-gray-700 dark:text-gray-300">Action</th>
                             </tr>
                         </thead>
@@ -469,10 +468,10 @@
                                         @if (! $h->responsible_pin_verified)
                                             <span
                                                 class="ms-0.5 rounded bg-gray-200 px-0.5 text-[9px] font-medium text-gray-700 dark:bg-white/10 dark:text-gray-300"
-                                            >Legacy</span>
+                                            >Ancien</span>
                                         @endif
                                     </td>
-                                    <td class="max-w-[6rem] truncate border-e border-gray-100 px-2 py-0.5 text-[10px] text-gray-800 dark:border-white/10 dark:text-gray-200" title="Operateur panneau (Filament)">
+                                    <td class="max-w-[6rem] truncate border-e border-gray-100 px-2 py-0.5 text-[10px] text-gray-800 dark:border-white/10 dark:text-gray-200" title="Opérateur du panneau (Filament)">
                                         {{ $this->historyOperatorDisplay($h) }}
                                     </td>
                                     <td class="whitespace-nowrap px-2 py-0.5">
@@ -483,14 +482,14 @@
                                             color="gray"
                                             outlined
                                         >
-                                            Detail
+                                            Détail
                                         </x-filament::button>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
                                     <td colspan="16" class="px-2 py-3 text-center text-xs text-gray-600 dark:text-gray-400">
-                                        Aucun historique caisse.
+                                        Aucune clôture enregistrée.
                                     </td>
                                 </tr>
                             @endforelse
@@ -514,9 +513,9 @@
         @if ($snapFin)
             <div class="max-h-[80vh] space-y-4 overflow-y-auto text-gray-950 dark:text-white">
                 <div class="border-b border-gray-200 pb-3 dark:border-white/10">
-                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Snapshot</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Aperçu</p>
                     <p class="text-sm font-semibold text-gray-900 dark:text-white">
-                        Detail cloture #{{ $snapFin->id }} · {{ $snapFin->business_date?->format('Y-m-d') }} ·
+                        Détail clôture n°{{ $snapFin->id }} · {{ $snapFin->business_date?->format('Y-m-d') }} ·
                         {{ $snapFin->shift === 'lunch' ? 'Midi' : 'Soir' }}
                     </p>
                 </div>
@@ -530,35 +529,35 @@
                     @endphp
                     <div class="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
                         <div class="rounded-lg bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
-                            <p class="font-medium text-gray-600 dark:text-gray-400">tip/mesure %</p>
+                            <p class="font-medium text-gray-600 dark:text-gray-400">Pourboire / mesure %</p>
                             <p class="font-mono font-semibold text-primary-600 dark:text-primary-400">
                                 {{ isset($ms['chips_of_register']) ? number_format($ms['chips_of_register'], 2).'%' : '—' }}
                             </p>
                         </div>
                         <div class="rounded-lg bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
-                            <p class="font-medium text-gray-600 dark:text-gray-400">ｶｰﾄﾞ/Ventes%</p>
+                            <p class="font-medium text-gray-600 dark:text-gray-400">Carte / ventes %</p>
                             <p class="font-mono font-semibold text-primary-600 dark:text-primary-400">
                                 {{ isset($rs['carte_to_recettes_pct']) ? number_format($rs['carte_to_recettes_pct'], 2).'%' : '—' }}
                             </p>
                         </div>
                         <div class="rounded-lg bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
-                            <p class="font-medium text-gray-600 dark:text-gray-400">ﾁｯﾌﾟ/Ventes%</p>
+                            <p class="font-medium text-gray-600 dark:text-gray-400">Pourboire / ventes %</p>
                             <p class="font-mono font-semibold text-primary-600 dark:text-primary-400">
                                 {{ isset($rs['chips_to_recettes_pct']) ? number_format($rs['chips_to_recettes_pct'], 2).'%' : '—' }}
                             </p>
                         </div>
                         <div class="rounded-lg bg-gray-50 p-2 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
-                            <p class="font-medium text-gray-600 dark:text-gray-400">schema</p>
+                            <p class="font-medium text-gray-600 dark:text-gray-400">Version schéma</p>
                             <p class="font-mono">{{ $snap['schema_version'] ?? '—' }}</p>
                         </div>
                     </div>
 
                     <div class="rounded-lg bg-gray-50 p-3 ring-1 ring-gray-950/5 dark:bg-white/5 dark:ring-white/10">
-                        <p class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">close_snapshot（JSON）</p>
+                        <p class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">Données enregistrées (JSON)</p>
                         <pre class="max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-snug text-gray-900 dark:text-gray-100">{{ json_encode($snap, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre>
                     </div>
                 @else
-                    <p class="text-xs text-gray-600 dark:text-gray-400">Donnees anterieures au snapshot.</p>
+                    <p class="text-xs text-gray-600 dark:text-gray-400">Données antérieures à l’enregistrement détaillé.</p>
                 @endif
 
                 <x-filament::button
@@ -572,8 +571,8 @@
             </div>
         @elseif ($this->selectedHistoryFinanceId !== null)
             <div class="space-y-3 py-2">
-                <p class="text-sm font-medium text-gray-900 dark:text-white">Donnee introuvable.</p>
-                <p class="text-xs text-gray-600 dark:text-gray-400">Supprimee ou ID invalide.</p>
+                <p class="text-sm font-medium text-gray-900 dark:text-white">Donnée introuvable.</p>
+                <p class="text-xs text-gray-600 dark:text-gray-400">Supprimée ou identifiant invalide.</p>
                 <x-filament::button
                     type="button"
                     x-on:click="$dispatch('close-modal', { id: 'finance-history-snapshot-modal' })"
@@ -584,7 +583,7 @@
                 </x-filament::button>
             </div>
         @else
-            <p class="text-sm text-gray-600 dark:text-gray-400">Chargement...</p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">Chargement…</p>
         @endif
     </x-filament::modal>
 
@@ -592,10 +591,10 @@
         <div class="space-y-2 text-sm text-gray-900 dark:text-gray-100">
             <p class="font-semibold">Guide rapide</p>
             <ol class="list-decimal space-y-1 ps-4 text-xs">
-                <li>Retire le fond de caisse avant de compter le cash.</li>
-                <li>Paramètres : ventes POS + tip déclaré. Mesure caisse : cash + chèque + carte (sans tip).</li>
-                <li>Bravo si mesure caisse = tip déclaré + ventes POS (tolérance).</li>
-                <li>Si erreur : revérifie tickets, double comptage, ou saisie tip / POS.</li>
+                <li>Retirez le fond de caisse avant de compter les espèces.</li>
+                <li>Paramètres : ventes POS + pourboire déclaré. Mesure caisse : espèces + chèque + carte (sans pourboire).</li>
+                <li>Parfait si la mesure caisse = pourboire déclaré + ventes POS (avec tolérance).</li>
+                <li>En cas d’erreur : vérifiez les tickets, les doubles comptages, ou la saisie POS / pourboire.</li>
             </ol>
         </div>
     </x-filament::modal>
@@ -626,17 +625,17 @@
 
     <x-filament::modal
         id="daily-close-result-modal"
-        :close-by-clicking-away="! ($resultModalDbSaved && $this->whatsappManagerConfigured() && ! $closeWaReportDone)"
-        :close-by-escaping="! ($resultModalDbSaved && $this->whatsappManagerConfigured() && ! $closeWaReportDone)"
+        :close-by-clicking-away="true"
+        :close-by-escaping="true"
         width="2xl"
     >
         @php
             $v = $resultModalCalc['verdict'] ?? '';
             $verdictLabel = match ($v) {
-                'bravo' => 'Bravo',
+                'bravo' => 'Parfait !',
                 'plus_error' => 'Erreur (+)',
                 'minus_error' => 'Erreur (-)',
-                'failed' => 'Failed',
+                'failed' => 'Échec',
                 default => '—',
             };
             $fmt = static fn ($n) => number_format((float) $n, 3, '.', ',');
@@ -644,24 +643,24 @@
 
         @if ($resultModalKind === 'bravo')
             <div class="space-y-4 rounded-xl border-2 border-black bg-gradient-to-br from-emerald-100 via-cyan-50 to-sky-100 p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)] dark:border-white/20 dark:from-emerald-900/30 dark:via-cyan-950/30 dark:to-sky-950/30">
-                <p class="text-center text-xs font-medium uppercase tracking-wide text-success-700 dark:text-success-400">Register close</p>
+                <p class="text-center text-xs font-medium uppercase tracking-wide text-success-700 dark:text-success-400">Clôture caisse</p>
                 <div class="relative overflow-hidden rounded-lg border border-amber-300/70 bg-gradient-to-r from-amber-200/80 via-yellow-100/80 to-rose-100/80 px-3 py-3 dark:border-amber-500/40 dark:from-amber-900/30 dark:via-yellow-900/20 dark:to-rose-900/20">
                     <div class="pointer-events-none absolute -top-1 left-2 text-amber-500 animate-bounce">✦</div>
                     <div class="pointer-events-none absolute -top-1 right-3 text-rose-500 animate-pulse">✦</div>
                     <div class="pointer-events-none absolute -bottom-1 left-1/3 text-sky-500 animate-bounce">✦</div>
-                    <p class="text-center text-lg font-black text-gray-900 dark:text-white">Bravo !</p>
+                    <p class="text-center text-lg font-black text-gray-900 dark:text-white">Parfait !</p>
                     <p class="mt-1 text-center text-sm font-semibold text-emerald-700 dark:text-emerald-300">
                         Merci {{ $this->responsibleStaffDisplayName() }} !
                     </p>
                 </div>
                 <p class="text-center text-sm text-gray-700 dark:text-gray-300">{{ $resultModalShiftLabel }}</p>
                 @if ($resultModalDbSaved)
-                    <p class="text-center text-xs text-gray-600 dark:text-gray-400">Sauvegarde en base OK</p>
+                    <p class="text-center text-xs text-gray-600 dark:text-gray-400">Enregistrement réussi</p>
                 @endif
 
                 <dl class="space-y-2 rounded-lg bg-white p-3 text-sm shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                     <div class="flex justify-between gap-2 border-b border-gray-300 pb-2 dark:border-white/10">
-                        <dt class="font-medium text-gray-700 dark:text-gray-300">Tip déclaré (paramètres)</dt>
+                        <dt class="font-medium text-gray-700 dark:text-gray-300">Pourboire déclaré (paramètres)</dt>
                         <dd class="font-mono font-semibold tabular-nums">{{ $fmt($resultModalCalc['declared_tip'] ?? ($resultModalPayload['chips'] ?? 0)) }}</dd>
                     </div>
                     <div class="flex justify-between gap-2 border-b border-gray-300 pb-2 dark:border-white/10">
@@ -669,48 +668,41 @@
                         <dd class="font-mono font-semibold tabular-nums text-sky-700 dark:text-sky-300">{{ $fmt($resultModalCalc['expected_sales'] ?? 0) }}</dd>
                     </div>
                     <div class="flex justify-between gap-2 border-b border-gray-300 pb-2 dark:border-white/10">
-                        <dt class="font-medium text-sky-700 dark:text-sky-300">Tip déclaré + ventes POS</dt>
+                        <dt class="font-medium text-sky-700 dark:text-sky-300">Pourboire déclaré + ventes POS</dt>
                         <dd class="font-mono font-semibold tabular-nums text-sky-700 dark:text-sky-300">{{ $fmt($resultModalCalc['sum_tip_plus_pos_sales'] ?? (($resultModalCalc['declared_tip'] ?? 0) + ($resultModalCalc['expected_sales'] ?? 0))) }}</dd>
                     </div>
                     <div class="flex justify-between gap-2">
-                        <dt class="font-medium text-primary-700 dark:text-primary-300">Mesure caisse (cash + chèque + carte)</dt>
+                        <dt class="font-medium text-primary-700 dark:text-primary-300">Mesure caisse (espèces + chèque + carte)</dt>
                         <dd class="font-mono font-semibold tabular-nums text-primary-700 dark:text-primary-300">{{ $fmt($resultModalCalc['measured_without_declared_tip'] ?? 0) }}</dd>
                     </div>
                 </dl>
 
                 <p class="text-center text-xs leading-relaxed text-gray-700 dark:text-gray-300">{{ $resultModalHint }}</p>
 
-                @if ($resultModalDbSaved)
-                    @include('filament.pages.partials.daily-close-result-whatsapp-block', [
-                        'fermerLabel' => 'Fermer',
-                        'fermerColor' => 'gray',
-                    ])
-                @else
-                    <x-filament::button
-                        type="button"
-                        x-on:click="$dispatch('close-modal', { id: 'daily-close-result-modal' })"
-                        color="gray"
-                        class="w-full text-gray-950 dark:text-white"
-                    >
-                        Fermer
-                    </x-filament::button>
-                @endif
+                <x-filament::button
+                    type="button"
+                    x-on:click="$dispatch('close-modal', { id: 'daily-close-result-modal' })"
+                    color="gray"
+                    class="w-full text-gray-950 dark:text-white"
+                >
+                    Fermer
+                </x-filament::button>
             </div>
         @else
             <div class="space-y-4 rounded-xl border-2 border-black bg-gradient-to-br from-amber-100 via-orange-100 to-red-100 p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)] dark:border-white/20 dark:from-amber-900/30 dark:via-orange-950/30 dark:to-red-950/30">
-                <p class="text-center text-xs font-medium uppercase tracking-wide text-warning-800 dark:text-warning-400">Check again</p>
-                <p class="text-center text-base font-semibold text-gray-900 dark:text-white">Recheck avant renvoi</p>
+                <p class="text-center text-xs font-medium uppercase tracking-wide text-warning-800 dark:text-warning-400">Attention</p>
+                <p class="text-center text-base font-semibold text-gray-900 dark:text-white">Vérifiez avant de renvoyer</p>
                 <p class="text-center text-sm text-gray-700 dark:text-gray-300">{{ $resultModalShiftLabel }}</p>
-                <p class="text-center text-sm font-medium text-warning-800 dark:text-warning-300">Statut: {{ $verdictLabel }}</p>
+                <p class="text-center text-sm font-medium text-warning-800 dark:text-warning-300">Statut : {{ $verdictLabel }}</p>
                 @if ($resultModalDbSaved)
                     <p class="text-center text-xs text-gray-600 dark:text-gray-400">
-                        Sauvegarde faite (record failed).
+                        Enregistrement en base (statut échec).
                     </p>
                 @endif
 
                 <dl class="space-y-2 rounded-lg bg-white p-3 text-sm shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                     <div class="flex justify-between gap-2 border-b border-gray-300 pb-2 dark:border-white/10">
-                        <dt class="font-medium text-gray-700 dark:text-gray-300">Tip déclaré (paramètres)</dt>
+                        <dt class="font-medium text-gray-700 dark:text-gray-300">Pourboire déclaré (paramètres)</dt>
                         <dd class="font-mono font-semibold tabular-nums">{{ $fmt($resultModalCalc['declared_tip'] ?? ($resultModalPayload['chips'] ?? 0)) }}</dd>
                     </div>
                     <div class="flex justify-between gap-2 border-b border-gray-300 pb-2 dark:border-white/10">
@@ -718,15 +710,15 @@
                         <dd class="font-mono font-semibold tabular-nums text-sky-700 dark:text-sky-300">{{ $fmt($resultModalCalc['expected_sales'] ?? 0) }}</dd>
                     </div>
                     <div class="flex justify-between gap-2 border-b border-gray-300 pb-2 dark:border-white/10">
-                        <dt class="font-medium text-sky-700 dark:text-sky-300">Tip déclaré + ventes POS</dt>
+                        <dt class="font-medium text-sky-700 dark:text-sky-300">Pourboire déclaré + ventes POS</dt>
                         <dd class="font-mono font-semibold tabular-nums text-sky-700 dark:text-sky-300">{{ $fmt($resultModalCalc['sum_tip_plus_pos_sales'] ?? (($resultModalCalc['declared_tip'] ?? 0) + ($resultModalCalc['expected_sales'] ?? 0))) }}</dd>
                     </div>
                     <div class="flex justify-between gap-2 border-b border-gray-300 pb-2 dark:border-white/10">
-                        <dt class="font-medium text-primary-700 dark:text-primary-300">Mesure caisse (cash + chèque + carte)</dt>
+                        <dt class="font-medium text-primary-700 dark:text-primary-300">Mesure caisse (espèces + chèque + carte)</dt>
                         <dd class="font-mono font-semibold tabular-nums text-primary-700 dark:text-primary-300">{{ $fmt($resultModalCalc['measured_without_declared_tip'] ?? 0) }}</dd>
                     </div>
                     <div class="flex justify-between gap-2">
-                        <dt class="font-medium text-gray-700 dark:text-gray-300">Écart (mesure − (tip déclaré + ventes POS))</dt>
+                        <dt class="font-medium text-gray-700 dark:text-gray-300">Écart (mesure − (pourboire déclaré + ventes POS))</dt>
                         @php $diff = (float) ($resultModalCalc['final_difference'] ?? 0); @endphp
                         <dd class="inline-flex items-center gap-1 font-mono font-semibold tabular-nums text-danger-600 dark:text-danger-400">
                             @if ($diff > 0)
@@ -743,21 +735,14 @@
                     {{ $resultModalHint }}
                 </div>
 
-                @if ($resultModalDbSaved)
-                    @include('filament.pages.partials.daily-close-result-whatsapp-block', [
-                        'fermerLabel' => 'Fermer et corriger',
-                        'fermerColor' => 'warning',
-                    ])
-                @else
-                    <x-filament::button
-                        type="button"
-                        x-on:click="$dispatch('close-modal', { id: 'daily-close-result-modal' })"
-                        color="warning"
-                        class="w-full text-gray-950 dark:text-white"
-                    >
-                        Fermer et corriger
-                    </x-filament::button>
-                @endif
+                <x-filament::button
+                    type="button"
+                    x-on:click="$dispatch('close-modal', { id: 'daily-close-result-modal' })"
+                    color="warning"
+                    class="w-full text-gray-950 dark:text-white"
+                >
+                    {{ $resultModalDbSaved ? 'Réessayer' : 'Fermer' }}
+                </x-filament::button>
             </div>
         @endif
     </x-filament::modal>
@@ -770,9 +755,9 @@
             color="gray"
             outlined
             class="pointer-events-auto !rounded-full"
-            title="Door"
+            title="Lecture seule (administrateur)"
         >
-            Door
+            Admin
         </x-filament::button>
     </div>
 
@@ -784,9 +769,9 @@
     >
         <div class="space-y-4 text-gray-950 dark:text-white">
             <div class="border-b border-gray-200 pb-3 dark:border-white/10">
-                <p class="text-sm font-semibold text-gray-900 dark:text-white">Door manager (lecture)</p>
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">Lecture seule (responsable)</p>
                 <p class="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                    Seuils et historique visibles ici uniquement.
+                    Seuils de tolérance et historique : affichage réservé à cette fenêtre.
                 </p>
             </div>
 
@@ -797,7 +782,7 @@
                             for="daily-close-door-pin"
                             class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium text-gray-950 dark:text-white"
                         >
-                            PIN
+                            Code PIN
                         </label>
                         <x-filament::input.wrapper :valid="true" class="mt-1 max-w-sm">
                             <x-filament::input
@@ -810,25 +795,25 @@
                         </x-filament::input.wrapper>
                     </div>
                     <x-filament::button type="submit" color="primary" size="sm">
-                        Autoriser
+                        Valider
                     </x-filament::button>
                 </form>
             @else
                 <div class="flex flex-wrap items-center gap-2">
                     <x-filament::button type="button" wire:click="lockAdminDoor" color="gray" size="sm" outlined>
-                        Fermer lecture
+                        Quitter la lecture seule
                     </x-filament::button>
                 </div>
 
                 <div class="space-y-2">
-                    <p class="text-xs font-medium text-gray-900 dark:text-white">Seuils tolerance (+)</p>
-                    <p class="text-xs text-gray-600 dark:text-gray-400">La tolerance + est definie par plage de ventes (saisie).</p>
+                    <p class="text-xs font-medium text-gray-900 dark:text-white">Seuils de tolérance (+)</p>
+                    <p class="text-xs text-gray-600 dark:text-gray-400">La tolérance + est définie par plage de ventes (saisie).</p>
                     <div class="overflow-x-auto rounded-lg bg-white shadow-sm ring-1 ring-gray-950/5 dark:bg-gray-900 dark:ring-white/10">
                         <table class="fi-ta-table w-full min-w-[28rem] divide-y divide-gray-200 text-start text-sm dark:divide-white/10">
                             <thead>
                                 <tr class="bg-gray-50 dark:bg-white/5">
                                     <th class="fi-ta-header-cell px-3 py-2 text-start font-medium text-gray-700 dark:text-gray-300">Plage ventes</th>
-                                    <th class="fi-ta-header-cell px-3 py-2 text-end font-medium text-gray-700 dark:text-gray-300">Tolerance (+)</th>
+                                    <th class="fi-ta-header-cell px-3 py-2 text-end font-medium text-gray-700 dark:text-gray-300">Tolérance (+)</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 whitespace-nowrap dark:divide-white/10">
@@ -853,11 +838,11 @@
                                 <tr class="bg-gray-50 dark:bg-white/5">
                                     <th class="fi-ta-header-cell px-2 py-2 text-start font-medium text-gray-700 dark:text-gray-300">Date/heure</th>
                                     <th class="fi-ta-header-cell px-2 py-2 text-start font-medium text-gray-700 dark:text-gray-300">Date</th>
-                                    <th class="fi-ta-header-cell px-2 py-2 text-start font-medium text-gray-700 dark:text-gray-300">Shift</th>
+                                    <th class="fi-ta-header-cell px-2 py-2 text-start font-medium text-gray-700 dark:text-gray-300">Service</th>
                                     <th class="fi-ta-header-cell px-2 py-2 text-end font-medium text-gray-700 dark:text-gray-300">Ventes</th>
                                     <th class="fi-ta-header-cell px-2 py-2 text-start font-medium text-gray-700 dark:text-gray-300">Statut</th>
-                                    <th class="fi-ta-header-cell px-2 py-2 text-end font-medium text-gray-700 dark:text-gray-300">Tolerance utilisee</th>
-                                    <th class="fi-ta-header-cell px-2 py-2 text-end font-medium text-gray-700 dark:text-gray-300">Ecart final</th>
+                                    <th class="fi-ta-header-cell px-2 py-2 text-end font-medium text-gray-700 dark:text-gray-300">Tolérance utilisée</th>
+                                    <th class="fi-ta-header-cell px-2 py-2 text-end font-medium text-gray-700 dark:text-gray-300">Écart final</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 dark:divide-white/10">
@@ -873,7 +858,7 @@
                                             @php
                                                 $doorV = $row->verdict ?? '';
                                                 $doorVerdictLabel = match ($doorV) {
-                                                    'bravo' => 'Bravo',
+                                                    'bravo' => 'Parfait !',
                                                     'plus_error' => 'Erreur (+)',
                                                     'minus_error' => 'Erreur (-)',
                                                     default => $doorV ?: '—',

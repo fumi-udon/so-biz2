@@ -15,7 +15,7 @@
                 icon="heroicon-o-calculator"
                 class="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
             />
-            <span class="text-xs font-black tracking-tight text-gray-900 dark:text-white">レジ締</span>
+            <span class="text-xs font-black tracking-tight text-gray-900 dark:text-white">Clôture caisse</span>
         </div>
         <p class="pl-5 text-[10px] font-medium tabular-nums leading-none text-gray-500 dark:text-gray-400">
             {{ $this->businessDateStr }}

@@ -12,7 +12,6 @@ use App\Services\TipCalculationService;
 use App\Support\BusinessDate;
 use App\Support\DailyTipAuditContext;
 use App\Support\DailyTipAuditLogger;
-use App\Support\ShiftClockOutGate;
 use App\Support\TipAttendanceScope;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
@@ -318,9 +317,9 @@ class CalculateTips extends Page
             'data.shift' => ['required', 'in:lunch,dinner'],
             'data.total_amount' => ['required', 'numeric', 'min:0'],
         ], attributes: [
-            'data.business_date' => '営業日',
-            'data.shift' => 'シフト',
-            'data.total_amount' => 'チップ総額',
+            'data.business_date' => 'Date d’activité',
+            'data.shift' => 'Service',
+            'data.total_amount' => 'Montant total des pourboires',
         ]);
 
         $savedTotal = $this->normalizedTotalAmount();
@@ -339,25 +338,14 @@ class CalculateTips extends Page
         if (! $lock->get()) {
             Notification::make()
                 ->warning()
-                ->title('処理が競合しました')
-                ->body('現在、他のマネージャーが同じ日付・シフトの確定処理を行っています。数秒待ってから再度お試しください。')
+                ->title('Attention')
+                ->body('Un autre responsable traite déjà cette date et ce service. Patientez quelques secondes puis réessayez.')
                 ->send();
 
             return;
         }
 
         try {
-            $missingNames = ShiftClockOutGate::missingClockOutStaffNames($businessDate, $shift);
-            if ($missingNames !== []) {
-                Notification::make()
-                    ->danger()
-                    ->title('退勤打刻漏れがあります')
-                    ->body('以下のスタッフの退勤打刻（'.$shift.'）が完了していません。出勤簿を修正してから再度実行してください。'."\n対象者: ".implode(', ', $missingNames))
-                    ->send();
-
-                return;
-            }
-
             $flagField = $shift === 'lunch' ? 'is_lunch_tip_applied' : 'is_dinner_tip_applied';
             $denyField = $shift === 'lunch' ? 'is_lunch_tip_denied' : 'is_dinner_tip_denied';
             $rowStaffIds = array_map(fn (array $r): int => (int) $r['staff_id'], $this->rows);
@@ -642,15 +630,15 @@ class CalculateTips extends Page
             'data.manager_staff_id' => ['required', 'integer', 'exists:staff,id'],
             'data.manager_pin' => ['required', 'digits:4'],
         ], attributes: [
-            'data.manager_staff_id' => 'Manager',
-            'data.manager_pin' => 'PIN manager',
+            'data.manager_staff_id' => 'Responsable',
+            'data.manager_pin' => 'Code PIN (responsable)',
         ]);
 
         $managerId = (int) ($this->data['manager_staff_id'] ?? 0);
         $key = 'tips-manager-pin:staff:'.$managerId.':'.(request()->ip() ?? 'unknown');
         if (RateLimiter::tooManyAttempts($key, 5)) {
             throw ValidationException::withMessages([
-                'data.manager_pin' => 'PIN manager bloqué, attends un peu.',
+                'data.manager_pin' => 'Code PIN bloqué, réessayez dans quelques minutes.',
             ]);
         }
 
@@ -663,7 +651,7 @@ class CalculateTips extends Page
         if (! $manager || ! hash_equals((string) ($manager->pin_code ?? ''), (string) ($this->data['manager_pin'] ?? ''))) {
             RateLimiter::hit($key, 300);
             throw ValidationException::withMessages([
-                'data.manager_pin' => 'PIN manager invalide.',
+                'data.manager_pin' => 'Code PIN incorrect.',
             ]);
         }
 

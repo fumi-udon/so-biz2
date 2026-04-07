@@ -7,6 +7,7 @@ use App\Models\CloseTask;
 use App\Models\Staff;
 use App\Services\RoutineInventoryCompletionService;
 use App\Support\BusinessDate;
+use App\Support\ShiftClockOutGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -39,7 +40,7 @@ class CloseCheckController extends Controller
     {
         $incomplete = app(RoutineInventoryCompletionService::class)->globalIncompleteSummaries();
         if (! empty($incomplete)) {
-            abort(403, '未完了のタスクまたは棚卸しが残っているため、クローズ処理を実行できません。');
+            abort(403, 'Inventaire non terminé. Veuillez terminer l’inventaire et les tâches avant de clôturer.');
         }
 
         $validated = $request->validate([
@@ -56,14 +57,14 @@ class CloseCheckController extends Controller
             return redirect()
                 ->route('close-check.index')
                 ->withInput($request->except('pin_code'))
-                ->with('error', 'スタッフが見つからないか、無効です。');
+                ->with('error', 'Collaborateur introuvable ou inactif.');
         }
 
         if ($staff->pin_code === null || $staff->pin_code === '') {
             return redirect()
                 ->route('close-check.index')
                 ->withInput($request->except('pin_code'))
-                ->with('error', 'PIN が設定されていません。管理者に連絡してください。');
+                ->with('error', 'Code PIN non enregistré. Contactez l’administrateur.');
         }
 
         $pinKey = 'close-check-pin:staff:'.$staff->id.':'.($request->ip() ?? 'unknown');
@@ -72,7 +73,7 @@ class CloseCheckController extends Controller
             return redirect()
                 ->route('close-check.index')
                 ->withInput($request->except('pin_code'))
-                ->with('error', 'PIN の試行回数が上限に達しました。しばらく待ってから再度お試しください。');
+                ->with('error', 'Trop de tentatives de code PIN. Réessayez plus tard.');
         }
 
         if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
@@ -81,7 +82,7 @@ class CloseCheckController extends Controller
             return redirect()
                 ->route('close-check.index')
                 ->withInput($request->except('pin_code'))
-                ->with('error', 'PIN が正しくありません。');
+                ->with('error', 'Code PIN incorrect.');
         }
 
         RateLimiter::clear($pinKey);
@@ -92,9 +93,15 @@ class CloseCheckController extends Controller
             'completed_at' => now(),
         ]);
 
+        $businessDate = BusinessDate::toDateString();
+        $lunchMissing = ShiftClockOutGate::missingClockOutStaffNames($businessDate, 'lunch');
+        $dinnerMissing = ShiftClockOutGate::missingClockOutStaffNames($businessDate, 'dinner');
+        $clockoutWarnings = array_values(array_unique(array_merge($lunchMissing, $dinnerMissing)));
+
         return redirect()
             ->route('close-check.success')
-            ->with('closed_staff_name', $staff->name);
+            ->with('closed_staff_name', $staff->name)
+            ->with('close_check_clockout_warnings', $clockoutWarnings);
     }
 
     public function success(Request $request): View|RedirectResponse
@@ -103,8 +110,29 @@ class CloseCheckController extends Controller
             return redirect()->route('close-check.index');
         }
 
+        $warnings = $request->session()->get('close_check_clockout_warnings', []);
+        if (! is_array($warnings)) {
+            $warnings = [];
+        }
+
         return view('close_check.success', [
-            'closedStaffName' => $request->session()->get('closed_staff_name'),
+            'closedStaffName' => (string) $request->session()->get('closed_staff_name'),
+            'clockoutWarnings' => $warnings,
+            'businessDate' => BusinessDate::toDateString(),
+            'whatsappDigits' => $this->whatsappManagerDigits(),
         ]);
+    }
+
+    /**
+     * Chiffres uniquement pour wa.me (même logique que l’ancien bloc Filament).
+     */
+    private function whatsappManagerDigits(): string
+    {
+        $raw = config('services.whatsapp.manager_number');
+        if ($raw === null || $raw === '') {
+            return '';
+        }
+
+        return (string) preg_replace('/\D+/', '', (string) $raw);
     }
 }

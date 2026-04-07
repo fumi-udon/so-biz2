@@ -34,12 +34,12 @@ class NotifyDailyCloseMismatchJob implements ShouldQueue
     public function handle(): void
     {
         $lines = [
-            '[Daily Close] レジ締め差異検知',
-            'rule: mesure(cash+cheque+carte) = tip_declare + ventes_POS',
+            '[Clôture caisse] Écart détecté',
+            'Règle : mesure (espèces + chèque + carte) = pourboire déclaré + ventes POS',
             'responsible_staff_or_legacy_user_id: '.($this->userId !== null ? (string) $this->userId : 'null'),
             'verdict: '.($this->calcResult['verdict'] ?? ''),
-            'final_difference (mesure - (tip+POS)): '.($this->calcResult['final_difference'] ?? ''),
-            'measured_without_declared_tip (cash+cheque+carte): '.($this->calcResult['measured_without_declared_tip'] ?? ''),
+            'final_difference (mesure - (pourboire+POS)): '.($this->calcResult['final_difference'] ?? ''),
+            'measured_without_declared_tip (espèces+chèque+carte): '.($this->calcResult['measured_without_declared_tip'] ?? ''),
             'sum_tip_plus_pos_sales: '.($this->calcResult['sum_tip_plus_pos_sales'] ?? ''),
             'expected_sales (POS): '.($this->calcResult['expected_sales'] ?? ''),
             'system_tip: '.($this->calcResult['system_tip'] ?? ''),
@@ -56,7 +56,7 @@ class NotifyDailyCloseMismatchJob implements ShouldQueue
 
         try {
             Mail::raw(implode("\n", $lines), function ($message) use ($to): void {
-                $message->to($to)->subject('[Daily Close] レジ締め差異検知');
+                $message->to($to)->subject('[Clôture caisse] Écart détecté');
             });
         } catch (Throwable $e) {
             Log::error('NotifyDailyCloseMismatchJob mail failed: '.$e->getMessage(), ['exception' => $e]);
