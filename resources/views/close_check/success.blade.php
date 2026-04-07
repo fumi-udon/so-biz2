@@ -39,7 +39,7 @@
                 const text = '[Rapport de Clôture des Tâches - ' + this.appName + ']\n'
                     + 'Date : ' + this.businessDate + '\n'
                     + 'Responsable : ' + this.responsible + '\n'
-                    + 'Tâches : Terminées ✅\n'
+                    + 'Tâches : Terminées \n'
                     + 'Commentaire : ' + comment;
                 window.open('https://wa.me/' + this.waDigits + '?text=' + encodeURIComponent(text), '_blank');
                 this.hasReported = true;
