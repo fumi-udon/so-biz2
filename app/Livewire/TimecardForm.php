@@ -66,7 +66,10 @@ class TimecardForm extends Component
 
     public function mount(): void
     {
-        if (app()->environment('production') && ! str_contains(request()->header('User-Agent', ''), 'Vivaldi')) {
+        $agent = request()->header('User-Agent', '');
+
+        // 本番環境 ＆ Operaブラウザ系(OPR, OPT, Opera)以外 を弾く
+        if (app()->environment('production') && ! str_contains($agent, 'OPR') && ! str_contains($agent, 'OPT') && ! str_contains($agent, 'Opera')) {
             abort(403, 'Pointage impossible depuis cet appareil. Veuillez utiliser la tablette dédiée du restaurant.');
         }
 

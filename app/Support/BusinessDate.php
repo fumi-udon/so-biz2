@@ -11,7 +11,7 @@ final class BusinessDate
 {
     public static function current(): Carbon
     {
-        $now = now();
+        $now = now(config('app.business_timezone'));
 
         if ($now->hour < 6) {
             return $now->copy()->subDay()->startOfDay();

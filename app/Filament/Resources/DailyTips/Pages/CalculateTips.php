@@ -21,6 +21,7 @@ use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
@@ -325,112 +326,131 @@ class CalculateTips extends Page
             $this->verifyManagerPinOrFail();
         }
 
-        $businessDate = $this->data['business_date'] ?? null;
-        $shift        = $this->data['shift'] ?? 'lunch';
-        $flagField    = $shift === 'lunch' ? 'is_lunch_tip_applied' : 'is_dinner_tip_applied';
-        $denyField    = $shift === 'lunch' ? 'is_lunch_tip_denied'  : 'is_dinner_tip_denied';
-        $rowStaffIds  = array_map(fn (array $r): int => (int) $r['staff_id'], $this->rows);
+        $businessDateRaw = $this->data['business_date'] ?? null;
+        $shift = $this->data['shift'] ?? 'lunch';
+        $businessDate = Carbon::parse($businessDateRaw)->toDateString();
 
-        // staff_id => 確定 weight (0-100 整数) のマップ（tip_weight_override として Attendance に書き戻す用）
-        $rowWeightMap = [];
-        foreach ($this->rows as $row) {
-            $w = $this->snapTipWeightToMasterGrid(
-                (float) TipCalculationService::normalizeWeightScalar($row['weight'] ?? 0)
-            );
-            $rowWeightMap[(int) $row['staff_id']] = (int) round($w);
+        $lockKey = "daily_tip:confirm:{$businessDate}:{$shift}";
+        $lock = Cache::lock($lockKey, 10);
+
+        if (! $lock->get()) {
+            Notification::make()
+                ->warning()
+                ->title('処理が競合しました')
+                ->body('現在、他のマネージャーが同じ日付・シフトの確定処理を行っています。数秒待ってから再度お試しください。')
+                ->send();
+
+            return;
         }
 
-        DB::transaction(function () use ($savedTotal, $businessDate, $shift, $flagField, $denyField, $rowStaffIds, $rowWeightMap): void {
-            $tip = DailyTip::query()->updateOrCreate(
-                [
-                    'business_date' => $businessDate,
-                    'shift' => $shift,
-                ],
-                [
-                    'total_amount' => $savedTotal,
-                ]
-            );
+        try {
+            $flagField = $shift === 'lunch' ? 'is_lunch_tip_applied' : 'is_dinner_tip_applied';
+            $denyField = $shift === 'lunch' ? 'is_lunch_tip_denied' : 'is_dinner_tip_denied';
+            $rowStaffIds = array_map(fn (array $r): int => (int) $r['staff_id'], $this->rows);
 
-            $beforeCount = (int) $tip->distributions()->count();
-            $createdCount = 0;
-
-            DailyTipAuditContext::suppressDistributionAudit(true);
-            try {
-                $tip->distributions()->delete();
-
-                foreach ($this->rows as $row) {
-                    $w = $this->snapTipWeightToMasterGrid(
-                        (float) TipCalculationService::normalizeWeightScalar($row['weight'] ?? 0)
-                    );
-                    $tip->distributions()->create([
-                        'staff_id' => (int) $row['staff_id'],
-                        'weight' => round($w, 3),
-                        'amount' => round((float) $row['amount'], 3),
-                        'is_tardy_deprived' => (bool) $row['is_tardy_deprived'],
-                        'is_manual_added' => (bool) $row['is_manual_added'],
-                        'note' => $row['note'],
-                    ]);
-                    $createdCount++;
-                }
-            } finally {
-                DailyTipAuditContext::suppressDistributionAudit(false);
+            // staff_id => 確定 weight (0-100 整数) のマップ（tip_weight_override として Attendance に書き戻す用）
+            $rowWeightMap = [];
+            foreach ($this->rows as $row) {
+                $w = $this->snapTipWeightToMasterGrid(
+                    (float) TipCalculationService::normalizeWeightScalar($row['weight'] ?? 0)
+                );
+                $rowWeightMap[(int) $row['staff_id']] = (int) round($w);
             }
 
-            // --- Attendance フラグ同期 ---
-            // 確定前時点で pool に含まれていたスタッフ（打刻あり OR flag=true, かつ deny=false）を取得し revoke 対象を特定する。
-            // flag=true のみ取得すると打刻のみ pool 入りスタッフが除外できないため、loadRows と同じ条件で取得する。
-            $flaggedBefore = TipAttendanceScope::applyGoldenFormula(
-                Attendance::query()->whereDate('date', $businessDate),
-                $shift === 'dinner' ? 'dinner' : 'lunch',
-            )
-                ->pluck('staff_id')
-                ->map(fn ($id): int => (int) $id)
-                ->all();
-
-            // $rows にいるスタッフ: flag を true に、deny をクリア（Attendance がなければ新規作成）。
-            // 確定 weight を tip_weight_override として書き戻し、次回 loadRows 時に一致させる。
-            foreach ($rowStaffIds as $staffId) {
-                Attendance::query()->updateOrCreate(
-                    ['staff_id' => $staffId, 'date' => $businessDate],
+            DB::transaction(function () use ($savedTotal, $businessDate, $shift, $flagField, $denyField, $rowStaffIds, $rowWeightMap): void {
+                $tip = DailyTip::query()->updateOrCreate(
                     [
-                        $flagField            => true,
-                        $denyField            => false,
-                        'tip_weight_override' => $rowWeightMap[$staffId] ?? null,
+                        'business_date' => $businessDate,
+                        'shift' => $shift,
+                    ],
+                    [
+                        'total_amount' => $savedTotal,
                     ]
                 );
-            }
 
-            // $rows にいないが以前 pool にいたスタッフ: flag を false, deny を true に。
-            $toRevoke = array_values(array_diff($flaggedBefore, $rowStaffIds));
-            if ($toRevoke !== []) {
-                Attendance::query()
-                    ->whereDate('date', $businessDate)
-                    ->whereIn('staff_id', $toRevoke)
-                    ->update([$flagField => false, $denyField => true]);
-            }
+                $beforeCount = (int) $tip->distributions()->count();
+                $createdCount = 0;
 
-            DailyTipAuditLogger::write(
-                'distribution_recalculated',
-                $tip->business_date?->toDateString(),
-                $tip->shift,
-                [
-                    'daily_tip_id' => $tip->id,
-                    'removed_count' => $beforeCount,
-                    'created_count' => $createdCount,
-                    'final_total_amount' => (float) $tip->total_amount,
-                ]
-            );
+                DailyTipAuditContext::suppressDistributionAudit(true);
+                try {
+                    $tip->distributions()->delete();
 
-            DailyTipAuditLogger::write(
-                'attendance_tip_flag_synced',
-                $businessDate,
-                $shift,
-                [
-                    'flagged_staff_ids' => $rowStaffIds,
-                    'revoked_staff_ids' => $toRevoke,
-                ]
-            );
-        });
+                    foreach ($this->rows as $row) {
+                        $w = $this->snapTipWeightToMasterGrid(
+                            (float) TipCalculationService::normalizeWeightScalar($row['weight'] ?? 0)
+                        );
+                        $tip->distributions()->create([
+                            'staff_id' => (int) $row['staff_id'],
+                            'weight' => round($w, 3),
+                            'amount' => round((float) $row['amount'], 3),
+                            'is_tardy_deprived' => (bool) $row['is_tardy_deprived'],
+                            'is_manual_added' => (bool) $row['is_manual_added'],
+                            'note' => $row['note'],
+                        ]);
+                        $createdCount++;
+                    }
+                } finally {
+                    DailyTipAuditContext::suppressDistributionAudit(false);
+                }
+
+                // --- Attendance フラグ同期 ---
+                // 確定前時点で pool に含まれていたスタッフ（打刻あり OR flag=true, かつ deny=false）を取得し revoke 対象を特定する。
+                // flag=true のみ取得すると打刻のみ pool 入りスタッフが除外できないため、loadRows と同じ条件で取得する。
+                $flaggedBefore = TipAttendanceScope::applyGoldenFormula(
+                    Attendance::query()->whereDate('date', $businessDate),
+                    $shift === 'dinner' ? 'dinner' : 'lunch',
+                )
+                    ->pluck('staff_id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->all();
+
+                // $rows にいるスタッフ: flag を true に、deny をクリア（Attendance がなければ新規作成）。
+                // 確定 weight を tip_weight_override として書き戻し、次回 loadRows 時に一致させる。
+                foreach ($rowStaffIds as $staffId) {
+                    Attendance::query()->updateOrCreate(
+                        ['staff_id' => $staffId, 'date' => $businessDate],
+                        [
+                            $flagField            => true,
+                            $denyField            => false,
+                            'tip_weight_override' => $rowWeightMap[$staffId] ?? null,
+                        ]
+                    );
+                }
+
+                // $rows にいないが以前 pool にいたスタッフ: flag を false, deny を true に。
+                $toRevoke = array_values(array_diff($flaggedBefore, $rowStaffIds));
+                if ($toRevoke !== []) {
+                    Attendance::query()
+                        ->whereDate('date', $businessDate)
+                        ->whereIn('staff_id', $toRevoke)
+                        ->update([$flagField => false, $denyField => true]);
+                }
+
+                DailyTipAuditLogger::write(
+                    'distribution_recalculated',
+                    $tip->business_date?->toDateString(),
+                    $tip->shift,
+                    [
+                        'daily_tip_id' => $tip->id,
+                        'removed_count' => $beforeCount,
+                        'created_count' => $createdCount,
+                        'final_total_amount' => (float) $tip->total_amount,
+                    ]
+                );
+
+                DailyTipAuditLogger::write(
+                    'attendance_tip_flag_synced',
+                    $businessDate,
+                    $shift,
+                    [
+                        'flagged_staff_ids' => $rowStaffIds,
+                        'revoked_staff_ids' => $toRevoke,
+                    ]
+                );
+            });
+        } finally {
+            $lock->release();
+        }
 
         Notification::make()
             ->title('Répartition enregistrée')

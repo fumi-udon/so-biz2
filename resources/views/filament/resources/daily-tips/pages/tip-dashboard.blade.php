@@ -8,7 +8,7 @@
             $d = floor($v * 10) / 10;
 
             return rtrim(rtrim(number_format($d, 1, '.', ''), '0'), '.') ?: '0';
-        };
+        };          
     @endphp
 
     {{-- 週ナビ：1ブロックに圧縮 --}}
