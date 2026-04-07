@@ -1,0 +1,250 @@
+[33mcommit 5a9becf77019c9a8e8dab08a63cc96c47f9dca92[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Tue Apr 7 13:25:32 2026 +0100
+
+    OPERA,チップ重複ロック
+
+[33mcommit cb13ebeaf4cb981eafa9c0d59522c955322ebde2[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Mon Apr 6 22:14:09 2026 +0100
+
+    403, 'この端末からは打刻できま
+
+[33mcommit b8e7bdbad6273bf001e1eaada11c4aeb6efcea02[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Mon Apr 6 21:54:52 2026 +0100
+
+    piloteアカウントはべたがきでメニュー表示を制限
+
+[33mcommit bafbf69454e09837d58042910f0395846d36c9fc[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Mon Apr 6 18:17:58 2026 +0100
+
+    Revert "fix: add super_admin gate bypass to resolve 403 forbidden"
+    
+    This reverts commit eb8adf97d3918270392044a54c50c35e1d21188b.
+
+[33mcommit eb8adf97d3918270392044a54c50c35e1d21188b[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Mon Apr 6 18:10:38 2026 +0100
+
+    fix: add super_admin gate bypass to resolve 403 forbidden
+
+[33mcommit 278bab3e8c4f0779961ef03577c8e6cc0045401d[m[33m ([m[1;32mfeature/spatie-shield[m[33m)[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Mon Apr 6 14:54:50 2026 +0100
+
+    feat: 幹部Piloteアカウント生成機能とSpatie/Shieldによる権限管理の実装
+
+[33mcommit 46d488b70300739dc4f0ad393827c2be18c98aee[m[33m ([m[1;31morigin/feature/mypage-enhancement[m[33m, [m[1;32mfeature/mypage-enhancement[m[33m)[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Mon Apr 6 13:03:44 2026 +0100
+
+    feat: 勤怠スナップショット分離、チップSSOT徹底、及び遅刻・欠勤ロジックの不変性強化
+
+[33mcommit 65b3667fbfc4c2ac5207c43734e6314878439316[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Apr 4 03:00:58 2026 +0100
+
+    update: daily-close-check 本部、welcomeもpresence
+
+[33mcommit 268528b4f583c75a7c0ff206d2cc3e86dd6d846a[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Apr 4 00:12:57 2026 +0100
+
+    update: daily-close-check モーダル開かないように Lv 3以上を設定
+
+[33mcommit 1aacc00a9c4afd41e7286ecf8421bfd65a987a49[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Apr 4 00:05:28 2026 +0100
+
+    update: my page Lv.修正
+
+[33mcommit f1c351229214d6f4e4b2f6748672092d7804aa1c[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Fri Apr 3 21:14:48 2026 +0100
+
+    chore: add debugbar to gitignore
+
+[33mcommit 36b56164868ea686a7662180c249b353dfcf2e88[m[33m ([m[1;31morigin/study/self-edit-3days[m[33m)[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Thu Apr 2 17:43:43 2026 +0100
+
+    安定版の保存: 3日間プラン開始前
+
+[33mcommit 8cc0036e88887b4c29454f189252180c34d1bf2f[m[33m ([m[1;31morigin/feature/sf2-chip-system[m[33m, [m[1;32mfeature/sf2-chip-system[m[33m)[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Wed Apr 1 21:07:04 2026 +0100
+
+    レジ締め機能の最終修正を適用
+
+[33mcommit c0c9ed46d815527ebdfec44ee6c964dce40d18ef[m[33m ([m[1;33mtag: [m[1;33mv1.1.0-phase2[m[33m)[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Tue Mar 31 16:46:17 2026 +0100
+
+    fix: Phase 2 モーダルの致命的バグを修正（安定稼働状態）
+
+[33mcommit 37fa67e1f658792a69c8d6d3fc75ef5d4365f228[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Tue Mar 31 15:13:39 2026 +0100
+
+    feat: タイムカード・シフト・マイページの完全安定版（v1.0）
+
+[33mcommit ba8a750038e5557f6803f7435716746769896c4f[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Tue Mar 31 04:27:33 2026 +0100
+
+    feat: 勤怠・マイページ・チップ集計の安定版を反映
+    
+    勤怠UI再構成、週間シフト可視化、マイページの高密度化とチップ/遅刻欠勤表示を統合し、実運用向けの安定版として保存する。
+    
+    Made-with: Cursor
+
+[33mcommit ad06b2c74e0c92670a85eac79351da07d3746bad[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Mon Mar 30 01:52:49 2026 +0100
+
+    fix: 受注モニターのリアルタイム通信(Pusher)開通
+
+[33mcommit bfca5683c3c3ec5566166f9350e8bc5cae84d160[m[33m ([m[1;33mtag: [m[1;33mstable-base[m[33m)[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Mon Mar 30 01:28:03 2026 +0100
+
+    安定版の復旧完了 (PHP 8.4 / Laravel 11 / Filament v3)
+
+[33mcommit c76a596779a67a4d7a556a70b09bc89c01d5753d[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sun Mar 29 22:48:23 2026 +0100
+
+    fix: allow filament access in production
+
+[33mcommit 669bc95b4253763caf9506c1be365817fb997d79[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sun Mar 29 19:15:04 2026 +0100
+
+    Add trustProxies for reverse proxy; publish Livewire assets to public
+    
+    - trustProxies(at: '*') so HTTPS/session work behind OVH proxy
+    - Copy Livewire dist JS to public/vendor/livewire to avoid HTTP/2 errors on dynamic route
+    - Keep /hello_ws test route (restrict in production)
+    
+    Made-with: Cursor
+
+[33mcommit a319d87979dee38e8d223d20e9195089860eb83b[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sun Mar 29 18:07:33 2026 +0100
+
+    fix: migration order
+
+[33mcommit 298df220ae32f9a82936b65d837fe9d10b2be51d[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sun Mar 29 17:26:05 2026 +0100
+
+    feat: Pusher/Filament broadcasting, Echo, timecard notifications, dashboard widgets
+    
+    - Add broadcasting config, channels, Filament filament.php with Echo (Pusher)
+    - TimecardController: notify admins on successful punch via Notification
+    - AdminPanel: database notifications, remove test Echo hook
+    - Low stock widget table prefix fix; headquarters dashboard widgets
+    - hello_ws test route for WebSocket smoke test
+    - Composer: pusher-php-server; npm: laravel-echo, pusher-js
+    
+    Made-with: Cursor
+
+[33mcommit 49c116eeec981bf85d5f53b6835b45b16c973ddb[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sun Mar 29 03:00:48 2026 +0100
+
+    feat: 論理削除・DBインデックス・勤怠未来時刻ブロック・アーキ改善
+    
+    - Staff SoftDeletes、Filament TrashedFilter/RestoreAction
+    - attendances/inventory_records/routine_task_logs に複合インデックス
+    - MyPage 勤怠編集で未来時刻を拒否
+    - Timecard firstOrCreate+lock、Setting コンテナキャッシュ、globalIncompleteSummaries 絞り込み
+    
+    Made-with: Cursor
+
+[33mcommit 64fd80b1aadf585d623a7831b587f6148b41b390[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sun Mar 29 02:50:11 2026 +0100
+
+    chore: タイムゾーン Africa/Tunis、棚卸し value を text、Setting 静的キャッシュ
+    
+    Made-with: Cursor
+
+[33mcommit 9a82ae8a0932b784092b37aa4eeb9486d4f30601[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sun Mar 29 02:44:55 2026 +0100
+
+    fix: 勤怠パーサー統一・workMinutes符号・クローズ対象を出勤者のみ
+    
+    - BusinessDate::parseTimeForBusinessDate に集約、Timecard/MyPage/Filament を整合
+    - workMinutes は diffInMinutes(..., false) で逆転時は加算しない
+    - globalIncompleteSummaries は当日 attendances があるスタッフのみ対象
+    
+    Made-with: Cursor
+
+[33mcommit dea9684c751dac71b0f64cea4dbd366e4f5af5cc[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sun Mar 29 02:25:20 2026 +0100
+
+    feat: 堅牢性・UI・勤怠まわりのバックアップ
+    
+    - マイページ: 名前選択→PIN、RateLimiter、夜越え退勤の相対補正
+    - 打刻: PIN レート制限、attendances ユニーク制約と重複時ハンドリング
+    - 棚卸し POST: max_input_vars ガード
+    - クローズチェック: 未完了時 process を 403、タイル UI と演出
+    - RoutineInventoryCompletionService: global 集計のバルクロード化
+    - Filament: 勤怠テーブル・ウィジェット、Export/Import の sync 削除
+    - attendances staff_id+date ユニークマイグレーション
+    
+    Made-with: Cursor
+
+[33mcommit ad97abf9fd645c592500266e78df2fc365cb187d[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Mar 28 22:27:42 2026 +0100
+
+    feat: 勤怠拡張（時給・マネージャー承認）、Filament勤怠ダッシュボード・日給表示、マイページ勤怠画面、TextInputColumn修正
+    
+    Made-with: Cursor
+
+[33mcommit daf25d24c8237fc66ce5cac83af2e0fa7830f274[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Mar 28 20:55:26 2026 +0100
+
+    feat: クライアントUI（ナビ・マイページ・タイムカード連動）、棚卸しポータル、Filament棚卸し記録一覧改善
+    
+    Made-with: Cursor
+
+[33mcommit d46ad72c5b640ee498f8e352ca5fe7f941a123bc[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Mar 28 18:24:43 2026 +0100
+
+    feat: 在庫マスタ設定、タイムカード二重打刻防止、マイページ空POST対応
+    
+    - 設定画面でタイミング・カテゴリ・単位をタグ編集、棚卸し品目をSelect連携
+    - InventorySettingOptions と SettingSeeder、在庫の入力タイプ・value列マイグレーション
+    - タイムカード: 同一打刻列の上書き防止、結果モーダルに text-dark
+    - マイページ: routine/inventory の配列正規化と欠落キー時のレコードクリア
+    
+    Made-with: Cursor
+
+[33mcommit 41b33d300530b2c7edd45b135159b0f88970dc2b[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Mar 28 16:11:56 2026 +0100
+
+    店舗業務: Filament管理・タイムカード・マイページ・クローズチェック・Bootstrapビュー
+    
+    Made-with: Cursor
+
+[33mcommit 28ba5b6feda5032d25799c2e30522ab8b1b16261[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Mar 28 01:23:32 2026 +0100
+
+    Filamentインストール・初期セットアップ完了
+
+[33mcommit 04e5b15499b7f6c716440f989ea72b551c7c4944[m
+Author: fumi-udon <fmkz.ysn117@gmail.com>
+Date:   Sat Mar 28 01:10:32 2026 +0100
+
+    Initial commit: 独立DB構成の初期セットアップ

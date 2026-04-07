@@ -17,8 +17,13 @@ class HeadquartersStaffPayrollWidget extends Widget
     public static function canView(): bool
     {
         $u = auth()->user();
+        if ($u === null) {
+            return false;
+        }
 
-        return $u?->isAdmin() === true || $u?->isCashier() === true;
+        $superAdminName = config('filament-shield.super_admin.name', 'super_admin');
+
+        return $u->hasRole('Owner') || $u->hasRole($superAdminName);
     }
 
     /**
