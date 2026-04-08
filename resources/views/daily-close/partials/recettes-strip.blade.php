@@ -33,13 +33,12 @@
         <p class="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-200">{{ $recettesApiErrorMessage }}</p>
     @endif
     @if ($fetchedRecettesPanel)
-        <div class="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm sm:grid-cols-3 dark:border-gray-600 dark:bg-gray-900/40">
-            <p class="text-gray-600 dark:text-gray-400">Midi <span class="font-mono font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ number_format($fetchedRecettesPanel['lunch'], 2, '.', ',') }}</span></p>
-            <p class="text-gray-600 dark:text-gray-400">Soir <span class="font-mono font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ number_format($fetchedRecettesPanel['dinner'], 2, '.', ',') }}</span></p>
-            <p class="text-gray-600 dark:text-gray-400">Jour <span class="font-mono font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ number_format($fetchedRecettesPanel['journal'], 2, '.', ',') }}</span></p>
+        <div class="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm dark:border-gray-600 dark:bg-gray-900/40">
+            <p class="text-gray-600 dark:text-gray-400">
+                Ventes API — <span class="font-semibold text-gray-800 dark:text-gray-200">{{ $this->currentShiftLabel() }}</span>
+                <span class="ml-2 font-mono font-semibold tabular-nums text-gray-900 dark:text-gray-100">{{ $this->formatTnd($this->fetchedRecettesAmountForCurrentShift()) }}</span>
+                <span class="ml-1 text-xs font-medium text-gray-500 dark:text-gray-400">TND</span>
+            </p>
         </div>
-        @if ($this->fetchedRecettesAmountForCurrentShift() !== null)
-            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Service courant (API) : <span class="font-mono font-medium tabular-nums text-gray-800 dark:text-gray-200">{{ number_format($this->fetchedRecettesAmountForCurrentShift(), 2, '.', ',') }}</span></p>
-        @endif
     @endif
 </section>

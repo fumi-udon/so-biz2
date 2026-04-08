@@ -276,6 +276,7 @@ class FrontendDailyClose extends Component
                 'dinner' => (float) $totals['dinner'],
                 'journal' => (float) $totals['journal'],
             ];
+            $this->applyFetchedRecettesToVentesPosField();
         } catch (Throwable $e) {
             Log::warning('daily_close.fetch_recettes_failed', ['exception' => $e]);
             $this->recettesApiErrorMessage = self::ERR_RECETTES_API_GENERIC;
@@ -463,6 +464,62 @@ class FrontendDailyClose extends Component
         }
 
         return number_format($rounded, 2, '.', ',');
+    }
+
+    /**
+     * Dinar tunisien (TND) : 1 décimale ; affichage entier si la première décimale est 0.
+     */
+    public function formatTnd(float|string|null $n): string
+    {
+        $v = (float) $n;
+        if (! is_finite($v)) {
+            return '—';
+        }
+        $r = round($v, 1);
+        $scaled = (int) round($r * 10);
+        if ($scaled % 10 === 0) {
+            return number_format((int) round($r), 0, '.', ',');
+        }
+
+        return number_format($r, 1, '.', ',');
+    }
+
+    /**
+     * Valeur pour le champ texte Ventes POS (sans séparateur de milliers ; 1 décimale, entier si .0).
+     */
+    private function stringForVentesPosInput(float $amount): string
+    {
+        if (! is_finite($amount)) {
+            return '0';
+        }
+        $r = round($amount, 1);
+        $scaled = (int) round($r * 10);
+        if ($scaled % 10 === 0) {
+            return (string) (int) round($r);
+        }
+
+        return number_format($r, 1, '.', '');
+    }
+
+    /**
+     * Remplit Ventes POS (Midi ou Soir) avec le total API du service courant.
+     */
+    private function applyFetchedRecettesToVentesPosField(): void
+    {
+        if ($this->fetchedRecettesPanel === null) {
+            return;
+        }
+
+        $shift = (string) ($this->data['shift'] ?? 'dinner');
+        $k = $shift === 'lunch' ? 'lunch' : 'dinner';
+        $amount = (float) ($this->fetchedRecettesPanel[$k] ?? 0);
+        $value = $this->stringForVentesPosInput($amount);
+
+        if ($shift === 'lunch') {
+            $this->data['lunch_recettes'] = $value;
+        } else {
+            $this->data['dinner_recettes'] = $value;
+        }
     }
 
     public function historyResponsibleDisplay(Finance $h): string
