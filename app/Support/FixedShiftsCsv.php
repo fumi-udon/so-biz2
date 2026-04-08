@@ -8,6 +8,7 @@ namespace App\Support;
 final class FixedShiftsCsv
 {
     public const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
     public const SLOTS = ['lunch_start', 'lunch_end', 'dinner_start', 'dinner_end'];
 
     public static function flatColumnNames(): array
@@ -18,6 +19,7 @@ final class FixedShiftsCsv
                 $names[] = "{$day}_{$slot}";
             }
         }
+
         return $names;
     }
 
@@ -31,7 +33,7 @@ final class FixedShiftsCsv
         ];
 
         foreach (self::DAYS as $day) {
-            $prefix = $day . '_';
+            $prefix = $day.'_';
             if (! str_starts_with($column, $prefix)) {
                 continue;
             }
@@ -40,6 +42,7 @@ final class FixedShiftsCsv
                 return "{$day}.{$map[$slot]}";
             }
         }
+
         return null;
     }
 
@@ -67,6 +70,7 @@ final class FixedShiftsCsv
                 $out[$key] = ($v === null || $v === '') ? null : (string) $v;
             }
         }
+
         return $out;
     }
 
@@ -95,6 +99,7 @@ final class FixedShiftsCsv
                 ];
             }
         }
+
         return $tree === [] ? null : $tree;
     }
 }

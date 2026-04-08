@@ -2,12 +2,12 @@
 
 namespace App\Filament\Resources\Attendances;
 
-use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\Attendances\Forms\AttendanceForm;
 use App\Filament\Resources\Attendances\Pages\CreateAttendance;
 use App\Filament\Resources\Attendances\Pages\EditAttendance;
 use App\Filament\Resources\Attendances\Pages\ListAttendances;
 use App\Filament\Resources\Attendances\Tables\AttendancesTable;
+use App\Filament\Support\AdminOnlyResource;
 use App\Models\Attendance;
 use Filament\Forms\Form;
 use Filament\Tables\Table;

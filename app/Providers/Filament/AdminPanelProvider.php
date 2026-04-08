@@ -2,24 +2,23 @@
 
 namespace App\Providers\Filament;
 
-use Filament\Http\Middleware\Authenticate;
+use App\Filament\Resources\Attendances\Widgets\TodayAttendanceWidget;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use App\Filament\Resources\Attendances\Widgets\TodayAttendanceWidget;
-use Illuminate\Support\Facades\Auth;
 use Filament\View\PanelsRenderHook;
-use Illuminate\Support\Facades\Blade;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -33,7 +32,7 @@ class AdminPanelProvider extends PanelProvider
                 'broadcaster' => 'pusher',
                 'key' => env('VITE_PUSHER_APP_KEY'),
                 'cluster' => env('VITE_PUSHER_APP_CLUSTER'),
-                'wsHost' => env('VITE_PUSHER_HOST', 'ws-' . env('VITE_PUSHER_APP_CLUSTER') . '.pusher.com'),
+                'wsHost' => env('VITE_PUSHER_HOST', 'ws-'.env('VITE_PUSHER_APP_CLUSTER').'.pusher.com'),
                 'wsPort' => env('VITE_PUSHER_PORT', 443),
                 'wssPort' => env('VITE_PUSHER_PORT', 443),
                 'forceTLS' => true,
@@ -50,7 +49,7 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->homeUrl(function (): string {
                 if (Auth::user()?->isCashier()) {
-                    return route('filament.admin.pages.daily-close-check');
+                    return route('daily-close');
                 }
 
                 return url('/admin');
@@ -92,16 +91,6 @@ class AdminPanelProvider extends PanelProvider
                     }
 
                     return '<link rel="stylesheet" href="'.asset('css/filament-attendances-layout.css').'" />';
-                },
-            )
-            ->renderHook(
-                PanelsRenderHook::HEAD_END,
-                function (): string {
-                    if (! request()->routeIs('filament.admin.pages.daily-close-check')) {
-                        return '';
-                    }
-
-                    return Blade::render('@vite([\'resources/css/app.css\'])');
                 },
             );
     }

@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Models\Finance;
 use App\Support\BusinessDate;
 use Filament\Widgets\Widget;
+use Illuminate\Database\Eloquent\Collection;
 
 class HeadquartersCloseHistoryWidget extends Widget
 {
@@ -12,7 +13,7 @@ class HeadquartersCloseHistoryWidget extends Widget
 
     protected static ?int $sort = -8;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     public static function canView(): bool
     {
@@ -23,8 +24,8 @@ class HeadquartersCloseHistoryWidget extends Widget
 
     /**
      * @return array{
-     *     financeRows: \Illuminate\Database\Eloquent\Collection<int, Finance>,
-     *     auditRows: \Illuminate\Database\Eloquent\Collection<int, Finance>,
+     *     financeRows: Collection<int, Finance>,
+     *     auditRows: Collection<int, Finance>,
      *     range2Label: string,
      *     range3Label: string,
      * }

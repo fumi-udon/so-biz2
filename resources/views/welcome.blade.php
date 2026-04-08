@@ -67,10 +67,10 @@
                 <p class="text-xs font-semibold text-white/80">Vérification de fin de service</p>
             </a>
 
-            <a href="{{ url('/admin/daily-close-check') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-fuchsia-600 to-violet-500 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+            <a href="{{ route('daily-close') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-fuchsia-600 to-violet-500 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
                 <p class="text-lg">💰</p>
                 <p class="text-sm font-black tracking-wide text-white">Clôture caisse</p>
-                <p class="text-xs font-semibold text-white/80">Espace administrateur</p>
+                <p class="text-xs font-semibold text-white/80">Saisie caisse & PIN responsable</p>
             </a>
 
             <!-- <a href="{{ route('mypage.attendance') }}" class="rounded-xl border-2 border-black bg-gradient-to-br from-violet-500 to-purple-400 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">

@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\JobLevels;
 
-use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\JobLevels\Pages\CreateJobLevel;
 use App\Filament\Resources\JobLevels\Pages\EditJobLevel;
 use App\Filament\Resources\JobLevels\Pages\ListJobLevels;
+use App\Filament\Support\AdminOnlyResource;
 use App\Models\JobLevel;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;

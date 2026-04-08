@@ -18,7 +18,7 @@ class OrderPlaced implements ShouldBroadcastNow
     public function __construct(public Order $order) {}
 
     /**
-     * @return array<int, \Illuminate\Broadcasting\Channel>
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {

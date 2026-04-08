@@ -4,8 +4,8 @@ namespace App\Providers;
 
 use App\Models\DailyTip;
 use App\Models\DailyTipDistribution;
-use App\Models\StaffTip;
 use App\Models\Staff;
+use App\Models\StaffTip;
 use App\Observers\DailyTipDistributionObserver;
 use App\Observers\DailyTipObserver;
 use Illuminate\Support\Facades\View;

@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\User;
 use App\Models\Attendance;
+use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class AttendancePolicy
@@ -16,8 +16,6 @@ class AttendancePolicy
      * - 許可リスト（CRUD）に含まれる ability → true（以降のチェックをスキップして許可）
      * - 含まれない破壊的 ability → false（以降のチェックをスキップして拒否）
      * - pilote でないユーザー → null（Spatie の通常フローへ委譲）
-     *
-     * @return bool|null
      */
     public function before(User $user, string $ability): ?bool
     {

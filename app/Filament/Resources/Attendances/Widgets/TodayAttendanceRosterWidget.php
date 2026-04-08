@@ -18,7 +18,7 @@ class TodayAttendanceRosterWidget extends Widget
 
     protected static bool $isLazy = false;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     private const GRACE_MINUTES_AFTER_PLANNED_START = 10;
 
@@ -257,4 +257,3 @@ class TodayAttendanceRosterWidget extends Widget
         return ['finished', '退勤済', 'gray'];
     }
 }
-

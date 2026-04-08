@@ -10,6 +10,7 @@ use App\Filament\Widgets\HeadquartersTodayRosterWidget;
 use App\Filament\Widgets\LowStockAlertWidget;
 use Filament\Pages\Dashboard;
 use Filament\Widgets\AccountWidget;
+use Filament\Widgets\Widget;
 
 class HeadquartersDashboard extends Dashboard
 {
@@ -40,17 +41,17 @@ class HeadquartersDashboard extends Dashboard
     public function mount(): void
     {
         if (auth()->user()?->isCashier() === true) {
-            $this->redirectRoute('filament.admin.pages.daily-close-check', navigate: true);
+            $this->redirect(route('daily-close'), navigate: true);
         }
     }
 
     /**
-     * @return array<int, class-string<\Filament\Widgets\Widget>>
+     * @return array<int, class-string<Widget>>
      */
     public function getWidgets(): array
     {
         return [
-            //HeadquartersStatsWidget::class,
+            // HeadquartersStatsWidget::class,
             HeadquartersTodayRosterWidget::class,
             HeadquartersCloseHistoryWidget::class,
             HeadquartersAttendanceArcadeWidget::class,
@@ -63,7 +64,7 @@ class HeadquartersDashboard extends Dashboard
     /**
      * @return int | string | array<string, int | string | null>
      */
-    public function getColumns(): int | string | array
+    public function getColumns(): int|string|array
     {
         return [
             'default' => 1,

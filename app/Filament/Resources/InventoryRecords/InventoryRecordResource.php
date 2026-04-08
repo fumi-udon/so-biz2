@@ -2,13 +2,14 @@
 
 namespace App\Filament\Resources\InventoryRecords;
 
-use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\InventoryRecords\Pages\CreateInventoryRecord;
 use App\Filament\Resources\InventoryRecords\Pages\EditInventoryRecord;
 use App\Filament\Resources\InventoryRecords\Pages\ListInventoryRecords;
+use App\Filament\Support\AdminOnlyResource;
 use App\Models\InventoryItem;
 use App\Models\InventoryRecord;
 use App\Models\Staff;
+use Carbon\CarbonInterface;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -107,7 +108,7 @@ class InventoryRecordResource extends AdminOnlyResource
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         $raw = $data['record_date'] ?? today();
-                        $date = $raw instanceof \Carbon\CarbonInterface
+                        $date = $raw instanceof CarbonInterface
                             ? $raw->format('Y-m-d')
                             : (string) $raw;
 

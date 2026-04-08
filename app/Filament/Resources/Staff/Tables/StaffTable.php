@@ -45,7 +45,7 @@ class StaffTable
                         'pin_code',
                     ])
                     ->mutateRecordDataUsing(function (array $data): array {
-                        $data['name'] = ($data['name'] ?? '') . ' - コピー';
+                        $data['name'] = ($data['name'] ?? '').' - コピー';
                         $data['pin_code'] = null;
                         $data['is_active'] = false;
 

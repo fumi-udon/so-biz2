@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\DailyTip;
+use App\Models\DailyTipDistribution;
 use App\Support\TipAttendanceScope;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class TipCalculationService
@@ -175,7 +177,7 @@ class TipCalculationService
 
     public function recalculateAmounts(DailyTip $dailyTip): void
     {
-        /** @var \Illuminate\Support\Collection<int, \App\Models\DailyTipDistribution> $rows */
+        /** @var Collection<int, DailyTipDistribution> $rows */
         $rows = $dailyTip->distributions()->orderBy('id')->get();
 
         $targetTotal = round((float) $dailyTip->total_amount, 3);

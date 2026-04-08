@@ -4,14 +4,14 @@ namespace App\Livewire;
 
 use App\Models\Attendance;
 use App\Models\Staff;
-use App\Services\TipCalculationService;
 use App\Services\TimecardPinValidator;
 use App\Services\TimecardPunchOutcome;
 use App\Services\TimecardPunchService;
+use App\Services\TipCalculationService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -182,7 +182,7 @@ class TimecardForm extends Component
         $this->syncExtraMealDefault();
 
         if (in_array($action, ['lunch_in', 'dinner_in'], true)) {
-            $isLate      = $outcome->postFlow === 'mypage_late' && ($outcome->lateMinutes ?? 0) > 0;
+            $isLate = $outcome->postFlow === 'mypage_late' && ($outcome->lateMinutes ?? 0) > 0;
             $isZeroWeight = TipCalculationService::normalizeWeightScalar($staff->jobLevel?->default_weight) <= 0.0;
             $this->openTipResultModal($action, $isLate, $isZeroWeight);
 
@@ -255,7 +255,7 @@ class TimecardForm extends Component
         $this->refreshShiftState($staff);
         $this->syncExtraMealDefault();
 
-        $action       = $this->extraMeal === 'lunch' ? 'lunch_in' : 'dinner_in';
+        $action = $this->extraMeal === 'lunch' ? 'lunch_in' : 'dinner_in';
         $isZeroWeight = TipCalculationService::normalizeWeightScalar($staff->jobLevel?->default_weight) <= 0.0;
         $this->openTipResultModal($action, false, $isZeroWeight);
     }
@@ -542,8 +542,8 @@ class TimecardForm extends Component
     private function openTipResultModal(string $action, bool $isLate, bool $isZeroWeight = false): void
     {
         $this->tipTargetShift = $action === 'lunch_in' ? 'lunch' : 'dinner';
-        $this->tipModalState  = $isZeroWeight ? 'SKIP' : ($isLate ? 'LOSE' : 'WIN');
-        $this->showTipModal   = true;
+        $this->tipModalState = $isZeroWeight ? 'SKIP' : ($isLate ? 'LOSE' : 'WIN');
+        $this->showTipModal = true;
         $this->dispatch('open-modal', id: 'tip-result-modal');
     }
 

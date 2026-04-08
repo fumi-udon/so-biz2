@@ -74,7 +74,7 @@ final class AttendanceFormSaveData
      */
     public static function assertAtLeastOneMealClockIn(array $data): void
     {
-        $lunch  = $data['lunch_in_at']  ?? null;
+        $lunch = $data['lunch_in_at'] ?? null;
         $dinner = $data['dinner_in_at'] ?? null;
 
         if ($lunch === null && $dinner === null) {

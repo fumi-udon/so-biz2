@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources;
 
-use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\CloseTask\Pages\CreateCloseTask;
 use App\Filament\Resources\CloseTask\Pages\EditCloseTask;
 use App\Filament\Resources\CloseTask\Pages\ListCloseTasks;
+use App\Filament\Support\AdminOnlyResource;
 use App\Models\CloseTask;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Textarea;

@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\Settings;
 
-use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\Settings\Pages\ManageSettings;
+use App\Filament\Support\AdminOnlyResource;
 use App\Models\Setting;
 use App\Support\InventorySettingOptions;
 use App\Support\SettingFormValue;

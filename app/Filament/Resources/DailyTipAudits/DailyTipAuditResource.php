@@ -2,8 +2,8 @@
 
 namespace App\Filament\Resources\DailyTipAudits;
 
-use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\DailyTipAudits\Pages\ListDailyTipAudits;
+use App\Filament\Support\AdminOnlyResource;
 use App\Models\DailyTipAudit;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;

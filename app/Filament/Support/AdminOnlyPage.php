@@ -24,4 +24,3 @@ abstract class AdminOnlyPage extends Page
         return false;
     }
 }
-

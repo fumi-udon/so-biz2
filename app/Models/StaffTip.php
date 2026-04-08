@@ -45,4 +45,3 @@ class StaffTip extends Model
         return $this->belongsTo(Staff::class);
     }
 }
-

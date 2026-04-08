@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Setting;
+use App\Support\InventorySettingOptions;
 use Illuminate\Database\Seeder;
 
 class SettingSeeder extends Seeder
@@ -26,7 +27,7 @@ class SettingSeeder extends Seeder
         );
 
         Setting::query()->updateOrCreate(
-            ['key' => \App\Support\InventorySettingOptions::KEY_TIMING],
+            ['key' => InventorySettingOptions::KEY_TIMING],
             [
                 'value' => ['close', 'open', 'lunch', 'prep', 'night_close'],
                 'description' => '棚卸し・ルーティンで使う「確認タイミング」の選択肢（タグ）。例: close=閉店前',
@@ -34,7 +35,7 @@ class SettingSeeder extends Seeder
         );
 
         Setting::query()->updateOrCreate(
-            ['key' => \App\Support\InventorySettingOptions::KEY_CATEGORY],
+            ['key' => InventorySettingOptions::KEY_CATEGORY],
             [
                 'value' => [
                     '刺身・鮮魚',
@@ -55,7 +56,7 @@ class SettingSeeder extends Seeder
         );
 
         Setting::query()->updateOrCreate(
-            ['key' => \App\Support\InventorySettingOptions::KEY_UNIT],
+            ['key' => InventorySettingOptions::KEY_UNIT],
             [
                 'value' => ['kg', 'g', '本', '尾', '枚', 'ℓ', 'mL', '箱', 'パック', '個', '束', '杯'],
                 'description' => '棚卸し品目の「単位」候補（タグ）。',

@@ -19,7 +19,7 @@ return [
             'broadcaster' => 'pusher',
             'key' => env('VITE_PUSHER_APP_KEY'),
             'cluster' => env('VITE_PUSHER_APP_CLUSTER'),
-            'wsHost' => env('VITE_PUSHER_HOST', 'ws-' . env('VITE_PUSHER_APP_CLUSTER') . '.pusher.com'),
+            'wsHost' => env('VITE_PUSHER_HOST', 'ws-'.env('VITE_PUSHER_APP_CLUSTER').'.pusher.com'),
             'wsPort' => env('VITE_PUSHER_PORT', 443),
             'wssPort' => env('VITE_PUSHER_PORT', 443),
             'forceTLS' => true,

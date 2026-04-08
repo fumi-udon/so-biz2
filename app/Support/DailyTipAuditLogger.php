@@ -13,7 +13,7 @@ use Throwable;
 final class DailyTipAuditLogger
 {
     /**
-     * @param array<string, mixed> $details
+     * @param  array<string, mixed>  $details
      */
     public static function write(string $action, ?string $targetDate, ?string $shift, array $details = []): void
     {

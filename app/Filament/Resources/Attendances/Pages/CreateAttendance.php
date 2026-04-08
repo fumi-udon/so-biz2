@@ -38,7 +38,7 @@ class CreateAttendance extends CreateRecord
         $data = $this->form->getState();
 
         $staffId = $data['staff_id'] ?? null;
-        $date    = $data['date']     ?? null;
+        $date = $data['date'] ?? null;
 
         if (! $staffId || ! $date) {
             return;

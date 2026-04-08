@@ -11,4 +11,3 @@ abstract class AdminOnlyDashboard extends Dashboard
         return auth()->user()?->isAdmin() === true;
     }
 }
-

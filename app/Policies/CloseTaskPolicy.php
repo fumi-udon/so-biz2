@@ -2,8 +2,8 @@
 
 namespace App\Policies;
 
-use App\Models\User;
 use App\Models\CloseTask;
+use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class CloseTaskPolicy
@@ -13,8 +13,6 @@ class CloseTaskPolicy
     /**
      * pilote は CloseTask の閲覧（viewAny / view）のみ。作成・更新・削除は Spatie に委ねず拒否し、
      * 誤付与権限や Filament アクション経由の破壊的操作を防ぐ。
-     *
-     * @return bool|null
      */
     public function before(User $user, string $ability): ?bool
     {

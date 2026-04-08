@@ -4,24 +4,31 @@ use App\Http\Controllers\ClientInventoryController;
 use App\Http\Controllers\CloseCheckController;
 use App\Http\Controllers\MyPageController;
 use App\Http\Controllers\NewsNoteController;
-use App\Livewire\TimecardForm;
 use App\Livewire\ClientOrderForm;
-use App\Models\User;
-use Filament\Notifications\Notification;
+use App\Livewire\FrontendDailyClose;
+use App\Livewire\TimecardForm;
+use App\Models\Attendance;
+use App\Models\NewsNote;
+use App\Models\Staff;
+use App\Support\AbsenceScope;
+use App\Support\BusinessDate;
+use App\Support\StoreHolidaySetting;
+use App\Support\TipAttendanceScope;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function (Request $request) {
     $request->session()->forget('mypage_staff_id');
 
     // ── スタッフリスト（MyPage モーダル / Note モーダル用） ─────────────
-    $mypageStaffList = \App\Models\Staff::query()->where('is_active', true)->orderBy('name')->get();
-    $recentNews      = \App\Models\NewsNote::recentDays(5);
+    $mypageStaffList = Staff::query()->where('is_active', true)->orderBy('name')->get();
+    $recentNews = NewsNote::recentDays(5);
 
     // ── 当日チップ対象者（打刻 + 申請 + 非剥奪） ─────────────────────────
-    $today = \App\Support\BusinessDate::current()->toDateString();
-    $tipLunchAppliers = \App\Support\TipAttendanceScope::applyGoldenFormula(
-        \App\Models\Attendance::query()->whereDate('date', $today),
+    $today = BusinessDate::current()->toDateString();
+    $tipLunchAppliers = TipAttendanceScope::applyGoldenFormula(
+        Attendance::query()->whereDate('date', $today),
         'lunch',
     )
         ->with('staff:id,name')
@@ -29,8 +36,8 @@ Route::get('/', function (Request $request) {
         ->pluck('staff')
         ->filter()
         ->values();
-    $tipDinnerAppliers = \App\Support\TipAttendanceScope::applyGoldenFormula(
-        \App\Models\Attendance::query()->whereDate('date', $today),
+    $tipDinnerAppliers = TipAttendanceScope::applyGoldenFormula(
+        Attendance::query()->whereDate('date', $today),
         'dinner',
     )
         ->with('staff:id,name')
@@ -40,12 +47,12 @@ Route::get('/', function (Request $request) {
         ->values();
 
     // ── 勤怠ガント用集計 ─────────────────────────────────────────────────
-    $bd              = \App\Support\BusinessDate::current();
+    $bd = BusinessDate::current();
     $ganttMonthStart = $bd->copy()->startOfMonth()->toDateString();
-    $ganttMonthEnd   = $bd->copy()->toDateString();
+    $ganttMonthEnd = $bd->copy()->toDateString();
     $ganttMonthLabel = $bd->copy()->format('M Y');
 
-    $ganttAllStaff = \App\Models\Staff::query()
+    $ganttAllStaff = Staff::query()
         ->where('is_active', true)
         ->whereHas('jobLevel', fn ($q) => $q->where('level', '!=', 10))
         ->with('jobLevel')
@@ -53,20 +60,20 @@ Route::get('/', function (Request $request) {
         ->get();
 
     // 当月 Attendance を一括取得してスタッフ別 + 日付別にインデックス
-    $ganttAllAttendances = \App\Models\Attendance::query()
+    $ganttAllAttendances = Attendance::query()
         ->whereIn('staff_id', $ganttAllStaff->pluck('id'))
         ->whereBetween('date', [$ganttMonthStart, $ganttMonthEnd])
         ->get();
 
     $ganttAttendanceMap = [];
     foreach ($ganttAllAttendances as $att) {
-        $dateStr = \Illuminate\Support\Carbon::parse($att->date)->toDateString();
+        $dateStr = Carbon::parse($att->date)->toDateString();
         $ganttAttendanceMap[$att->staff_id][$dateStr] = $att;
     }
 
-    $ganttHolidaySet = \App\Support\StoreHolidaySetting::dateSet();
-    $ganttStaffIds   = $ganttAllStaff->pluck('id')->all();
-    $ganttAbsenceMap = \App\Support\AbsenceScope::loadAbsenceMapForStaffInRange($ganttStaffIds, $ganttMonthStart, $ganttMonthEnd);
+    $ganttHolidaySet = StoreHolidaySetting::dateSet();
+    $ganttStaffIds = $ganttAllStaff->pluck('id')->all();
+    $ganttAbsenceMap = AbsenceScope::loadAbsenceMapForStaffInRange($ganttStaffIds, $ganttMonthStart, $ganttMonthEnd);
 
     $ganttRows = $ganttAllStaff->map(function ($s) use ($ganttAttendanceMap, $ganttMonthStart, $ganttMonthEnd, $ganttHolidaySet, $ganttAbsenceMap) {
         $staffAttByDate = $ganttAttendanceMap[$s->id] ?? [];
@@ -75,15 +82,15 @@ Route::get('/', function (Request $request) {
         $late = collect($staffAttByDate)->filter(fn ($r) => (int) ($r->late_minutes ?? 0) > 0)->count();
 
         // 欠勤カウント（AbsenceScope: 休業日・出勤・確定欠勤）
-        $absent      = 0;
+        $absent = 0;
         $absentDates = [];
-        $cursor      = \Illuminate\Support\Carbon::parse($ganttMonthStart);
-        $endCarbon   = \Illuminate\Support\Carbon::parse($ganttMonthEnd);
+        $cursor = Carbon::parse($ganttMonthStart);
+        $endCarbon = Carbon::parse($ganttMonthEnd);
         while ($cursor->lte($endCarbon)) {
-            $d   = $cursor->toDateString();
+            $d = $cursor->toDateString();
             $row = $staffAttByDate[$d] ?? null;
             $hasAbs = isset($ganttAbsenceMap[$s->id][$d]);
-            if (\App\Support\AbsenceScope::resolveDay($d, $row, $ganttHolidaySet, $hasAbs) === \App\Support\AbsenceScope::STATUS_ABSENT) {
+            if (AbsenceScope::resolveDay($d, $row, $ganttHolidaySet, $hasAbs) === AbsenceScope::STATUS_ABSENT) {
                 $absent++;
                 $absentDates[] = $d;
             }
@@ -91,17 +98,17 @@ Route::get('/', function (Request $request) {
         }
 
         return [
-            'staff'        => $s,
-            'late'         => $late,
-            'absent'       => $absent,
+            'staff' => $s,
+            'late' => $late,
+            'absent' => $absent,
             'absent_dates' => $absentDates,
-            'total'        => $late + $absent,
+            'total' => $late + $absent,
         ];
     })->sortByDesc('total')->values();
 
-    $ganttBravo       = $ganttRows->filter(fn ($r) => $r['total'] === 0)->values();
+    $ganttBravo = $ganttRows->filter(fn ($r) => $r['total'] === 0)->values();
     $ganttProblematic = $ganttRows->filter(fn ($r) => $r['total'] > 0)->values();
-    $ganttMaxVal      = max((int) ($ganttProblematic->max('total') ?? 0), 1);
+    $ganttMaxVal = max((int) ($ganttProblematic->max('total') ?? 0), 1);
 
     return view('welcome', compact(
         'mypageStaffList',
@@ -119,8 +126,9 @@ Route::get('/', function (Request $request) {
 
 Route::get('/order/{table_number}', ClientOrderForm::class)->name('order.table');
 
-
 Route::get('/timecard', TimecardForm::class)->name('timecard.index');
+
+Route::get('/daily-close', FrontendDailyClose::class)->name('daily-close');
 
 Route::get('/close-check', [CloseCheckController::class, 'index'])->name('close-check.index');
 Route::post('/close-check/process', [CloseCheckController::class, 'process'])->name('close-check.process');

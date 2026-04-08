@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\StaffAbsences;
 
+use App\Filament\Resources\StaffAbsences\Forms\StaffAbsenceForm;
 use App\Filament\Resources\StaffAbsences\Pages\CreateStaffAbsence;
 use App\Filament\Resources\StaffAbsences\Pages\EditStaffAbsence;
 use App\Filament\Resources\StaffAbsences\Pages\ListStaffAbsences;
-use App\Filament\Resources\StaffAbsences\Forms\StaffAbsenceForm;
 use App\Filament\Resources\StaffAbsences\Tables\StaffAbsencesTable;
 use App\Filament\Support\AdminOnlyResource;
 use App\Models\StaffAbsence;

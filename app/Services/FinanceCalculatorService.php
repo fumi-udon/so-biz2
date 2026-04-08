@@ -33,8 +33,7 @@ final class FinanceCalculatorService
         array $data,
         ?float $toleranceMoins = null,
         ?float $tolerancePlus = null,
-    ): array
-    {
+    ): array {
         $posSales = $this->resolvePosSales($data);
         $cash = (float) ($data['cash'] ?? 0);
         $cheque = (float) ($data['cheque'] ?? 0);

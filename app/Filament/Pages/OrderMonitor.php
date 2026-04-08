@@ -9,7 +9,7 @@ use Livewire\Attributes\On;
 class OrderMonitor extends AdminOnlyPage
 {
     protected static bool $shouldRegisterNavigation = false; // ←これを追加
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-bell-alert';
 
     protected static ?string $navigationGroup = '受注モニター';

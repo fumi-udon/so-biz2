@@ -6,6 +6,7 @@ use App\Filament\Resources\DailyTips\DailyTipResource;
 use App\Filament\Resources\Staff\StaffResource;
 use App\Models\DailyTip;
 use App\Models\DailyTipDistribution;
+use App\Models\Staff;
 use App\Support\BusinessDate;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -125,7 +126,7 @@ class TipDashboard extends Page
             ->whereHas('dailyTip', fn ($q) => $q->whereBetween('business_date', [$start->toDateString(), $endDate]))
             ->get();
 
-        /** @var array<int, array{staff: \App\Models\Staff, days: array<string, array{amount: float, lunch_amount: float, dinner_amount: float, notes: list<string>, shifts: list<string>}>, week_total: float}> $byStaff */
+        /** @var array<int, array{staff: Staff, days: array<string, array{amount: float, lunch_amount: float, dinner_amount: float, notes: list<string>, shifts: list<string>}>, week_total: float}> $byStaff */
         $byStaff = [];
         $weekGrand = 0.0;
 

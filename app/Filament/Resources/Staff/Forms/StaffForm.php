@@ -13,6 +13,9 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
+use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 
 class StaffForm
@@ -120,7 +123,7 @@ class StaffForm
                                     ->modalHeading('シフト（JSON）の書き方ルール')
                                     ->modalSubmitAction(false)
                                     ->modalCancelActionLabel('閉じる')
-                                    ->modalContent(fn () => new \Illuminate\Support\HtmlString('
+                                    ->modalContent(fn () => new HtmlString('
                                         <div class="text-sm leading-relaxed text-gray-950 dark:text-gray-100">
                                             <p>曜日（英語小文字）をキーにし、lunchとdinnerの時間を指定します。<br>時間は <b>["開始", "終了"]</b> の形式、休みのシフトは <b>null</b> を指定してください。</p>
                                             <ul class="list-disc pl-5 mt-2 mb-4">
@@ -136,7 +139,7 @@ class StaffForm
                                 Action::make('format_json')
                                     ->label('JSONを整形')
                                     ->icon('heroicon-m-sparkles')
-                                    ->action(function (\Filament\Forms\Get $get, \Filament\Forms\Set $set): void {
+                                    ->action(function (Get $get, Set $set): void {
                                         $raw = $get('fixed_shifts');
                                         if (! is_string($raw)) {
                                             $set('fixed_shifts', FixedShiftsJson::toPrettyJsonString($raw));

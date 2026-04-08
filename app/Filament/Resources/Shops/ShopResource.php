@@ -2,12 +2,12 @@
 
 namespace App\Filament\Resources\Shops;
 
-use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\Shops\Forms\ShopForm;
 use App\Filament\Resources\Shops\Pages\CreateShop;
 use App\Filament\Resources\Shops\Pages\EditShop;
 use App\Filament\Resources\Shops\Pages\ListShops;
 use App\Filament\Resources\Shops\Tables\ShopsTable;
+use App\Filament\Support\AdminOnlyResource;
 use App\Models\Shop;
 use Filament\Forms\Form;
 use Filament\Tables\Table;

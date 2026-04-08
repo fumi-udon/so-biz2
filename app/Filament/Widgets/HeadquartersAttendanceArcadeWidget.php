@@ -5,8 +5,8 @@ namespace App\Filament\Widgets;
 use App\Models\Attendance;
 use App\Models\Staff;
 use App\Support\AbsenceScope;
-use App\Support\StoreHolidaySetting;
 use App\Support\BusinessDate;
+use App\Support\StoreHolidaySetting;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -17,7 +17,7 @@ class HeadquartersAttendanceArcadeWidget extends Widget
 
     protected static ?int $sort = -7;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     public static function canView(): bool
     {
@@ -66,7 +66,7 @@ class HeadquartersAttendanceArcadeWidget extends Widget
             ->map(fn (Collection $g) => $g->count());
 
         $startCarbon = Carbon::parse($start);
-        $endCarbon   = Carbon::parse($end);
+        $endCarbon = Carbon::parse($end);
 
         $holidaySet = StoreHolidaySetting::dateSet();
         $staffIds = $staffList->pluck('id')->all();

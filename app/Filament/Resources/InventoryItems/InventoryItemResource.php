@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\InventoryItems;
 
-use App\Filament\Support\AdminOnlyResource;
 use App\Filament\Resources\InventoryItems\Pages\CreateInventoryItem;
 use App\Filament\Resources\InventoryItems\Pages\EditInventoryItem;
 use App\Filament\Resources\InventoryItems\Pages\ListInventoryItems;
+use App\Filament\Support\AdminOnlyResource;
 use App\Models\InventoryItem;
 use App\Models\Shop;
 use App\Models\Staff;

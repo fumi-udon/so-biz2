@@ -68,7 +68,6 @@ class InventorySettingOptions
     }
 
     /**
-     * @param  mixed  $raw
      * @return array<string, string>
      */
     protected static function toKeyedOptions(mixed $raw): array
