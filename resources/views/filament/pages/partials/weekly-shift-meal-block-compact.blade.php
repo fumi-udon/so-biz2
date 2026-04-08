@@ -51,7 +51,7 @@
                     $end = $shift[1] ?? $shift[0] ?? '';
                     $ls = $row['live_status'] ?? null;
                 @endphp
-                <li class="flex min-w-0 items-center gap-0.5 px-1 py-0.5">
+                <li wire:key="meal-compact-assign-{{ $mealTint }}-{{ $row['staff']->id }}-{{ $loop->index }}" class="flex min-w-0 items-center gap-0.5 px-1 py-0.5">
                     @if($isToday && $ls && $ls !== 'none')
                         <span class="shrink-0 select-none" title="打刻">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($ls) }}</span>
                     @endif
@@ -61,7 +61,7 @@
                 </li>
             @endforeach
             @foreach($liveExtras as $extra)
-                <li class="flex min-w-0 items-center gap-0.5 bg-rose-100/60 px-1 py-0.5 text-rose-950 dark:bg-rose-950/40 dark:text-rose-100">
+                <li wire:key="meal-compact-extra-{{ $mealTint }}-{{ $extra['staff']->id }}-{{ $loop->index }}" class="flex min-w-0 items-center gap-0.5 bg-rose-100/60 px-1 py-0.5 text-rose-950 dark:bg-rose-950/40 dark:text-rose-100">
                     <x-filament::icon icon="heroicon-m-exclamation-triangle" class="h-3 w-3 shrink-0 text-rose-700 dark:text-rose-300" />
                     @include('filament.pages.partials.weekly-shift-staff-role-icon', ['staff' => $extra['staff'], 'class' => 'h-3 w-3 shrink-0 text-rose-700 dark:text-rose-200'])
                     <span class="min-w-0 flex-1 truncate text-xs font-medium" title="{{ $extra['staff']->name }}">{{ $extra['staff']->name }}</span>

@@ -60,7 +60,7 @@
                                         return 'text-gray-900 dark:text-gray-100';
                                     };
                                 @endphp
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                <tr wire:key="roster-{{ $staff->id }}" class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
                                     <td @class([
                                         'px-2 py-1.5 align-middle',
                                         'bg-emerald-50/50 dark:bg-emerald-950/20' => $rowPulse,

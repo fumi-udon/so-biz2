@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
-use App\Models\DailyTipDistribution;
+use App\Models\AttendanceEditLog;
 use App\Models\InventoryItem;
 use App\Models\InventoryRecord;
 use App\Models\RoutineTask;
@@ -11,13 +11,13 @@ use App\Models\RoutineTaskLog;
 use App\Models\Staff;
 use App\Models\StaffTip;
 use App\Services\AttendanceStatusResolver;
-use App\Support\AttendanceLateCalculator;
 use App\Support\AbsenceScope;
-use App\Support\StoreHolidaySetting;
+use App\Support\AttendanceLateCalculator;
 use App\Support\BusinessDate;
-use App\Support\TipAttendanceScope;
+use App\Support\FixedShiftSchedule;
 use App\Support\InventorySettingOptions;
-use App\Models\AttendanceEditLog;
+use App\Support\StoreHolidaySetting;
+use App\Support\TipAttendanceScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -130,10 +130,10 @@ class MyPageController extends Controller
 
             $lunchScheduledStart = $attendance?->scheduled_in_at
                 ? $attendance->scheduled_in_at->format('H:i')
-                : null;
+                : FixedShiftSchedule::start($staff, $dayKey, 'lunch');
             $dinnerScheduledStart = $attendance?->scheduled_dinner_at
                 ? $attendance->scheduled_dinner_at->format('H:i')
-                : null;
+                : FixedShiftSchedule::start($staff, $dayKey, 'dinner');
             $lunchStatus = $statusResolver->resolveMealStatus($businessDate, $lunchScheduledStart, $attendance?->lunch_in_at);
             $dinnerStatus = $statusResolver->resolveMealStatus($businessDate, $dinnerScheduledStart, $attendance?->dinner_in_at);
             $lunchInTime = $attendance?->lunch_in_at?->format('H:i');
@@ -354,6 +354,7 @@ class MyPageController extends Controller
                     $lunch = (float) $rows
                         ->filter(function (StaffTip $tip): bool {
                             $shift = strtolower((string) ($tip->dailyTip?->shift ?? ''));
+
                             return str_contains($shift, 'lunch');
                         })
                         ->sum('amount');
@@ -361,6 +362,7 @@ class MyPageController extends Controller
                     $dinner = (float) $rows
                         ->filter(function (StaffTip $tip): bool {
                             $shift = strtolower((string) ($tip->dailyTip?->shift ?? ''));
+
                             return str_contains($shift, 'dinner');
                         })
                         ->sum('amount');
@@ -380,6 +382,7 @@ class MyPageController extends Controller
                 ->take(5)
                 ->map(function (array $row): array {
                     unset($row['date_key']);
+
                     return $row;
                 })
                 ->values();
@@ -423,7 +426,7 @@ class MyPageController extends Controller
             // TipAttendanceScope（打刻 + 申請 + 非剥奪）と同一
             $monthTipWinCount = $monthlyAttendances->reduce(
                 function (int $carry, Attendance $row): int {
-                    $lunchWin  = TipAttendanceScope::lunchEligible($row);
+                    $lunchWin = TipAttendanceScope::lunchEligible($row);
                     $dinnerWin = TipAttendanceScope::dinnerEligible($row);
 
                     return $carry + ($lunchWin ? 1 : 0) + ($dinnerWin ? 1 : 0);
@@ -441,7 +444,7 @@ class MyPageController extends Controller
             }
         }
         $routinesAllComplete = $staff && ($routineTasks->isEmpty() || $routinesPendingCount === 0);
- 
+
         return view('mypage.index', [
             'staffList' => $staffList,
             'staff' => $staff,
@@ -735,9 +738,9 @@ class MyPageController extends Controller
                 ->orderBy('date')
                 ->get();
 
-            $businessCurrent = \App\Support\BusinessDate::current();
-            $weekStart = $businessCurrent->copy()->startOfWeek(\Illuminate\Support\Carbon::MONDAY);
-            $weekEnd = $businessCurrent->copy()->endOfWeek(\Illuminate\Support\Carbon::SUNDAY);
+            $businessCurrent = BusinessDate::current();
+            $weekStart = $businessCurrent->copy()->startOfWeek(Carbon::MONDAY);
+            $weekEnd = $businessCurrent->copy()->endOfWeek(Carbon::SUNDAY);
 
             $weekRows = Attendance::query()
                 ->where('staff_id', $staff->id)

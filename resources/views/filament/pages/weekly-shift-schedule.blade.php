@@ -15,7 +15,7 @@
                 <tr>
                     <th class="w-[min(12rem,32vw)] max-w-[12rem] px-2 py-2 text-xs font-semibold text-gray-900 dark:text-white whitespace-nowrap sm:px-4 sm:py-3">スタッフ</th>
                     @foreach($dayLabels as $dayKey => $dayLabel)
-                        <th @class([
+                        <th wire:key="shift-col-{{ $dayKey }}" @class([
                             'px-4 py-3 font-semibold text-gray-900 dark:text-white text-center whitespace-nowrap',
                             'bg-blue-50/80 dark:bg-blue-950/30 ring-1 ring-inset ring-blue-200/60 dark:ring-blue-500/20' => $dayKey === $todayDayKey,
                         ])>
@@ -29,7 +29,7 @@
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-white/5">
                 @foreach($staffs as $staff)
-                <tr class="hover:bg-gray-50 dark:hover:bg-white/5 transition duration-75">
+                <tr wire:key="staff-row-{{ $staff->id }}" class="hover:bg-gray-50 dark:hover:bg-white/5 transition duration-75">
                     <td class="max-w-[9rem] px-2 py-2 align-middle sm:max-w-[12rem] sm:px-4 sm:py-3">
                         <span class="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap" title="{{ $staff->name }}">
                             @include('filament.pages.partials.weekly-shift-staff-role-icon', ['staff' => $staff])
@@ -45,7 +45,7 @@
                             $att = $isTodayCol ? $attendancesToday->get($staff->id) : null;
                             $live = $liveByStaff[$staff->id] ?? ['lunch' => 'none', 'dinner' => 'none'];
                         @endphp
-                        <td @class([
+                        <td wire:key="staff-{{ $staff->id }}-day-{{ $dayKey }}" @class([
                             'px-2 py-2 sm:px-3 sm:py-3 align-top text-left min-w-0 max-w-[11rem] sm:max-w-none',
                             'bg-blue-50/50 dark:bg-blue-950/20' => $isTodayCol,
                         ])>
@@ -140,7 +140,7 @@
                         $blockLunch = $shiftGrid[$dayKey]['lunch'] ?? ['assignments' => [], 'counts' => ['kitchen' => 0, 'hall' => 0, 'other' => 0], 'live_extras' => []];
                         $blockDinner = $shiftGrid[$dayKey]['dinner'] ?? ['assignments' => [], 'counts' => ['kitchen' => 0, 'hall' => 0, 'other' => 0], 'live_extras' => []];
                     @endphp
-                    <div
+                    <div wire:key="shift-mobile-day-{{ $dayKey }}"
                         @class([
                             'overflow-hidden rounded-sm border-2 border-black shadow-[4px_4px_0_0_rgba(0,0,0,0.85)] dark:border-sky-600 dark:shadow-[4px_4px_0_0_rgba(0,0,0,0.5)]',
                             'ring-2 ring-yellow-400 dark:ring-yellow-500/60' => $isDayToday,
@@ -231,7 +231,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-200 dark:divide-white/5">
                     @foreach($dayLabels as $dayKey => $dayLabel)
-                    <tr @class([
+                    <tr wire:key="shift-wide-day-{{ $dayKey }}" @class([
                         'hover:bg-gray-50 dark:hover:bg-white/5 transition duration-75 align-top',
                         'bg-blue-50/40 dark:bg-blue-950/25' => $dayKey === $todayDayKey,
                     ])>
@@ -293,7 +293,7 @@
                                                     $end = $shift[1] ?? $shift[0] ?? '';
                                                     $ls = $row['live_status'] ?? null;
                                                 @endphp
-                                                <span class="inline-flex w-full max-w-full min-w-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-medium ring-1 ring-inset {{ $chip }}">
+                                                <span wire:key="shift-wide-assign-{{ $dayKey }}-{{ $meal }}-{{ $row['staff']->id }}-{{ $loop->index }}" class="inline-flex w-full max-w-full min-w-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-medium ring-1 ring-inset {{ $chip }}">
                                                     @if($ls && $ls !== 'none')
                                                         <span class="shrink-0 select-none" title="打刻">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($ls) }}</span>
                                                     @endif
@@ -306,7 +306,7 @@
                                                 @php
                                                     $echip = 'bg-rose-100 text-rose-900 ring-rose-200/80 dark:bg-rose-950/50 dark:text-rose-100';
                                                 @endphp
-                                                <span class="inline-flex w-full max-w-full min-w-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-medium ring-1 ring-inset {{ $echip }}" title="予定なし・打刻あり">
+                                                <span wire:key="shift-wide-extra-{{ $dayKey }}-{{ $meal }}-{{ $extra['staff']->id }}-{{ $loop->index }}" class="inline-flex w-full max-w-full min-w-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-medium ring-1 ring-inset {{ $echip }}" title="予定なし・打刻あり">
                                                     <x-filament::icon icon="heroicon-m-exclamation-triangle" class="h-3 w-3 shrink-0 text-rose-700 dark:text-rose-300" />
                                                     @include('filament.pages.partials.weekly-shift-staff-role-icon', ['staff' => $extra['staff'], 'class' => 'h-3 w-3 shrink-0'])
                                                     <span class="min-w-0 flex-1 truncate" title="{{ $extra['staff']->name }}">{{ $extra['staff']->name }}</span>

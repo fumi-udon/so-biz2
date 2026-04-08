@@ -11,7 +11,7 @@
             icon="heroicon-o-lock-closed"
             icon-color="warning"
             heading="Avant la clôture"
-            description="Choisissez le service (Midi ou Soir), le responsable, puis le code PIN (4 chiffres)."
+            description=""
             :sticky-footer="true"
             :extra-modal-window-attribute-bag="new \Illuminate\View\ComponentAttributeBag([
                 'class' => 'daily-close-gate-window dark !bg-gradient-to-b !from-slate-950 !via-slate-900 !to-zinc-950 !text-slate-100 !shadow-2xl !ring-2 !ring-cyan-500/45',
@@ -246,9 +246,6 @@
             <span class="text-xs text-gray-600 dark:text-gray-400">Clôture</span>
         </div>
 
-        <div class="-mt-1">
-            <button type="button" class="text-[11px] font-semibold text-primary-600 underline decoration-dotted underline-offset-2 dark:text-primary-400" x-on:click="$dispatch('open-modal', { id: 'daily-close-help' })">Comment compter la caisse ?</button>
-        </div>
 
         @if ($this->closeSessionReady)
             @php
@@ -351,10 +348,7 @@
                 </x-filament-panels::form>
             @else
                 <div class="space-y-2 py-5 text-center">
-                    <p class="text-base font-semibold text-gray-900 dark:text-white">Validez le verrouillage dans la fenêtre</p>
-                    <p class="mx-auto max-w-md text-sm text-gray-600 dark:text-gray-400">
-                        Choisissez le service, le responsable et le code PIN (4 chiffres) pour ouvrir le formulaire.
-                    </p>
+
                     <x-filament::button type="button" wire:click="openSessionGateModal" color="primary">
                         Ouvrir la fenêtre
                     </x-filament::button>
