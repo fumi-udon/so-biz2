@@ -2,8 +2,14 @@
 
 @section('title', 'Clôture des tâches — '.config('app.name', 'Laravel'))
 
+@push('head')
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+@endpush
+
 @section('content')
-<div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+<div class="min-h-screen bg-gradient-to-b from-sky-100 via-emerald-50 to-teal-100 text-gray-950 dark:from-slate-950 dark:via-emerald-950/40 dark:to-slate-900 dark:text-gray-100">
     <x-client-nav />
 
     @php
@@ -44,11 +50,11 @@
             },
         }"
     >
-        {{-- Étape A : oubli de pointage (sortie) — pas de fermeture au clic extérieur --}}
+        {{-- Étape A : oubli de pointage --}}
         <div
             x-show="showClockoutModal"
             x-cloak
-            class="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4"
+            class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
             role="dialog"
             aria-modal="true"
             aria-labelledby="clockout-modal-title"
@@ -67,7 +73,7 @@
                 </ul>
                 <button
                     type="button"
-                    class="mt-6 w-full rounded-xl border-2 border-amber-400 bg-amber-500 px-4 py-3 text-center text-base font-black text-slate-950 shadow-md transition hover:bg-amber-400"
+                    class="mt-6 w-full rounded-xl border-2 border-amber-400 bg-gradient-to-b from-amber-400 to-amber-600 px-4 py-3 text-center text-base font-black text-slate-950 shadow-[0_4px_0_0_#92400e] transition hover:brightness-105 active:translate-y-0.5 active:shadow-[0_2px_0_0_#92400e]"
                     @click="dismissClockout()"
                 >
                     Fermer
@@ -75,21 +81,24 @@
             </div>
         </div>
 
-        {{-- Carte de remerciement (toujours visible en arrière-plan) --}}
-        <div class="w-full rounded-2xl border-2 border-black bg-white p-4 text-center text-gray-900 shadow-[0_8px_0_0_rgba(0,0,0,1)] dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100">
-            <p class="mb-3 text-2xl font-black text-emerald-600 dark:text-emerald-400 sm:text-3xl">
-                Merci, bonne fin de journée !
+        {{-- STAGE CLEAR --}}
+        <div class="w-full rounded-2xl border-4 border-emerald-400/80 bg-gradient-to-br from-emerald-100 via-white to-cyan-100 p-6 text-center shadow-[0_10px_0_0_rgba(6,95,70,0.35)] ring-2 ring-emerald-300/50 dark:border-emerald-600/60 dark:from-emerald-950/80 dark:via-slate-900 dark:to-cyan-950/50 dark:shadow-[0_10px_0_0_rgba(6,78,59,0.5)] dark:ring-emerald-500/30">
+            <p class="font-['Press_Start_2P'] text-[10px] leading-relaxed tracking-tight text-emerald-700 dark:text-emerald-300 sm:text-xs">
+            MISSION ACCOMPLIE
             </p>
-            <p class="text-3xl font-black text-slate-900 dark:text-white sm:text-4xl">{{ $closedStaffName }}</p>
+            <p class="mt-4 text-lg font-bold text-gray-950 dark:text-gray-100">
+                Merci pour votre excellent travail!
+            </p>
+            <p class="mt-3 text-2xl font-black tracking-tight text-emerald-800 dark:text-emerald-300 sm:text-3xl">{{ $closedStaffName }}</p>
         </div>
 
-        {{-- Étape B : rapport WhatsApp --}}
+        {{-- Rapport WhatsApp --}}
         <div
             x-show="showWhatsappBlock"
             x-cloak
             class="mt-6 w-full"
         >
-            <div class="rounded-2xl border-2 border-emerald-600/60 bg-gradient-to-br from-emerald-50 to-teal-50 p-4 shadow-md ring-1 ring-emerald-500/20 dark:border-emerald-500/50 dark:from-emerald-950/60 dark:to-teal-950/50 dark:ring-emerald-400/20">
+            <div class="rounded-2xl border-2 border-emerald-600/70 bg-gradient-to-br from-emerald-50 to-teal-50 p-4 shadow-md ring-1 ring-emerald-500/25 dark:border-emerald-500/50 dark:from-emerald-950/60 dark:to-teal-950/50 dark:ring-emerald-400/20">
                 <p class="text-center text-base font-black text-emerald-950 dark:text-emerald-100">
                     Rapport au responsable
                 </p>
@@ -121,8 +130,7 @@
 
                 <button
                     type="button"
-                    class="mt-4 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black uppercase tracking-wide text-white shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                    style="background-color: #25D366;"
+                    class="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-800 bg-gradient-to-b from-emerald-500 to-teal-700 px-4 py-3 text-sm font-black uppercase tracking-wide text-white shadow-[0_5px_0_0_#134e4a] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 active:translate-y-0.5 active:shadow-[0_2px_0_0_#134e4a]"
                     :disabled="!waConfigured || !waDigits || hasReported"
                     @click="sendWhatsapp()"
                 >
@@ -142,7 +150,7 @@
 
         <a
             href="{{ route('home') }}"
-            class="mt-8 inline-flex items-center justify-center rounded-full border-2 border-black bg-slate-100 px-6 py-2.5 text-base font-bold text-slate-900 hover:bg-slate-200 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
+            class="mt-8 inline-flex items-center justify-center rounded-full border-2 border-emerald-800 bg-gradient-to-b from-white to-emerald-100 px-6 py-2.5 text-base font-bold text-emerald-950 shadow-[0_4px_0_0_rgba(6,78,59,0.45)] hover:brightness-105 active:translate-y-0.5 dark:border-emerald-600 dark:from-slate-800 dark:to-emerald-950 dark:text-emerald-100 dark:shadow-[0_4px_0_0_rgba(6,78,59,0.6)]"
             :class="{ 'pointer-events-none opacity-40': !canGoHome() }"
             :aria-disabled="!canGoHome() ? 'true' : 'false'"
             @click="if (! canGoHome()) { $event.preventDefault() }"
