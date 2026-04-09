@@ -1,15 +1,10 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Mon espace — {{ config('app.name') }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>[x-cloak]{display:none!important;}</style>
-</head>
-<body
+@extends('layouts.app')
+
+@section('title', 'Mon espace — '.config('app.name'))
+
+@section('content')
+<div
+    id="mypage-root"
     class="min-h-screen bg-gradient-to-br from-pink-100 via-yellow-100 to-cyan-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950"
     data-auto-logout-url="{{ route('mypage.auto-logout') }}"
     data-timecard-url="{{ route('timecard.index') }}"
@@ -452,9 +447,9 @@
         (() => {
             const limitSeconds = 180;
             const timerEl = document.getElementById('idle-timer');
-            const body = document.body;
-            const autoLogoutUrl = body?.dataset?.autoLogoutUrl || '/mypage/auto-logout';
-            const timecardUrl = body?.dataset?.timecardUrl || '/timecard';
+            const root = document.getElementById('mypage-root');
+            const autoLogoutUrl = root?.dataset?.autoLogoutUrl || '/mypage/auto-logout';
+            const timecardUrl = root?.dataset?.timecardUrl || '/timecard';
             let remain = limitSeconds;
             let ticking = null;
 
@@ -526,5 +521,5 @@
             ticking = setInterval(tick, 1000);
         })();
     </script>
-</body>
-</html>
+</div>
+@endsection

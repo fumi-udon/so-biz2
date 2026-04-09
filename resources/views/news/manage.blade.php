@@ -1,17 +1,12 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Gestion des notes — {{ config('app.name') }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>[x-cloak]{display:none!important;}</style>
-</head>
-<body class="min-h-screen bg-slate-100 text-slate-900 antialiased">
+@extends('layouts.app')
+
+@section('title', 'Gestion des notes — '.config('app.name'))
+
+@section('content')
+<div class="min-h-screen bg-gray-50 text-gray-900 antialiased dark:bg-gray-900 dark:text-gray-100">
 
     {{-- Navbar --}}
-    <nav class="sticky top-0 z-30 border-b-2 border-black bg-slate-900 px-3 py-2">
+    <nav class="sticky top-0 z-30 border-b-2 border-black bg-gray-900 px-3 py-2">
         <div class="mx-auto flex max-w-4xl items-center justify-between">
             <div class="flex items-center gap-2">
                 <span class="text-lg font-black text-yellow-300">📰</span>
@@ -27,7 +22,7 @@
         </div>
     </nav>
 
-    <main class="mx-auto w-full max-w-4xl px-3 py-4 space-y-4">
+    <main class="mx-auto w-full max-w-4xl space-y-2 px-3 py-3">
 
         {{-- Flash messages --}}
         @if (session('status'))
@@ -192,5 +187,5 @@
         </section>
 
     </main>
-</body>
-</html>
+</div>
+@endsection

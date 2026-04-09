@@ -1,15 +1,9 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Portail d'exploitation — {{ config('app.name') }}</title>
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>[x-cloak]{display:none!important;}</style>
-</head>
-<body
+@extends('layouts.app')
+
+@section('title', "Portail d'exploitation — ".config('app.name'))
+
+@section('content')
+<div
     x-data="{
         openMyPageModal: @js(request()->boolean('open_mypage')),
         absentModalOpen: false,
@@ -21,7 +15,7 @@
             this.absentModalOpen = true;
         }
     }"
-    class="min-h-screen bg-slate-100 text-slate-900 antialiased"
+    class="min-h-screen bg-gray-50 text-gray-900 antialiased dark:bg-gray-900 dark:text-gray-100"
 >
     <x-client-nav />
 
@@ -442,5 +436,5 @@
         </div>
     </div>
 
-</body>
-</html>
+</div>
+@endsection

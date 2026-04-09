@@ -76,16 +76,16 @@
             </div>
         </dl>
 
-        <button
-            type="button"
-            wire:click="dismissResultOverlay"
+        <a
+            href="{{ url('/') }}"
             @class([
-                'w-full rounded-xl px-4 py-3 text-sm font-bold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99]',
-                'bg-gradient-to-r from-emerald-600 to-teal-600 ring-2 ring-emerald-400/50 hover:from-emerald-500 hover:to-teal-500 dark:from-emerald-500 dark:to-teal-500' => $resultModalKind === 'bravo',
-                'bg-gradient-to-r from-amber-600 to-orange-600 ring-2 ring-amber-400/40 hover:from-amber-500 hover:to-orange-500 dark:from-amber-500 dark:to-orange-500' => $resultModalKind !== 'bravo',
+                'w-full inline-block text-center rounded-xl px-4 py-3 text-sm font-bold text-white shadow-[0_5px_0_0_rgba(0,0,0,0.25)] transition hover:brightness-110 active:translate-y-1 active:shadow-[0_2px_0_0_rgba(0,0,0,0.2)]',
+                'bg-gradient-to-b from-emerald-500 to-teal-700 ring-2 ring-emerald-400/50 hover:from-emerald-400 hover:to-teal-600 dark:from-emerald-600 dark:to-teal-800' => $resultModalKind === 'bravo',
+                'bg-gradient-to-b from-amber-500 to-orange-700 ring-2 ring-amber-400/40 hover:from-amber-400 hover:to-orange-600 dark:from-amber-600 dark:to-orange-800' => $resultModalKind !== 'bravo',
             ])
         >
-            Fermer
-        </button>
+            Retour à la page d'accueil
+        </a>
+   
     </div>
 </div>

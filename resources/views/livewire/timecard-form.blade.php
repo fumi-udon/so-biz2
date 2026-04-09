@@ -1,14 +1,36 @@
-<div class="space-y-3">
-    <header class="rounded-2xl border-4 border-black bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 p-4 text-center shadow-[0_10px_0_0_rgba(0,0,0,1)]">
+@php
+    $timecardNavStaffs = \App\Models\Staff::query()->where('is_active', true)->orderBy('name')->get();
+@endphp
+<div class="min-h-0" x-data="{ openMyPageModal: false }">
+    <header class="border-b-4 border-black bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 text-white">
+        <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-2 sm:px-4">
+            <a href="{{ route('home') }}" class="text-base font-black tracking-[0.18em] text-amber-300 drop-shadow">{{ config('app.name', 'SOYA BIZ') }}</a>
+            <nav class="flex items-center gap-2 text-sm">
+                <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 font-bold text-white transition hover:bg-white/20">Accueil</a>
+                <a href="{{ route('timecard.index') }}" class="rounded-md border-2 border-black bg-amber-400 px-3 py-1.5 font-black text-black shadow-[0_4px_0_0_rgba(0,0,0,1)]">Pointage</a>
+                <button
+                    type="button"
+                    @click="openMyPageModal = true"
+                    class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 font-bold text-white transition hover:bg-white/20"
+                >
+                    Mon espace
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <div class="mx-auto w-full max-w-4xl px-4 py-2 sm:px-4 lg:px-8">
+        <div class="space-y-2">
+    <section class="rounded-2xl border-4 border-black bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 p-3 text-center shadow-[0_10px_0_0_rgba(0,0,0,1)]">
         <p class="mb-1 text-sm font-black uppercase tracking-[0.2em] text-black">TIME ATTACK</p>
         <h1 class="mb-1 text-3xl font-black tracking-widest text-black">BATAILLE DE POINTAGE</h1>
-        <p class="text-sm text-gray-700">
+        <p class="text-sm text-gray-700 dark:text-gray-800">
             Date de service
             <time class="font-mono font-semibold text-gray-900" datetime="{{ $targetBusinessDate->toDateString() }}">
                 {{ $targetBusinessDate->format('Y/m/d') }}
             </time>
         </p>
-    </header>
+    </section>
 
     @if ($bannerSuccess)
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700" role="status">
@@ -177,7 +199,7 @@
             >
                 ➕ Declarer une entree exceptionnelle (aide)
             </button>
-            <div x-show="showExtra" x-collapse class="mt-3">
+            <div x-show="showExtra" x-cloak x-transition class="mt-2">
                         <p class="mb-2 text-sm font-bold text-amber-900">Entree exceptionnelle (aide)</p>
                 @if ($extraAvailable)
                     @if ($this->allMainPunchesDisabled())
@@ -283,70 +305,136 @@
         @endif
     @endif
 
-    <x-filament::modal
-        id="tip-result-modal"
-        :close-by-clicking-away="true"
-        :close-by-escaping="true"
-        width="md"
-        x-on:modal-closed.window="if ($event.detail.id === 'tip-result-modal') { $wire.declineTipAndRedirect() }"
-    >
-        @if ($tipModalState === 'WIN')
-            <div class="rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 p-4 text-gray-950">
-                <p class="mb-2 text-lg font-black">🎉 Bonjour 🎉</p>
-                <p class="mb-4 text-sm font-bold">Arrivee a l'heure. Droit de demande de tip obtenu !</p>
-                <button
-                    type="button"
-                    wire:click="applyForTip"
-                    class="w-full rounded-lg bg-black/85 px-3 py-2 text-sm font-extrabold text-yellow-200"
-                >
-                    🪙 Get Your Tip!
-                </button>
+    @if ($showTipModal)
+        <div
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 dark:bg-black/80"
+            wire:click.self="declineTipAndRedirect"
+            wire:key="tip-result-overlay"
+        >
+            <div class="w-full max-w-md" wire:click.stop>
+                @if ($tipModalState === 'WIN')
+                    <div class="rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 p-4 text-gray-950 dark:text-gray-950">
+                        <p class="mb-2 text-lg font-black">🎉 Bonjour 🎉</p>
+                        <p class="mb-4 text-sm font-bold">Arrivee a l'heure. Droit de demande de tip obtenu !</p>
+                        <button
+                            type="button"
+                            wire:click="applyForTip"
+                            class="w-full rounded-lg bg-black/85 px-3 py-2 text-sm font-extrabold text-yellow-200"
+                        >
+                            🪙 Get Your Tip!
+                        </button>
+                    </div>
+                @elseif ($tipModalState === 'LOSE')
+                    <div class="rounded-xl bg-gradient-to-r from-red-800 to-gray-900 p-4 text-gray-100">
+                        <p class="mb-2 text-lg font-black">⚠️ Retard enregistré.</p>
+                        <button
+                            type="button"
+                            wire:click="declineTipAndRedirect"
+                            class="w-full rounded-lg bg-gray-600 px-3 py-2 text-sm font-extrabold text-gray-100"
+                        >
+                            My page (retour)
+                        </button>
+                    </div>
+                @elseif ($tipModalState === 'SKIP')
+                    <div class="rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 p-4 text-gray-100">
+                        <p class="mb-2 text-lg font-black">✅ Pointage enregistre !</p>
+                        <p class="mb-4 text-sm font-bold">Merci pour votre ponctualite !</p>
+                        <button
+                            type="button"
+                            wire:click="declineTipAndRedirect"
+                            class="w-full rounded-lg bg-slate-500 px-3 py-2 text-sm font-extrabold text-gray-100 hover:bg-slate-400 active:scale-95 transition-all"
+                        >
+                            ▶ Mon espace
+                        </button>
+                    </div>
+                @endif
             </div>
-        @elseif ($tipModalState === 'LOSE')
-            <div class="rounded-xl bg-gradient-to-r from-red-800 to-gray-900 p-4 text-gray-100">
-                <p class="mb-2 text-lg font-black">⚠️ Retard enregistré.</p>
-                <button
-                    type="button"
-                    wire:click="declineTipAndRedirect"
-                    class="w-full rounded-lg bg-gray-600 px-3 py-2 text-sm font-extrabold text-gray-100"
-                >
-                    My page (retour)
-                </button>
-            </div>
-        @elseif ($tipModalState === 'SKIP')
-            <div class="rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 p-4 text-gray-100">
-                <p class="mb-2 text-lg font-black">✅ Pointage enregistre !</p>
-                <p class="mb-4 text-sm font-bold">Merci pour votre ponctualite !</p>
-                <button
-                    type="button"
-                    wire:click="declineTipAndRedirect"
-                    class="w-full rounded-lg bg-slate-500 px-3 py-2 text-sm font-extrabold text-gray-100 hover:bg-slate-400 active:scale-95 transition-all"
-                >
-                    ▶ Mon espace
-                </button>
-            </div>
-        @endif
-    </x-filament::modal>
-
-    <x-filament::modal
-        id="punch-complete-modal"
-        :close-by-clicking-away="false"
-        :close-by-escaping="true"
-        width="md"
-        x-on:modal-closed.window="if ($event.detail.id === 'punch-complete-modal') { $wire.closePunchCompleteModal() }"
-    >
-        <div class="rounded-xl border-4 border-black bg-gradient-to-r from-emerald-400 via-cyan-300 to-sky-400 p-4 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)]">
-            <p class="mb-1 text-center text-sm font-black tracking-[0.2em] text-slate-800">TIMECARD COMPLETE</p>
-            <p class="mb-1 text-center text-xl font-black tracking-widest">🎉 Pointage termine Bravo merci 🎉</p>
-            <p class="mb-2 text-center text-sm font-bold">{{ $punchCompleteLabel ?? 'SHIFT OUT' }}</p>
-            <p class="mb-3 text-center text-sm font-semibold">Merci pour votre travail aujourd'hui !</p>
-            <button
-                type="button"
-                x-on:click="$dispatch('close-modal', { id: 'punch-complete-modal' })"
-                class="w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-black text-slate-900 shadow-[0_4px_0_0_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none"
-            >
-                OK
-            </button>
         </div>
-    </x-filament::modal>
+    @endif
+
+    @if ($showPunchCompleteModal)
+        <div
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 dark:bg-black/80"
+            wire:key="punch-complete-overlay"
+        >
+            <div class="w-full max-w-md" wire:click.stop>
+                <div class="rounded-xl border-4 border-black bg-gradient-to-r from-emerald-400 via-cyan-300 to-sky-400 p-4 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)]">
+                    <p class="mb-1 text-center text-sm font-black tracking-[0.2em] text-slate-800">TIMECARD COMPLETE</p>
+                    <p class="mb-1 text-center text-xl font-black tracking-widest">🎉 Pointage termine Bravo merci 🎉</p>
+                    <p class="mb-2 text-center text-sm font-bold">{{ $punchCompleteLabel ?? 'SHIFT OUT' }}</p>
+                    <p class="mb-3 text-center text-sm font-semibold">Merci pour votre travail aujourd'hui !</p>
+                    <button
+                        type="button"
+                        wire:click="closePunchCompleteModal"
+                        class="w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-black text-gray-900 shadow-[0_4px_0_0_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none dark:bg-white dark:text-gray-900"
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+        </div>
+    </div>
+
+    <footer class="py-2 text-center text-xs text-gray-500 dark:text-gray-400">
+        {{ config('app.name') }}
+    </footer>
+
+    <div
+        x-show="openMyPageModal"
+        x-cloak
+        x-transition.opacity
+        class="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4"
+        @click.self="openMyPageModal = false"
+    >
+        <div class="w-full max-w-md rounded-2xl border-4 border-black bg-white p-4 text-gray-900 shadow-[0_12px_0_0_rgba(0,0,0,1)] dark:bg-gray-950 dark:text-gray-100">
+            <h2 class="mb-1 text-xl font-black tracking-wider text-gray-900 dark:text-white">Connexion Mon espace</h2>
+            <p class="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Selectionnez le personnel et saisissez le PIN.</p>
+            <p class="-mt-2 mb-3 text-[10px] text-gray-400 dark:text-gray-500">本人確認</p>
+            <form method="POST" action="{{ route('mypage.open') }}" class="space-y-2">
+                @csrf
+                <div>
+                    <label for="mypage_staff_id_tc" class="mb-1 block text-sm font-black tracking-wide text-gray-800 dark:text-gray-200">Personnel</label>
+                    <div class="relative">
+                        <select
+                            id="mypage_staff_id_tc"
+                            name="staff_id"
+                            required
+                            class="block w-full appearance-none rounded-lg border-2 border-black bg-white px-3 py-2.5 pr-10 text-sm font-semibold text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:bg-gray-900 dark:text-gray-100"
+                        >
+                            <option value="">Veuillez selectionner</option>
+                            @foreach ($timecardNavStaffs as $staff)
+                                <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                            @endforeach
+                        </select>
+                        <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-700 dark:text-gray-300">▾</span>
+                    </div>
+                </div>
+                <div>
+                    <label for="mypage_pin_tc" class="mb-1 block text-sm font-black tracking-wide text-gray-800 dark:text-gray-200">Code PIN</label>
+                    <input
+                        id="mypage_pin_tc"
+                        type="password"
+                        name="pin_code"
+                        required
+                        maxlength="4"
+                        pattern="[0-9]*"
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                        class="block w-full rounded-lg border-2 border-black bg-white px-3 py-2.5 text-center font-mono text-lg font-bold tracking-[0.3em] text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:bg-gray-900 dark:text-gray-100"
+                        placeholder="••••"
+                    >
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" @click="openMyPageModal = false" class="rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
+                        Fermer
+                    </button>
+                    <button type="submit" class="rounded-lg border-2 border-black bg-emerald-400 px-3 py-2 text-sm font-black text-black shadow-[0_4px_0_0_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none">
+                        Entrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>

@@ -1,14 +1,9 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Clôture des tâches — {{ config('app.name', 'Laravel') }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>[x-cloak]{display:none!important;}</style>
-</head>
-<body class="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+@extends('layouts.app')
+
+@section('title', 'Clôture des tâches — '.config('app.name', 'Laravel'))
+
+@section('content')
+<div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
     <x-client-nav />
 
     @php
@@ -16,7 +11,7 @@
     @endphp
 
     <div
-        class="mx-auto flex min-h-[70vh] w-full max-w-3xl flex-col items-center justify-center px-4 py-8"
+        class="mx-auto flex min-h-[70vh] w-full max-w-3xl flex-col items-center justify-center px-3 py-6 sm:px-4"
         x-data="{
             showClockoutModal: @json($hasClockoutWarnings),
             showWhatsappBlock: @json(! $hasClockoutWarnings),
@@ -58,7 +53,7 @@
             aria-modal="true"
             aria-labelledby="clockout-modal-title"
         >
-            <div class="w-full max-w-lg rounded-2xl border-2 border-amber-500 bg-slate-900 p-6 text-slate-100 shadow-2xl ring-1 ring-amber-400/30">
+            <div class="w-full max-w-lg rounded-2xl border-2 border-amber-500 bg-slate-900 p-4 text-slate-100 shadow-2xl ring-1 ring-amber-400/30">
                 <h2 id="clockout-modal-title" class="text-center text-xl font-black text-amber-300">
                     Attention : Oubli de pointage
                 </h2>
@@ -81,7 +76,7 @@
         </div>
 
         {{-- Carte de remerciement (toujours visible en arrière-plan) --}}
-        <div class="w-full rounded-2xl border-2 border-black bg-white p-6 text-center shadow-[0_8px_0_0_rgba(0,0,0,1)] dark:border-slate-600 dark:bg-slate-900">
+        <div class="w-full rounded-2xl border-2 border-black bg-white p-4 text-center text-gray-900 shadow-[0_8px_0_0_rgba(0,0,0,1)] dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100">
             <p class="mb-3 text-2xl font-black text-emerald-600 dark:text-emerald-400 sm:text-3xl">
                 Merci, bonne fin de journée !
             </p>
@@ -94,7 +89,7 @@
             x-cloak
             class="mt-6 w-full"
         >
-            <div class="rounded-2xl border-2 border-emerald-600/60 bg-gradient-to-br from-emerald-50 to-teal-50 p-5 shadow-md ring-1 ring-emerald-500/20 dark:border-emerald-500/50 dark:from-emerald-950/60 dark:to-teal-950/50 dark:ring-emerald-400/20">
+            <div class="rounded-2xl border-2 border-emerald-600/60 bg-gradient-to-br from-emerald-50 to-teal-50 p-4 shadow-md ring-1 ring-emerald-500/20 dark:border-emerald-500/50 dark:from-emerald-950/60 dark:to-teal-950/50 dark:ring-emerald-400/20">
                 <p class="text-center text-base font-black text-emerald-950 dark:text-emerald-100">
                     Rapport au responsable
                 </p>
@@ -155,5 +150,5 @@
             Retour à l’accueil
         </a>
     </div>
-</body>
-</html>
+</div>
+@endsection

@@ -1,19 +1,13 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Presence (Mon espace) — {{ config('app.name') }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>[x-cloak]{display:none!important;}</style>
-</head>
-<body class="min-h-screen bg-slate-100 text-slate-900">
+@extends('layouts.app')
+
+@section('title', 'Presence (Mon espace) — '.config('app.name'))
+
+@section('content')
+<div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
     <x-client-nav />
 
-    <div class="mx-auto w-full max-w-6xl px-4 py-4">
-        <section class="mb-4 rounded-2xl border-2 border-black bg-gradient-to-r from-indigo-900 via-blue-900 to-purple-900 p-4 text-white shadow-[0_8px_0_0_rgba(0,0,0,1)]">
+    <div class="mx-auto w-full max-w-6xl px-3 py-3 sm:px-4">
+        <section class="mb-3 rounded-2xl border-2 border-black bg-gradient-to-r from-indigo-900 via-blue-900 to-purple-900 p-3 text-white shadow-[0_8px_0_0_rgba(0,0,0,1)]">
             <h1 class="text-2xl font-black tracking-wide">CENTRE DE PRESENCE</h1>
 
         </section>
@@ -250,5 +244,5 @@
             @endif
         @endif
     </div>
-</body>
-</html>
+</div>
+@endsection

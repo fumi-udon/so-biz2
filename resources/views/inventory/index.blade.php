@@ -1,19 +1,13 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>棚卸しポータル — {{ config('app.name') }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>[x-cloak]{display:none!important;}</style>
-</head>
-<body class="min-h-screen bg-slate-100 text-slate-900">
+@extends('layouts.app')
+
+@section('title', '棚卸しポータル — '.config('app.name'))
+
+@section('content')
+<div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
     <x-client-nav />
 
-    <div class="mx-auto w-full max-w-5xl px-4 py-5">
-        <header class="mb-4">
+    <div class="mx-auto w-full max-w-5xl px-3 py-4 sm:px-4">
+        <header class="mb-3">
             <h1 class="mb-2 text-2xl font-black text-slate-900">棚卸しポータル</h1>
             <p class="text-sm text-slate-600">
                 営業日 <span class="font-mono font-semibold text-slate-900">{{ $dateString }}</span>
@@ -74,5 +68,5 @@
             @endforeach
         @endif
     </div>
-</body>
-</html>
+</div>
+@endsection

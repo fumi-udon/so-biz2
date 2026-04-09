@@ -1,4 +1,7 @@
-<section class="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+<section class="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+    <div class="mb-2 flex flex-wrap items-center gap-2">
+        <span class="font-['Press_Start_2P'] text-[8px] leading-tight text-indigo-600 dark:text-indigo-400 sm:text-[9px]">POINT DE VENTE</span>
+    </div>
     <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <div class="min-w-0 flex-1">
             <label for="dc-business-date" class="mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300">Date</label>
@@ -16,7 +19,7 @@
             wire:click="fetchRecettesFromApi"
             wire:loading.attr="disabled"
             wire:target="fetchRecettesFromApi"
-            class="inline-flex min-h-[2.5rem] min-w-[10rem] items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 shadow-sm transition-all duration-200 hover:bg-gray-50 disabled:opacity-95 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+            class="inline-flex min-h-[2.75rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border-2 border-cyan-700 bg-gradient-to-b from-sky-500 to-indigo-700 px-4 py-2.5 text-sm font-bold text-white shadow-[0_4px_0_0_#164e63] transition-all duration-200 hover:brightness-110 disabled:opacity-95 active:translate-y-1 active:shadow-[0_2px_0_0_#164e63] dark:border-indigo-800 dark:from-sky-600 dark:to-indigo-800 dark:shadow-[0_4px_0_0_#1e3a5f] dark:active:shadow-[0_2px_0_0_#1e3a5f]"
             wire:loading.class="animate-pulse border-transparent bg-gradient-to-r from-sky-500 via-indigo-500 to-fuchsia-600 text-white shadow-lg ring-2 ring-amber-300 ring-offset-2 ring-offset-white dark:from-sky-600 dark:via-indigo-600 dark:to-fuchsia-700 dark:ring-amber-400/90 dark:ring-offset-gray-800"
         >
             <span wire:loading.remove wire:target="fetchRecettesFromApi">Récupérer les ventes</span>

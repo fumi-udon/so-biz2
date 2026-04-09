@@ -1,15 +1,9 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Clôture des tâches — {{ config('app.name', 'Laravel') }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>[x-cloak]{display:none!important;}</style>
-</head>
-<body class="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+@extends('layouts.app')
+
+@section('title', 'Clôture des tâches — '.config('app.name', 'Laravel'))
+
+@section('content')
+<div class="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
     <x-client-nav />
 
     <div
@@ -20,7 +14,7 @@
             allChecked(ids) { return ids.length > 0 && ids.every(id => this.checked[id] === true) },
         }"
         x-init='initChecks(@json($tasks->pluck("id")->values()))'
-        class="mx-auto w-full max-w-6xl px-3 py-4"
+        class="mx-auto w-full max-w-6xl px-3 py-3"
     >
         <header class="mb-4 rounded-2xl border-2 border-black bg-gradient-to-r from-slate-950 via-indigo-900 to-slate-950 p-4 text-white shadow-[0_6px_0_0_rgba(0,0,0,1)]">
             <h1 class="text-2xl font-black tracking-wide">Clôture des tâches</h1>
@@ -134,5 +128,5 @@
             </div>
         @endif
     </div>
-</body>
-</html>
+</div>
+@endsection

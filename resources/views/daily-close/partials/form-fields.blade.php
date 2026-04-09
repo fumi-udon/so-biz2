@@ -7,9 +7,12 @@
 @endphp
 
 @if ($shift === 'lunch')
-    <section class="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <section class="mb-3 rounded-xl border border-amber-200/80 bg-white p-4 shadow-md dark:border-amber-800/50 dark:bg-gray-800">
         <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Midi — Saisie caisse</h2>
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex rounded border border-amber-400/70 bg-amber-100 px-1.5 py-0.5 font-['Press_Start_2P'] text-[7px] font-semibold text-amber-950 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-100 sm:text-[8px]">MIDI</span>
+                <h2 class="text-sm font-semibold text-gray-950 dark:text-gray-100">Saisie caisse</h2>
+            </div>
             <div class="flex flex-col items-stretch sm:items-end sm:text-right">
                 <span class="mb-0.5 text-[10px] font-medium text-gray-500 dark:text-gray-400">Fond de caisse (exclusif · lecture seule)</span>
                 <input type="text" readonly wire:model="data.lunch_montant_initial" title="Paramètre magasin — non inclus dans la saisie calculée" class="{{ $fondReadonlyClass }}" tabindex="-1" aria-readonly="true">
@@ -48,9 +51,12 @@
         </div>
     </section>
 @else
-    <section class="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <section class="mb-3 rounded-xl border border-indigo-200/80 bg-white p-4 shadow-md dark:border-indigo-800/50 dark:bg-gray-800">
         <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Soir — Saisie caisse</h2>
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex rounded border border-indigo-400/70 bg-indigo-100 px-1.5 py-0.5 font-['Press_Start_2P'] text-[7px] font-semibold text-indigo-950 dark:border-indigo-600/50 dark:bg-indigo-950/40 dark:text-indigo-100 sm:text-[8px]">SOIR</span>
+                <h2 class="text-sm font-semibold text-gray-950 dark:text-gray-100">Saisie caisse</h2>
+            </div>
             <div class="flex flex-col items-stretch sm:items-end sm:text-right">
                 <span class="mb-0.5 text-[10px] font-medium text-gray-500 dark:text-gray-400">Fond de caisse (exclusif · lecture seule)</span>
                 <input type="text" readonly wire:model="data.dinner_montant_initial" title="Paramètre magasin — non inclus dans la saisie calculée" class="{{ $fondReadonlyClass }}" tabindex="-1" aria-readonly="true">
@@ -86,7 +92,7 @@
     </section>
 @endif
 
-<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
     @include('daily-close.partials.health-gauge')
 
     <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -95,7 +101,7 @@
         wire:click="calculate"
         wire:loading.attr="disabled"
         wire:target="calculate"
-        class="flex-1 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+        class="flex-1 rounded-xl bg-gradient-to-b from-fuchsia-600 to-rose-700 px-4 py-3 text-sm font-bold text-white shadow-[0_5px_0_0_#9f1239] transition hover:brightness-110 disabled:opacity-50 active:translate-y-1 active:shadow-[0_2px_0_0_#9f1239] dark:from-fuchsia-700 dark:to-rose-800 dark:shadow-[0_5px_0_0_#881337] dark:active:shadow-[0_2px_0_0_#881337]"
     >
         <span wire:loading.remove wire:target="calculate">Clôturer le service</span>
         <span wire:loading wire:target="calculate">Envoi…</span>

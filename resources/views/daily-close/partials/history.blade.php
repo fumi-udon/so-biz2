@@ -1,8 +1,8 @@
-<section class="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+<section class="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-md dark:border-gray-700 dark:bg-gray-800">
     <button
         type="button"
         wire:click="toggleHistoryDetail"
-        class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-700/50"
+        class="flex w-full items-center justify-between bg-gradient-to-b from-gray-50 to-gray-100 px-4 py-3 text-left text-sm font-bold text-gray-950 shadow-inner hover:brightness-105 dark:from-gray-800 dark:to-gray-900 dark:text-gray-100 dark:hover:brightness-110"
     >
         <span>Historique clôture (50)</span>
         <span class="text-gray-400 dark:text-gray-500">{{ $historyDetailOpen ? '▼' : '▶' }}</span>

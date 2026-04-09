@@ -12,10 +12,8 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
-use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-#[Layout('layouts.timecard')]
 class TimecardForm extends Component
 {
     public int $step = 1;
@@ -275,7 +273,6 @@ class TimecardForm extends Component
 
     public function closePunchCompleteModal(): void
     {
-        $this->dispatch('close-modal', id: 'punch-complete-modal');
         $this->showPunchCompleteModal = false;
         $this->punchCompleteLabel = null;
         $this->resetAfterPunch();
@@ -395,6 +392,8 @@ class TimecardForm extends Component
             'weeklyMissionRows' => $weeklyMissionRows,
             'attendance' => $todayAttendance,
             'hasShiftToday' => $this->authenticatedStaffId !== null && ! $this->noWorkDataToday,
+        ])->layout('layouts.app', [
+            'layoutTitle' => 'Pointage — '.config('app.name'),
         ]);
     }
 
@@ -535,7 +534,6 @@ class TimecardForm extends Component
             $this->bannerSuccess = null;
         }
         $this->showPunchCompleteModal = true;
-        $this->dispatch('open-modal', id: 'punch-complete-modal');
         $this->js('setTimeout(() => $wire.closePunchCompleteModal(), 4200)');
     }
 
@@ -544,7 +542,6 @@ class TimecardForm extends Component
         $this->tipTargetShift = $action === 'lunch_in' ? 'lunch' : 'dinner';
         $this->tipModalState = $isZeroWeight ? 'SKIP' : ($isLate ? 'LOSE' : 'WIN');
         $this->showTipModal = true;
-        $this->dispatch('open-modal', id: 'tip-result-modal');
     }
 
     private function resetTipModalState(): void
