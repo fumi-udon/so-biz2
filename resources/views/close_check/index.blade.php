@@ -3,12 +3,15 @@
 @section('title', 'Clôture des tâches — '.config('app.name', 'Laravel'))
 
 @section('content')
+@php
+    $openApprovalOnLoad = $tasks->isNotEmpty() && ($errors->any() || session()->has('error'));
+@endphp
 <div class="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
     <x-client-nav />
 
     <div
         x-data="{
-            openApproval: false,
+            openApproval: {{ $openApprovalOnLoad ? 'true' : 'false' }},
             authStep: 1,
             oathChecked: false,
             staffOathName: '',
@@ -67,7 +70,7 @@
             </div>
         @endif
 
-        @if (session('error'))
+        @if (session('error') && $tasks->isEmpty())
             <div class="mb-3 rounded-lg border border-rose-700 bg-rose-950/40 p-3 text-sm font-semibold text-rose-100">
                 {{ session('error') }}
             </div>
@@ -142,6 +145,9 @@
                                         <option value="{{ $staff->id }}" @selected(old('staff_id') == $staff->id)>{{ $staff->name }}</option>
                                     @endforeach
                                 </select>
+                                @error('staff_id')
+                                    <p class="mt-2 font-mono text-sm uppercase text-rose-300">{{ $message }}</p>
+                                @enderror
                             </div>
                             <div>
                                 <label for="pin_code" class="mb-1 block font-mono text-xs font-bold uppercase tracking-wider text-zinc-300">Code PIN (4 chiffres)</label>
@@ -158,6 +164,12 @@
                                     placeholder="••••"
                                     class="block w-full rounded border border-zinc-600 bg-zinc-950 px-3 py-2.5 text-center font-mono text-lg tracking-widest text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
                                 >
+                                @error('pin_code')
+                                    <p class="mt-2 font-mono text-sm uppercase text-rose-300">{{ $message }}</p>
+                                @enderror
+                                @if (! $errors->has('pin_code') && session('error'))
+                                    <p class="mt-2 font-mono text-sm uppercase text-rose-300">{{ session('error') }}</p>
+                                @endif
                             </div>
                             <div class="grid grid-cols-2 gap-2 pt-1">
                                 <button type="button" @click="closeApprovalModal()" class="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 font-mono text-xs font-semibold uppercase tracking-wider text-zinc-100 border-b-4 border-b-black active:border-b-0 active:translate-y-1">Retour</button>
