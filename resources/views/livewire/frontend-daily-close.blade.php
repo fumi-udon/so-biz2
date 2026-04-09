@@ -13,7 +13,7 @@
     @endif
 
     @if ($closeSessionReady && ! $showSessionGate)
-        @include('daily-close.partials.stage-header')
+        <!-- @include('daily-close.partials.stage-header') -->
         @include('daily-close.partials.recettes-strip')
         @include('daily-close.partials.form-fields')
         @include('daily-close.partials.history')

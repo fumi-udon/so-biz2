@@ -34,19 +34,18 @@ class HeadquartersCloseHistoryWidget extends Widget
     {
         $bd = BusinessDate::current();
         $d0 = $bd->toDateString();
-        $d1 = $bd->copy()->subDays(1)->toDateString();
         $d2 = $bd->copy()->subDays(2)->toDateString();
-        $d4 = $bd->copy()->subDays(4)->toDateString();
+        $d6 = $bd->copy()->subDays(6)->toDateString();
 
         $financeRows = Finance::query()
-            ->whereBetween('business_date', [$d4, $d0])
+            ->whereBetween('business_date', [$d6, $d0])
             ->with(['responsibleStaff', 'creator', 'panelOperator'])
             ->orderByDesc('business_date')
             ->orderBy('shift')
             ->get();
 
         $auditRows = Finance::query()
-            ->whereBetween('business_date', [$d4, $d0])
+            ->whereBetween('business_date', [$d2, $d0])
             ->with(['responsibleStaff', 'panelOperator'])
             ->orderByDesc('business_date')
             ->orderBy('shift')
@@ -55,7 +54,7 @@ class HeadquartersCloseHistoryWidget extends Widget
         return [
             'financeRows' => $financeRows,
             'auditRows' => $auditRows,
-            'range2Label' => $d1.' — '.$d0,
+            'range2Label' => $d6.' — '.$d0,
             'range3Label' => $d2.' — '.$d0,
         ];
     }

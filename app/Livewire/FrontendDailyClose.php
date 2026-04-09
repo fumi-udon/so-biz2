@@ -9,6 +9,7 @@ use App\Models\Staff;
 use App\Services\BistronipponOrdersRecettesService;
 use App\Services\TimecardPinValidator;
 use App\Support\BusinessDate;
+use App\Support\CaisseMoneyInputNormalizer;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
@@ -120,6 +121,73 @@ class FrontendDailyClose extends Component
     {
         if (is_string($value)) {
             $this->handleBusinessDateChange($value);
+        }
+    }
+
+    public function updatedDataLunchRecettes(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('lunch_recettes', $value);
+    }
+
+    public function updatedDataLunchChips(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('lunch_chips', $value);
+    }
+
+    public function updatedDataLunchCash(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('lunch_cash', $value);
+    }
+
+    public function updatedDataLunchCheque(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('lunch_cheque', $value);
+    }
+
+    public function updatedDataLunchCarte(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('lunch_carte', $value);
+    }
+
+    public function updatedDataDinnerRecettes(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('dinner_recettes', $value);
+    }
+
+    public function updatedDataDinnerChips(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('dinner_chips', $value);
+    }
+
+    public function updatedDataDinnerCash(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('dinner_cash', $value);
+    }
+
+    public function updatedDataDinnerCheque(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('dinner_cheque', $value);
+    }
+
+    public function updatedDataDinnerCarte(mixed $value): void
+    {
+        $this->syncNormalizedCaisseMoney('dinner_carte', $value);
+    }
+
+    public function updatedGatePinInput(mixed $value): void
+    {
+        $digits = preg_replace('/\D/', '', (string) $value) ?? '';
+        $digits = substr($digits, 0, 4);
+        if ($digits !== (string) $value) {
+            $this->gatePinInput = $digits;
+        }
+    }
+
+    private function syncNormalizedCaisseMoney(string $key, mixed $value): void
+    {
+        $normalized = CaisseMoneyInputNormalizer::normalizeToMaxOneDecimal($value);
+        if (($this->data[$key] ?? null) !== $normalized) {
+            $this->data[$key] = $normalized;
         }
     }
 
@@ -489,16 +557,7 @@ class FrontendDailyClose extends Component
      */
     private function stringForVentesPosInput(float $amount): string
     {
-        if (! is_finite($amount)) {
-            return '0';
-        }
-        $r = round($amount, 1);
-        $scaled = (int) round($r * 10);
-        if ($scaled % 10 === 0) {
-            return (string) (int) round($r);
-        }
-
-        return number_format($r, 1, '.', '');
+        return CaisseMoneyInputNormalizer::normalizeToMaxOneDecimal($amount) ?? '0';
     }
 
     /**
@@ -569,22 +628,22 @@ class FrontendDailyClose extends Component
 
         if ($shift === 'lunch') {
             return array_merge($base, [
-                'data.lunch_recettes' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+                'data.lunch_recettes' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
                 'data.lunch_montant_initial' => ['nullable', 'numeric'],
-                'data.lunch_chips' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
-                'data.lunch_cash' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
-                'data.lunch_cheque' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
-                'data.lunch_carte' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+                'data.lunch_chips' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
+                'data.lunch_cash' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
+                'data.lunch_cheque' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
+                'data.lunch_carte' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
             ]);
         }
 
         return array_merge($base, [
-            'data.dinner_recettes' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            'data.dinner_recettes' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
             'data.dinner_montant_initial' => ['nullable', 'numeric'],
-            'data.dinner_chips' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
-            'data.dinner_cash' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
-            'data.dinner_cheque' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
-            'data.dinner_carte' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            'data.dinner_chips' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
+            'data.dinner_cash' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
+            'data.dinner_cheque' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
+            'data.dinner_carte' => ['required', 'numeric', 'decimal:0,1', 'min:0'],
         ]);
     }
 

@@ -54,7 +54,6 @@
                     wire:model.live.debounce.300ms="gatePinInput"
                     maxlength="4"
                     inputmode="numeric"
-                    pattern="[0-9]*"
                     autocomplete="one-time-code"
                     placeholder="••••"
                     class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-center font-mono text-xl font-semibold tracking-[0.35em] text-gray-900 tabular-nums placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
