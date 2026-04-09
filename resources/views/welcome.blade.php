@@ -99,6 +99,8 @@
         </section>
     </main>
 
+    @include('welcome.partials.today-shift-roster')
+
     {{-- ── 勤怠ガント（今月 遅刻・欠勤） ────────────────────────────────── --}}
     <section class="mx-auto mt-4 w-full max-w-5xl px-3">
         <div class="overflow-hidden rounded-xl border-2 border-black shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
@@ -135,16 +137,16 @@
                                         title="{{ $row['staff']->name }} — cliquez pour voir les absences"
                                     >{{ $row['staff']->name }}</button>
                                 @else
-                                    <div class="truncate font-mono text-[11px] font-black text-gray-900" title="{{ $row['staff']->name }}">{{ $row['staff']->name }}</div>
+                                    <div class="truncate font-mono text-[12px] font-black text-gray-900" title="{{ $row['staff']->name }}">{{ $row['staff']->name }}</div>
                                 @endif
-                                <div class="font-mono text-[9px] font-semibold text-gray-400">R:{{ $row['late'] }} A:{{ $row['absent'] }}</div>
+                                <div class="font-mono text-[11px] font-semibold text-blue-500">Rtrd:{{ $row['late'] }} Abst:{{ $row['absent'] }}</div>
                             </div>
                             {{-- バー列 --}}
                             <div class="flex flex-1 flex-col gap-1">
                                 {{-- 遅刻バー --}}
                                 @if ($row['late'] > 0)
                                     <div class="flex items-center gap-1.5">
-                                        <span class="w-10 shrink-0 font-mono text-[8px] font-black uppercase tracking-wide text-amber-700">Retard</span>
+                                        <span class="w-10 shrink-0 font-mono text-[10px] font-black uppercase tracking-wide text-amber-700">Retard</span>
                                         <div class="relative h-4 flex-1 overflow-hidden rounded border border-amber-200 bg-amber-50">
                                             <div class="h-full bg-amber-400" style="width: {{ $lateW }}%"></div>
                                             <span class="absolute inset-y-0 right-1.5 flex items-center font-mono text-[9px] font-black text-amber-900">{{ $row['late'] }}x</span>
@@ -154,7 +156,7 @@
                                 {{-- 欠勤バー --}}
                                 @if ($row['absent'] > 0)
                                     <div class="flex items-center gap-1.5">
-                                        <span class="w-10 shrink-0 font-mono text-[8px] font-black uppercase tracking-wide text-rose-600">Absent</span>
+                                        <span class="w-10 shrink-0 font-mono text-[10px] font-black uppercase tracking-wide text-rose-600">Absent</span>
                                         <div class="relative h-4 flex-1 overflow-hidden rounded border border-rose-200 bg-rose-50">
                                             <div class="h-full bg-rose-400" style="width: {{ $absentW }}%"></div>
                                             <span class="absolute inset-y-0 right-1.5 flex items-center font-mono text-[9px] font-black text-rose-900">{{ $row['absent'] }}x</span>
@@ -212,7 +214,7 @@
             <div class="bg-white px-3 py-2">
                 {{-- Lunch 行 --}}
                 <div class="mb-1 flex items-center gap-2">
-                    <span class="w-14 shrink-0 font-mono text-[9px] font-black uppercase tracking-wide text-amber-600">🍽 Lunch</span>
+                    <span class="w-14 shrink-0 font-mono text-[10px] font-black uppercase tracking-wide text-amber-600">🍽 Lunch</span>
                     @if ($tipLunchAppliers->isNotEmpty())
                         <div class="flex flex-wrap gap-1">
                             @foreach ($tipLunchAppliers as $s)
@@ -222,12 +224,12 @@
                             @endforeach
                         </div>
                     @else
-                        <span class="font-mono text-[9px] text-slate-400">—</span>
+                        <span class="font-mono text-[10px] text-slate-400">—</span>
                     @endif
                 </div>
                 {{-- Dinner 行 --}}
                 <div class="flex items-center gap-2">
-                    <span class="w-14 shrink-0 font-mono text-[9px] font-black uppercase tracking-wide text-amber-600">🌙 Dinner</span>
+                    <span class="w-14 shrink-0 font-mono text-[10px] font-black uppercase tracking-wide text-amber-600">🌙 Dinner</span>
                     @if ($tipDinnerAppliers->isNotEmpty())
                         <div class="flex flex-wrap gap-1">
                             @foreach ($tipDinnerAppliers as $s)
@@ -237,7 +239,7 @@
                             @endforeach
                         </div>
                     @else
-                        <span class="font-mono text-[9px] text-slate-400">—</span>
+                        <span class="font-mono text-[10px] text-slate-400">—</span>
                     @endif
                 </div>
             </div>

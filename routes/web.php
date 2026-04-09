@@ -10,6 +10,7 @@ use App\Livewire\TimecardForm;
 use App\Models\Attendance;
 use App\Models\NewsNote;
 use App\Models\Staff;
+use App\Services\WeeklyShiftGridService;
 use App\Support\AbsenceScope;
 use App\Support\BusinessDate;
 use App\Support\StoreHolidaySetting;
@@ -45,6 +46,21 @@ Route::get('/', function (Request $request) {
         ->pluck('staff')
         ->filter()
         ->values();
+
+    // ── 本日の人員配置（週次シフト表と同一集計・welcome 用） ─────────────
+    $shiftGridData = app(WeeklyShiftGridService::class)->build();
+    $todayDayKey = $shiftGridData['todayDayKey'];
+    $emptyShiftBlock = [
+        'assignments' => [],
+        'counts' => ['kitchen' => 0, 'hall' => 0, 'other' => 0],
+        'live_extras' => [],
+    ];
+    $todayShiftPanel = [
+        'dayLabel' => $shiftGridData['dayLabels'][$todayDayKey] ?? $todayDayKey,
+        'dateLabel' => Carbon::parse($today)->format('d/m/Y'),
+        'lunch' => $shiftGridData['shiftGrid'][$todayDayKey]['lunch'] ?? $emptyShiftBlock,
+        'dinner' => $shiftGridData['shiftGrid'][$todayDayKey]['dinner'] ?? $emptyShiftBlock,
+    ];
 
     // ── 勤怠ガント用集計 ─────────────────────────────────────────────────
     $bd = BusinessDate::current();
@@ -116,6 +132,7 @@ Route::get('/', function (Request $request) {
         'today',
         'tipLunchAppliers',
         'tipDinnerAppliers',
+        'todayShiftPanel',
         'ganttMonthLabel',
         'ganttRows',
         'ganttBravo',
