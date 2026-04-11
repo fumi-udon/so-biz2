@@ -102,16 +102,16 @@ class ListCloseTasks extends ListRecords
 
                     try {
                         $count = DB::transaction(function () use ($fullPath): int {
-                            $handle = fopen($fullPath, 'r');
+                            $utf8 = $this->normalizeUploadedCsvToUtf8($fullPath);
+
+                            $handle = fopen('php://temp', 'r+');
                             if ($handle === false) {
-                                throw new \RuntimeException('CSVファイルを開けませんでした。');
+                                throw new \RuntimeException('一時バッファを開けませんでした。');
                             }
 
                             try {
-                                $bom = fread($handle, 3);
-                                if ($bom !== "\xEF\xBB\xBF") {
-                                    rewind($handle);
-                                }
+                                fwrite($handle, $utf8);
+                                rewind($handle);
 
                                 $header = fgetcsv($handle);
                                 if ($header === false) {
@@ -185,6 +185,42 @@ class ListCloseTasks extends ListRecords
                     }
                 }),
         ];
+    }
+
+    /**
+     * アップロード CSV をバイナリで読み、UTF-8 に正規化する（Shift-JIS / CP932 等の Excel 出力を想定）。
+     */
+    private function normalizeUploadedCsvToUtf8(string $fullPath): string
+    {
+        $raw = file_get_contents($fullPath);
+        if ($raw === false) {
+            throw new \RuntimeException('CSVファイルを読み取れませんでした。');
+        }
+
+        if (str_starts_with($raw, "\xEF\xBB\xBF")) {
+            $raw = substr($raw, 3);
+        }
+
+        if ($raw === '') {
+            return '';
+        }
+
+        if (mb_check_encoding($raw, 'UTF-8')) {
+            return $raw;
+        }
+
+        $candidates = ['UTF-8', 'SJIS-win', 'SJIS', 'CP51932', 'Windows-1252', 'ISO-8859-1'];
+        $from = mb_detect_encoding($raw, $candidates, true);
+        if ($from === false) {
+            $from = 'SJIS-win';
+        }
+
+        $converted = mb_convert_encoding($raw, 'UTF-8', $from);
+        if ($converted === false) {
+            throw new \RuntimeException('文字コードの変換に失敗しました。');
+        }
+
+        return $converted;
     }
 
     /**

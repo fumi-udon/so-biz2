@@ -52,7 +52,7 @@ class CreateAttendance extends CreateRecord
         if ($existing !== null) {
             Notification::make()
                 ->warning()
-                ->title('既に登録済みです。編集画面を開きます。')
+                ->title(__('hq.notify_duplicate_attendance', [], 'fr'))
                 ->send();
 
             $this->redirect(AttendanceResource::getUrl('edit', ['record' => $existing]));

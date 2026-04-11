@@ -24,9 +24,12 @@ class CloseTaskResource extends AdminOnlyResource
 {
     protected static ?string $model = CloseTask::class;
 
-    protected static ?string $navigationGroup = '店舗・勤怠管理';
-
     protected static ?string $modelLabel = 'クローズチェック項目';
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('hq.nav_group_store', [], 'fr');
+    }
 
     protected static ?string $pluralModelLabel = 'クローズチェック項目';
 

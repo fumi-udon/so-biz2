@@ -1,0 +1,106 @@
+<?php
+
+return [
+    'nav_group_store' => 'Équipe & horaires',
+
+    'nav_pointages' => 'Pointages',
+    'nav_weekly_planning' => 'Planning de la semaine',
+
+    'model_attendance' => 'Pointage',
+    'model_attendance_plural' => 'Pointages',
+
+    'page_weekly_shift_title' => 'Planning de la semaine',
+
+    'col_date' => '📅 Date',
+    'col_staff' => '👤 Staff',
+    'col_lunch' => '☀️ Midi',
+    'col_dinner' => '🌙 Soir',
+    'col_tip_l' => '💰 Tip M',
+    'col_tip_d' => '💰 Tip S',
+    'col_late_min' => '🐢 Retard',
+    'col_actions' => '🍄 Action',
+
+    'filter_staff' => 'Collaborateur',
+    'filter_month' => 'Mois affiché',
+
+    'action_new_punch' => 'Nouveau pointage',
+    'action_edit' => 'Modifier',
+    'action_edit_mushroom' => '🍄 Modifier',
+
+    'tip_eligible' => 'Éligible',
+    'tip_denied' => 'Exclu',
+    'tip_pending' => 'Non demandé',
+    'tip_no_punch' => 'Sans pointage',
+
+    'notify_duplicate_attendance' => 'Un pointage existe déjà pour ce jour. Ouverture de la fiche.',
+    'notify_duplicate_table' => 'Un enregistrement existe déjà pour cette date. Redirection vers la modification.',
+
+    'form_staff' => '👤 Employé',
+    'form_date' => '📅 Date',
+    'form_scheduled_in_lunch' => '⏰ Prévu (midi)',
+    'form_scheduled_in_lunch_help' => 'Instantané. Vide = rempli depuis les horaires fixes du jour.',
+    'form_scheduled_in_dinner' => '🏁 Prévu (soir)',
+    'form_scheduled_in_dinner_help' => 'Instantané. Vide = rempli depuis les horaires fixes du jour.',
+    'form_lunch_in' => '🏃 Arrivée (midi)',
+    'form_lunch_out' => '🚪 Départ (midi)',
+    'form_dinner_in' => '🏃 Arrivée (soir)',
+    'form_dinner_out' => '🚪 Départ (soir)',
+    'form_note_in' => '📝 Note (entrée)',
+    'form_note_out' => '📝 Note (sortie)',
+    'form_note_admin' => '📝 Note équipe',
+    'form_late_total' => '⏱️ Retard total (min)',
+    'form_late_total_help' => 'Calculé automatiquement à partir des pointages et du planning.',
+
+    'form_section_identity' => '🎮 Infos équipe',
+    'form_section_planned' => '⏰ Horaires prévus',
+    'form_section_lunch' => '☀️ Service midi',
+    'form_section_dinner' => '🌙 Service soir',
+    'form_section_late' => '⏱️ Retard',
+    'form_section_notes' => '📝 Notes',
+
+    'section_tip_title' => '🪙 Pourboires',
+    'section_tip_desc' => 'En plus des demandes sur badgeuse, validez ou retirez la part pourboire ici.',
+
+    'toggle_lunch_apply' => 'Midi — valider (mandat)',
+    'toggle_lunch_apply_help' => 'Si pointage présent et éligible au partage, activer.',
+    'toggle_lunch_deny' => 'Midi — exclure',
+    'toggle_lunch_deny_help' => 'Exclure du partage pourboire.',
+
+    'toggle_dinner_apply' => 'Soir — valider (mandat)',
+    'toggle_dinner_apply_help' => 'Si pointage présent et éligible au partage, activer.',
+    'toggle_dinner_deny' => 'Soir — exclure',
+    'toggle_dinner_deny_help' => 'Exclure du partage pourboire.',
+
+    'day_short_mon' => 'Lun',
+    'day_short_tue' => 'Mar',
+    'day_short_wed' => 'Mer',
+    'day_short_thu' => 'Jeu',
+    'day_short_fri' => 'Ven',
+    'day_short_sat' => 'Sam',
+    'day_short_sun' => 'Dim',
+
+    'weekly_staff' => 'Collaborateur',
+    'weekly_today_dot' => 'Aujourd’hui (jour ouvré)',
+    'weekly_extra_title' => 'Hors planning',
+    'weekly_repos' => 'Repos',
+    'weekly_section_title' => 'Effectifs par jour et service',
+    'weekly_section_hint_mobile' => 'Deux colonnes (midi | soir). Faites défiler pour les jours.',
+    'weekly_section_hint_desktop' => 'Aujourd’hui : pointages 🟢 🆘 🔴 ⚪',
+    'weekly_wide_day' => 'Jour',
+    'weekly_no_schedule' => 'Pas de shift prévu',
+    'weekly_extra_badge' => 'Hors planning · pointage',
+    'weekly_title_punch' => 'Pointage',
+    'weekly_title_status' => 'Statut',
+
+    'roster_heading' => 'Aujourd’hui — pointages',
+    'roster_empty' => 'Aucun collaborateur à afficher.',
+    'roster_col_staff' => 'Équipe',
+    'roster_col_lunch' => 'Midi',
+    'roster_col_dinner' => 'Soir',
+    'roster_meal_absent' => 'Absent',
+    'roster_status_no_punch_scheduled' => '⚠ Pas de pointage (prévu)',
+    'roster_status_working' => 'En service',
+    'roster_status_no_punch' => 'Pas de pointage',
+    'roster_status_no_punch_any' => 'Aucun pointage',
+    'roster_status_left' => 'Sorti·e',
+];

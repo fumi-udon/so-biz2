@@ -13,76 +13,158 @@ use Filament\Forms\Form;
 
 class AttendanceForm
 {
+    private const string SKY_BLOCK =
+        'rounded-2xl border-2 border-b-4 border-sky-300 bg-white shadow-sm dark:border-sky-700 dark:bg-slate-900';
+
+    private const string AMBER_BLOCK =
+        'rounded-2xl border-2 border-b-4 border-amber-400 bg-amber-50/90 shadow-sm dark:border-amber-700 dark:bg-amber-950/50';
+
     public static function configure(Form $form): Form
     {
         return $form
             ->schema([
-                Select::make('staff_id')
-                    ->relationship('staff', 'name')
-                    ->required()
-                    ->searchable()
-                    ->preload(),
-                DatePicker::make('date')
-                    ->required()
-                    ->native(false),
-                DateTimePicker::make('scheduled_in_at')
-                    ->label('予定出勤（ランチ）')
-                    ->helperText('スナップショット。空のまま保存すると当日の fixed_shifts から埋まります。')
-                    ->nullable()
-                    ->seconds(false),
-                DateTimePicker::make('scheduled_dinner_at')
-                    ->label('予定出勤（ディナー）')
-                    ->helperText('スナップショット。空のまま保存すると当日の fixed_shifts から埋まります。')
-                    ->nullable()
-                    ->seconds(false),
-                DateTimePicker::make('lunch_in_at')
-                    ->nullable()
-                    ->seconds(false),
-                DateTimePicker::make('lunch_out_at')
-                    ->nullable()
-                    ->seconds(false),
-                DateTimePicker::make('dinner_in_at')
-                    ->nullable()
-                    ->seconds(false),
-                DateTimePicker::make('dinner_out_at')
-                    ->nullable()
-                    ->seconds(false),
-                TextInput::make('late_minutes')
-                    ->label('遅刻合計（分）')
-                    ->numeric()
-                    ->default(0)
-                    ->disabled()
-                    ->dehydrated(false)
-                    ->helperText('打刻・予定時刻から自動計算されます。'),
-                Textarea::make('in_note')
-                    ->nullable()
-                    ->rows(2),
-                Textarea::make('out_note')
-                    ->nullable()
-                    ->rows(2),
-                Textarea::make('admin_note')
-                    ->nullable()
-                    ->rows(2),
-                Section::make('チップ管理 (Tip Management)')
-                    ->description('タイムカード申請に加え、代理申請・剥奪はここで設定します。')
+                Section::make(__('hq.form_section_identity', [], 'fr'))
+                    ->compact()
+                    ->columns(['default' => 2, 'md' => 2])
+                    ->schema([
+                        Select::make('staff_id')
+                            ->label(__('hq.form_staff', [], 'fr'))
+                            ->relationship('staff', 'name')
+                            ->required()
+                            ->searchable()
+                            ->preload(),
+                        DatePicker::make('date')
+                            ->label(__('hq.form_date', [], 'fr'))
+                            ->required()
+                            ->native(false)
+                            ->displayFormat('d/m/Y'),
+                    ])
+                    ->extraAttributes([
+                        'class' => self::SKY_BLOCK,
+                    ]),
+
+                Section::make(__('hq.form_section_planned', [], 'fr'))
+                    ->compact()
+                    ->columns(['default' => 2, 'md' => 2])
+                    ->schema([
+                        DateTimePicker::make('scheduled_in_at')
+                            ->label(__('hq.form_scheduled_in_lunch', [], 'fr'))
+                            ->helperText(__('hq.form_scheduled_in_lunch_help', [], 'fr'))
+                            ->nullable()
+                            ->native(false)
+                            ->displayFormat('d/m/Y H:i')
+                            ->seconds(false),
+                        DateTimePicker::make('scheduled_dinner_at')
+                            ->label(__('hq.form_scheduled_in_dinner', [], 'fr'))
+                            ->helperText(__('hq.form_scheduled_in_dinner_help', [], 'fr'))
+                            ->nullable()
+                            ->native(false)
+                            ->displayFormat('d/m/Y H:i')
+                            ->seconds(false),
+                    ])
+                    ->extraAttributes([
+                        'class' => self::SKY_BLOCK,
+                    ]),
+
+                Section::make(__('hq.form_section_lunch', [], 'fr'))
+                    ->compact()
+                    ->columns(['default' => 2, 'md' => 2])
+                    ->schema([
+                        DateTimePicker::make('lunch_in_at')
+                            ->label(__('hq.form_lunch_in', [], 'fr'))
+                            ->nullable()
+                            ->native(false)
+                            ->displayFormat('d/m/Y H:i')
+                            ->seconds(false),
+                        DateTimePicker::make('lunch_out_at')
+                            ->label(__('hq.form_lunch_out', [], 'fr'))
+                            ->nullable()
+                            ->native(false)
+                            ->displayFormat('d/m/Y H:i')
+                            ->seconds(false),
+                    ])
+                    ->extraAttributes([
+                        'class' => self::SKY_BLOCK,
+                    ]),
+
+                Section::make(__('hq.form_section_dinner', [], 'fr'))
+                    ->compact()
+                    ->columns(['default' => 2, 'md' => 2])
+                    ->schema([
+                        DateTimePicker::make('dinner_in_at')
+                            ->label(__('hq.form_dinner_in', [], 'fr'))
+                            ->nullable()
+                            ->native(false)
+                            ->displayFormat('d/m/Y H:i')
+                            ->seconds(false),
+                        DateTimePicker::make('dinner_out_at')
+                            ->label(__('hq.form_dinner_out', [], 'fr'))
+                            ->nullable()
+                            ->native(false)
+                            ->displayFormat('d/m/Y H:i')
+                            ->seconds(false),
+                    ])
+                    ->extraAttributes([
+                        'class' => self::SKY_BLOCK,
+                    ]),
+
+                Section::make(__('hq.form_section_late', [], 'fr'))
                     ->compact()
                     ->schema([
-                        Toggle::make('is_lunch_tip_applied')
-                            ->label('Lunch tip — 申請（代理）')
-                            ->helperText('打刻があり、チップ配分対象とする場合は ON'),
-                        Toggle::make('is_lunch_tip_denied')
-                            ->label('Lunch tip — 剥奪')
-                            ->helperText('ON でチップ配分から除外'),
-                        Toggle::make('is_dinner_tip_applied')
-                            ->label('Dinner tip — 申請（代理）')
-                            ->helperText('打刻があり、チップ配分対象とする場合は ON'),
-                        Toggle::make('is_dinner_tip_denied')
-                            ->label('Dinner tip — 剥奪')
-                            ->helperText('ON でチップ配分から除外'),
+                        TextInput::make('late_minutes')
+                            ->label(__('hq.form_late_total', [], 'fr'))
+                            ->numeric()
+                            ->default(0)
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText(__('hq.form_late_total_help', [], 'fr')),
                     ])
-                    ->columns(2)
                     ->extraAttributes([
-                        'class' => 'rounded-lg border border-amber-200/80 bg-amber-50/40 dark:border-amber-800/50 dark:bg-amber-950/20',
+                        'class' => self::SKY_BLOCK,
+                    ]),
+
+                Section::make(__('hq.form_section_notes', [], 'fr'))
+                    ->compact()
+                    ->columns(['default' => 2, 'md' => 2])
+                    ->schema([
+                        Textarea::make('in_note')
+                            ->label(__('hq.form_note_in', [], 'fr'))
+                            ->nullable()
+                            ->rows(2),
+                        Textarea::make('out_note')
+                            ->label(__('hq.form_note_out', [], 'fr'))
+                            ->nullable()
+                            ->rows(2),
+                        Textarea::make('admin_note')
+                            ->label(__('hq.form_note_admin', [], 'fr'))
+                            ->nullable()
+                            ->rows(2)
+                            ->columnSpan(['default' => 2, 'md' => 2]),
+                    ])
+                    ->extraAttributes([
+                        'class' => self::SKY_BLOCK,
+                    ]),
+
+                Section::make(__('hq.section_tip_title', [], 'fr'))
+                    ->description(__('hq.section_tip_desc', [], 'fr'))
+                    ->compact()
+                    ->columns(['default' => 2, 'md' => 4])
+                    ->schema([
+                        Toggle::make('is_lunch_tip_applied')
+                            ->label(__('hq.toggle_lunch_apply', [], 'fr'))
+                            ->helperText(__('hq.toggle_lunch_apply_help', [], 'fr')),
+                        Toggle::make('is_lunch_tip_denied')
+                            ->label(__('hq.toggle_lunch_deny', [], 'fr'))
+                            ->helperText(__('hq.toggle_lunch_deny_help', [], 'fr')),
+                        Toggle::make('is_dinner_tip_applied')
+                            ->label(__('hq.toggle_dinner_apply', [], 'fr'))
+                            ->helperText(__('hq.toggle_dinner_apply_help', [], 'fr')),
+                        Toggle::make('is_dinner_tip_denied')
+                            ->label(__('hq.toggle_dinner_deny', [], 'fr'))
+                            ->helperText(__('hq.toggle_dinner_deny_help', [], 'fr')),
+                    ])
+                    ->extraAttributes([
+                        'class' => self::AMBER_BLOCK,
                     ]),
             ]);
     }

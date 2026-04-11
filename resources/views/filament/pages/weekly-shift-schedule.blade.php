@@ -8,19 +8,35 @@
 @endphp
 
 <x-filament-panels::page>
-    <div wire:poll.30s class="space-y-6">
-    <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
+    <div
+        class="relative overflow-hidden rounded-2xl border-2 border-sky-300/70 bg-gradient-to-b from-sky-400 via-sky-200 to-sky-100 p-3 shadow-xl dark:border-sky-800/60 dark:from-slate-900 dark:via-sky-950 dark:to-slate-950 sm:p-5"
+    >
+        <div
+            class="pointer-events-none absolute -left-4 top-6 h-16 w-32 rounded-full bg-white/50 blur-sm dark:bg-white/10"
+            aria-hidden="true"
+        ></div>
+        <div
+            class="pointer-events-none absolute right-10 top-16 h-10 w-24 rounded-full bg-white/40 blur-sm dark:bg-white/10"
+            aria-hidden="true"
+        ></div>
+        <div
+            class="pointer-events-none absolute bottom-24 left-1/3 h-14 w-40 rounded-full bg-white/30 blur-sm dark:bg-white/5"
+            aria-hidden="true"
+        ></div>
+
+        <div wire:poll.30s class="relative space-y-6">
+    <div class="overflow-x-auto rounded-2xl border-2 border-b-4 border-white/95 bg-white/95 shadow-xl dark:border-slate-600/90 dark:bg-slate-900/95">
         <table class="w-full text-left text-sm divide-y divide-gray-200 dark:divide-white/5">
-            <thead class="bg-gray-50 dark:bg-white/5">
+            <thead class="bg-gradient-to-r from-sky-100 to-cyan-50 dark:from-slate-800 dark:to-slate-900">
                 <tr>
-                    <th class="w-[min(12rem,32vw)] max-w-[12rem] px-2 py-2 text-xs font-semibold text-gray-900 dark:text-white whitespace-nowrap sm:px-4 sm:py-3">スタッフ</th>
+                    <th class="w-[min(12rem,32vw)] max-w-[12rem] px-2 py-2 text-xs font-black uppercase tracking-wide text-gray-950 dark:text-white whitespace-nowrap sm:px-4 sm:py-3">{{ __('hq.weekly_staff', [], 'fr') }}</th>
                     @foreach($dayLabels as $dayKey => $dayLabel)
                         <th wire:key="shift-col-{{ $dayKey }}" @class([
-                            'px-4 py-3 font-semibold text-gray-900 dark:text-white text-center whitespace-nowrap',
-                            'bg-blue-50/80 dark:bg-blue-950/30 ring-1 ring-inset ring-blue-200/60 dark:ring-blue-500/20' => $dayKey === $todayDayKey,
+                            'px-4 py-3 font-black uppercase tracking-wide text-gray-950 dark:text-white text-center whitespace-nowrap',
+                            'bg-sky-200/90 dark:bg-sky-950/40 ring-1 ring-inset ring-sky-400/50 dark:ring-sky-500/30' => $dayKey === $todayDayKey,
                         ])>
                             @if($dayKey === $todayDayKey)
-                                <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-blue-500 align-middle" title="本日（営業日）"></span>
+                                <span class="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-sky-600 align-middle dark:bg-sky-400" title="{{ __('hq.weekly_today_dot', [], 'fr') }}"></span>
                             @endif
                             {{ $dayLabel }}
                         </th>
@@ -29,11 +45,11 @@
             </thead>
             <tbody class="divide-y divide-gray-200 dark:divide-white/5">
                 @foreach($staffs as $staff)
-                <tr wire:key="staff-row-{{ $staff->id }}" class="hover:bg-gray-50 dark:hover:bg-white/5 transition duration-75">
+                <tr wire:key="staff-row-{{ $staff->id }}" class="hover:bg-sky-50/50 dark:hover:bg-white/5 transition duration-75">
                     <td class="max-w-[9rem] px-2 py-2 align-middle sm:max-w-[12rem] sm:px-4 sm:py-3">
                         <span class="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap" title="{{ $staff->name }}">
                             @include('filament.pages.partials.weekly-shift-staff-role-icon', ['staff' => $staff])
-                            <span class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ $staff->name }}</span>
+                            <span class="truncate text-xs font-bold text-gray-950 dark:text-white">{{ $staff->name }}</span>
                         </span>
                     </td>
                     @foreach($dayLabels as $dayKey => $dayLabel)
@@ -47,14 +63,14 @@
                         @endphp
                         <td wire:key="staff-{{ $staff->id }}-day-{{ $dayKey }}" @class([
                             'px-2 py-2 sm:px-3 sm:py-3 align-top text-left min-w-0 max-w-[11rem] sm:max-w-none',
-                            'bg-blue-50/50 dark:bg-blue-950/20' => $isTodayCol,
+                            'bg-sky-100/60 dark:bg-sky-950/25' => $isTodayCol,
                         ])>
                             @if(!$lunch && !$dinner)
                                 @if($isTodayCol && ($live['lunch'] === 'extra' || $live['dinner'] === 'extra'))
                                     <div class="grid min-w-0 grid-cols-2 gap-1 items-start">
                                         <div class="min-w-0">
                                             @if($live['lunch'] === 'extra')
-                                                <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-rose-50 px-1 py-0.5 text-[10px] font-medium leading-none text-rose-800 ring-1 ring-inset ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-200 dark:ring-rose-500/30" title="臨時出勤">
+                                                <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-rose-50 px-1 py-0.5 text-[10px] font-medium leading-none text-rose-800 ring-1 ring-inset ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-200 dark:ring-rose-500/30" title="{{ __('hq.weekly_extra_title', [], 'fr') }}">
                                                     <x-filament::icon icon="heroicon-m-sun" class="h-3 w-3 shrink-0 text-amber-500 dark:text-amber-400" />
                                                     <span class="shrink-0">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon('extra') }}</span>
                                                     <span class="inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 font-mono tabular-nums text-[9px] font-semibold text-rose-900 dark:bg-rose-900/50 dark:text-rose-100">{{ $att?->lunch_in_at?->format('H:i') ?? '—' }}</span>
@@ -63,7 +79,7 @@
                                         </div>
                                         <div class="min-w-0">
                                             @if($live['dinner'] === 'extra')
-                                                <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-rose-50 px-1 py-0.5 text-[10px] font-medium leading-none text-rose-800 ring-1 ring-inset ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-200 dark:ring-rose-500/30" title="臨時出勤">
+                                                <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-rose-50 px-1 py-0.5 text-[10px] font-medium leading-none text-rose-800 ring-1 ring-inset ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-200 dark:ring-rose-500/30" title="{{ __('hq.weekly_extra_title', [], 'fr') }}">
                                                     <x-filament::icon icon="heroicon-m-moon" class="h-3 w-3 shrink-0 text-indigo-500 dark:text-indigo-300" />
                                                     <span class="shrink-0">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon('extra') }}</span>
                                                     <span class="inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 font-mono tabular-nums text-[9px] font-semibold text-rose-900 dark:bg-rose-900/50 dark:text-rose-100">{{ $att?->dinner_in_at?->format('H:i') ?? '—' }}</span>
@@ -72,8 +88,8 @@
                                         </div>
                                     </div>
                                 @else
-                                    <span class="inline-flex text-gray-400 dark:text-gray-500 text-[10px] sm:text-xs font-medium bg-gray-50 dark:bg-white/5 px-1.5 py-0.5 rounded-md">
-                                        Repos
+                                    <span class="inline-flex rounded-md bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-600 dark:bg-white/5 dark:text-gray-400 sm:text-xs">
+                                        {{ __('hq.weekly_repos', [], 'fr') }}
                                     </span>
                                 @endif
                             @else
@@ -83,12 +99,12 @@
                                             <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-amber-50 px-1 py-0.5 text-[10px] font-medium leading-none text-amber-900 ring-1 ring-inset ring-amber-600/25 dark:bg-amber-400/10 dark:text-amber-200 dark:ring-amber-400/25">
                                                 <x-filament::icon icon="heroicon-m-sun" class="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
                                                 @if($isTodayCol && ($live['lunch'] ?? 'none') !== 'none')
-                                                    <span class="select-none shrink-0" title="打刻ステータス">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($live['lunch']) }}</span>
+                                                    <span class="select-none shrink-0" title="{{ __('hq.weekly_title_status', [], 'fr') }}">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($live['lunch']) }}</span>
                                                 @endif
                                                 <span class="inline-flex min-w-0 items-center rounded-full bg-gray-100 px-1.5 py-0.5 font-mono text-[9px] font-semibold tabular-nums text-gray-800 dark:bg-gray-800 dark:text-gray-100">{{ $lunch[0] }}–{{ $lunch[1] ?? $lunch[0] }}</span>
                                             </span>
                                         @elseif($isTodayCol && ($live['lunch'] ?? 'none') === 'extra')
-                                            <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-rose-50 px-1 py-0.5 text-[10px] font-medium leading-none text-rose-800 ring-1 ring-inset ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-200" title="臨時出勤">
+                                            <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-rose-50 px-1 py-0.5 text-[10px] font-medium leading-none text-rose-800 ring-1 ring-inset ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-200" title="{{ __('hq.weekly_extra_title', [], 'fr') }}">
                                                 <x-filament::icon icon="heroicon-m-sun" class="h-3 w-3 shrink-0 text-amber-500 dark:text-amber-400" />
                                                 <span class="shrink-0">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon('extra') }}</span>
                                                 <span class="inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 font-mono tabular-nums text-[9px] font-semibold text-rose-900 dark:bg-rose-900/50 dark:text-rose-100">{{ $att?->lunch_in_at?->format('H:i') ?? '—' }}</span>
@@ -100,12 +116,12 @@
                                             <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-indigo-50 px-1 py-0.5 text-[10px] font-medium leading-none text-indigo-900 ring-1 ring-inset ring-indigo-600/20 dark:bg-indigo-400/10 dark:text-indigo-100 dark:ring-indigo-400/25">
                                                 <x-filament::icon icon="heroicon-m-moon" class="h-3 w-3 shrink-0 text-indigo-600 dark:text-indigo-300" />
                                                 @if($isTodayCol && ($live['dinner'] ?? 'none') !== 'none')
-                                                    <span class="select-none shrink-0" title="ステータス">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($live['dinner']) }}</span>
+                                                    <span class="select-none shrink-0" title="{{ __('hq.weekly_title_status', [], 'fr') }}">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($live['dinner']) }}</span>
                                                 @endif
                                                 <span class="inline-flex min-w-0 items-center rounded-full bg-gray-100 px-1.5 py-0.5 font-mono text-[9px] font-semibold tabular-nums text-gray-800 dark:bg-gray-800 dark:text-gray-100">{{ $dinner[0] }}–{{ $dinner[1] ?? $dinner[0] }}</span>
                                             </span>
                                         @elseif($isTodayCol && ($live['dinner'] ?? 'none') === 'extra')
-                                            <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-rose-50 px-1 py-0.5 text-[10px] font-medium leading-none text-rose-800 ring-1 ring-inset ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-200" title="臨時出勤">
+                                            <span class="inline-flex w-full min-w-0 items-center gap-0.5 rounded-md bg-rose-50 px-1 py-0.5 text-[10px] font-medium leading-none text-rose-800 ring-1 ring-inset ring-rose-200/70 dark:bg-rose-950/40 dark:text-rose-200" title="{{ __('hq.weekly_extra_title', [], 'fr') }}">
                                                 <x-filament::icon icon="heroicon-m-moon" class="h-3 w-3 shrink-0 text-indigo-500 dark:text-indigo-300" />
                                                 <span class="shrink-0">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon('extra') }}</span>
                                                 <span class="inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 font-mono tabular-nums text-[9px] font-semibold text-rose-900 dark:bg-rose-900/50 dark:text-rose-100">{{ $att?->dinner_in_at?->format('H:i') ?? '—' }}</span>
@@ -122,12 +138,12 @@
         </table>
     </div>
 
-    <div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-gray-900">
-        <div class="border-b border-gray-200 px-3 py-2 dark:border-white/10 sm:px-4 bg-gray-50 dark:bg-white/5">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">日別・時間帯別 人員配置</h3>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                <span class="xl:hidden">2列固定（ランチ｜ディナー）。下にスクロールで各曜日。</span>
-                <span class="hidden xl:inline">本日列は打刻: 🟢 🆘 🔴 ⚪</span>
+    <div class="rounded-2xl border-2 border-b-4 border-white/95 bg-white/95 shadow-xl dark:border-slate-600/90 dark:bg-slate-900/95">
+        <div class="border-b-2 border-sky-200/80 bg-gradient-to-r from-sky-50 to-white px-3 py-2 dark:border-slate-600 dark:from-slate-800 dark:to-slate-900 sm:px-4">
+            <h3 class="text-sm font-black uppercase tracking-wide text-gray-950 dark:text-white">{{ __('hq.weekly_section_title', [], 'fr') }}</h3>
+            <p class="mt-0.5 text-xs font-semibold text-gray-600 dark:text-gray-400">
+                <span class="xl:hidden">{{ __('hq.weekly_section_hint_mobile', [], 'fr') }}</span>
+                <span class="hidden xl:inline">{{ __('hq.weekly_section_hint_desktop', [], 'fr') }}</span>
             </p>
         </div>
 
@@ -142,8 +158,8 @@
                     @endphp
                     <div wire:key="shift-mobile-day-{{ $dayKey }}"
                         @class([
-                            'overflow-hidden rounded-sm border-2 border-black shadow-[4px_4px_0_0_rgba(0,0,0,0.85)] dark:border-sky-600 dark:shadow-[4px_4px_0_0_rgba(0,0,0,0.5)]',
-                            'ring-2 ring-yellow-400 dark:ring-yellow-500/60' => $isDayToday,
+                            'overflow-hidden rounded-2xl border-2 border-b-4 border-slate-800 bg-white shadow-xl dark:border-slate-600 dark:bg-slate-900',
+                            'ring-2 ring-amber-400 dark:ring-amber-500/60' => $isDayToday,
                         ])
                         aria-label="{{ $dayLabel }}"
                     >
@@ -158,7 +174,7 @@
                                 ])>
                                     <th colspan="2" class="px-2 py-1.5 font-black uppercase tracking-[0.12em] text-black dark:text-sky-100">
                                         @if($isDayToday)
-                                            <span class="mr-1 inline-block h-2 w-2 rounded-full bg-red-600 align-middle" title="本日"></span>
+                                            <span class="mr-1 inline-block h-2 w-2 rounded-full bg-red-600 align-middle" title="{{ __('hq.weekly_today_dot', [], 'fr') }}"></span>
                                         @endif
                                         <span class="inline-block max-w-full truncate align-middle text-[11px] normal-case tracking-normal" title="{{ $dayLabel }}">{{ $dayLabel }}</span>
                                     </th>
@@ -214,7 +230,7 @@
             <table class="w-full text-left text-sm divide-y divide-gray-200 dark:divide-white/5">
                 <thead class="bg-gray-50 dark:bg-white/5">
                     <tr>
-                        <th class="w-28 whitespace-nowrap px-3 py-2 text-xs font-semibold text-gray-900 dark:text-white">曜日</th>
+                        <th class="w-28 whitespace-nowrap px-3 py-2 text-xs font-black uppercase tracking-wide text-gray-950 dark:text-white">{{ __('hq.weekly_wide_day', [], 'fr') }}</th>
                         <th class="min-w-[12rem] px-3 py-2 text-gray-900 dark:text-white">
                             <span class="inline-flex items-center gap-1 whitespace-nowrap" title="Lunch · AM">
                                 <x-filament::icon icon="heroicon-m-sun" class="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -257,7 +273,7 @@
                                 'bg-blue-50/30 dark:bg-blue-950/20' => $dayKey === $todayDayKey,
                             ])>
                                 @if(count($assignments) === 0 && count($liveExtras) === 0)
-                                    <span class="text-xs text-gray-400 dark:text-gray-500">出勤予定なし</span>
+                                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ __('hq.weekly_no_schedule', [], 'fr') }}</span>
                                 @else
                                     <div class="flex flex-col gap-y-1.5">
                                         <div class="mb-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border-b border-gray-200 pb-1 text-[9px] font-bold leading-none dark:border-white/10">
@@ -295,7 +311,7 @@
                                                 @endphp
                                                 <span wire:key="shift-wide-assign-{{ $dayKey }}-{{ $meal }}-{{ $row['staff']->id }}-{{ $loop->index }}" class="inline-flex w-full max-w-full min-w-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-medium ring-1 ring-inset {{ $chip }}">
                                                     @if($ls && $ls !== 'none')
-                                                        <span class="shrink-0 select-none" title="打刻">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($ls) }}</span>
+                                                        <span class="shrink-0 select-none" title="{{ __('hq.weekly_title_punch', [], 'fr') }}">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($ls) }}</span>
                                                     @endif
                                                     @include('filament.pages.partials.weekly-shift-staff-role-icon', ['staff' => $row['staff'], 'class' => 'h-3 w-3 shrink-0'])
                                                     <span class="min-w-0 flex-1 truncate" title="{{ $row['staff']->name }} · {{ $row['role_display'] }}">{{ $row['staff']->name }}</span>
@@ -306,7 +322,7 @@
                                                 @php
                                                     $echip = 'bg-rose-100 text-rose-900 ring-rose-200/80 dark:bg-rose-950/50 dark:text-rose-100';
                                                 @endphp
-                                                <span wire:key="shift-wide-extra-{{ $dayKey }}-{{ $meal }}-{{ $extra['staff']->id }}-{{ $loop->index }}" class="inline-flex w-full max-w-full min-w-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-medium ring-1 ring-inset {{ $echip }}" title="予定なし・打刻あり">
+                                                <span wire:key="shift-wide-extra-{{ $dayKey }}-{{ $meal }}-{{ $extra['staff']->id }}-{{ $loop->index }}" class="inline-flex w-full max-w-full min-w-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[10px] font-medium ring-1 ring-inset {{ $echip }}" title="{{ __('hq.weekly_extra_badge', [], 'fr') }}">
                                                     <x-filament::icon icon="heroicon-m-exclamation-triangle" class="h-3 w-3 shrink-0 text-rose-700 dark:text-rose-300" />
                                                     @include('filament.pages.partials.weekly-shift-staff-role-icon', ['staff' => $extra['staff'], 'class' => 'h-3 w-3 shrink-0'])
                                                     <span class="min-w-0 flex-1 truncate" title="{{ $extra['staff']->name }}">{{ $extra['staff']->name }}</span>
@@ -324,5 +340,6 @@
             </table>
         </div>
     </div>
+        </div>
     </div>
 </x-filament-panels::page>

@@ -17,9 +17,12 @@ class StaffResource extends AdminOnlyResource
 {
     protected static ?string $model = Staff::class;
 
-    protected static ?string $navigationGroup = '店舗・勤怠管理';
-
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('hq.nav_group_store', [], 'fr');
+    }
 
     public static function getEloquentQuery(): Builder
     {

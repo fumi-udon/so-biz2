@@ -53,7 +53,7 @@
                 @endphp
                 <li wire:key="meal-compact-assign-{{ $mealTint }}-{{ $row['staff']->id }}-{{ $loop->index }}" class="flex min-w-0 items-center gap-0.5 px-1 py-0.5">
                     @if($isToday && $ls && $ls !== 'none')
-                        <span class="shrink-0 select-none" title="打刻">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($ls) }}</span>
+                        <span class="shrink-0 select-none" title="{{ __('hq.weekly_title_punch', [], 'fr') }}">{{ \App\Filament\Pages\WeeklyShiftSchedule::liveStatusIcon($ls) }}</span>
                     @endif
                     @include('filament.pages.partials.weekly-shift-staff-role-icon', ['staff' => $row['staff'], 'class' => 'h-3 w-3 shrink-0 text-gray-700 dark:text-gray-300'])
                     <span class="min-w-0 flex-1 truncate text-xs font-medium" title="{{ $row['staff']->name }}">{{ $row['staff']->name }}</span>

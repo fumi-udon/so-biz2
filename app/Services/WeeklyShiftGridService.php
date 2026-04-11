@@ -12,19 +12,26 @@ use Illuminate\Support\Collection;
  */
 class WeeklyShiftGridService
 {
-    /** @var array<string, string> */
+    /**
+     * @deprecated Utiliser {@see self::translatedDayLabels()} pour l’affichage localisé.
+     *
+     * @var array<string, string>
+     */
     public const DAY_LABELS = [
-        'monday' => 'Lun (月)',
-        'tuesday' => 'Mar (火)',
-        'wednesday' => 'Mer (水)',
-        'thursday' => 'Jeu (木)',
-        'friday' => 'Ven (金)',
-        'saturday' => 'Sam (土)',
-        'sunday' => 'Dim (日)',
+        'monday' => 'Lun',
+        'tuesday' => 'Mar',
+        'wednesday' => 'Mer',
+        'thursday' => 'Jeu',
+        'friday' => 'Ven',
+        'saturday' => 'Sam',
+        'sunday' => 'Dim',
     ];
 
-    /** モバイル用・曜日の短縮（1行ヘッダ） */
-    /** @var array<string, string> */
+    /**
+     * @deprecated Utiliser {@see self::translatedDayShortLabels()}.
+     *
+     * @var array<string, string>
+     */
     public const DAY_SHORT_LABELS = [
         'monday' => 'Lun',
         'tuesday' => 'Mar',
@@ -34,6 +41,30 @@ class WeeklyShiftGridService
         'saturday' => 'Sam',
         'sunday' => 'Dim',
     ];
+
+    /**
+     * @return array<string, string>
+     */
+    public static function translatedDayLabels(): array
+    {
+        return [
+            'monday' => __('hq.day_short_mon', [], 'fr'),
+            'tuesday' => __('hq.day_short_tue', [], 'fr'),
+            'wednesday' => __('hq.day_short_wed', [], 'fr'),
+            'thursday' => __('hq.day_short_thu', [], 'fr'),
+            'friday' => __('hq.day_short_fri', [], 'fr'),
+            'saturday' => __('hq.day_short_sat', [], 'fr'),
+            'sunday' => __('hq.day_short_sun', [], 'fr'),
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function translatedDayShortLabels(): array
+    {
+        return self::translatedDayLabels();
+    }
 
     /** @var list<string> */
     public const DAY_KEYS = [
@@ -84,8 +115,8 @@ class WeeklyShiftGridService
         return [
             'staffs' => $staffs,
             'shiftGrid' => $shiftGrid,
-            'dayLabels' => self::DAY_LABELS,
-            'dayShortLabels' => self::DAY_SHORT_LABELS,
+            'dayLabels' => self::translatedDayLabels(),
+            'dayShortLabels' => self::translatedDayShortLabels(),
             'todayDayKey' => $todayDayKey,
             'attendancesToday' => $attendancesToday,
             'liveByStaff' => $liveByStaff,

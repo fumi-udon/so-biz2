@@ -22,9 +22,27 @@ class AttendanceResource extends AdminOnlyResource
 
     protected static ?string $model = Attendance::class;
 
-    protected static ?string $navigationGroup = '店舗・勤怠管理';
-
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('hq.nav_group_store', [], 'fr');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('hq.nav_pointages', [], 'fr');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('hq.model_attendance', [], 'fr');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('hq.model_attendance_plural', [], 'fr');
+    }
 
     public static function getEloquentQuery(): Builder
     {

@@ -82,9 +82,9 @@ class TodayAttendanceRosterWidget extends Widget
                 $roleRaw = (string) ($staff->role ?? '');
                 $roleCategory = self::roleCategory($roleRaw);
                 $roleLabel = match ($roleCategory) {
-                    'kitchen' => 'Kitchen',
-                    'hall' => 'Hall',
-                    default => 'Other',
+                    'kitchen' => 'Cuisine',
+                    'hall' => 'Salle',
+                    default => 'Autre',
                 };
                 $roleColor = match ($roleCategory) {
                     'kitchen' => 'red',
@@ -238,22 +238,22 @@ class TodayAttendanceRosterWidget extends Widget
         $scheduled = FixedShiftSchedule::hasShiftOnDay($staff, $dayKey);
 
         if ($att === null) {
-            return ['no_show', '⚠ 未打刻（予定あり）', 'warning'];
+            return ['no_show', __('hq.roster_status_no_punch_scheduled', [], 'fr'), 'warning'];
         }
 
         if ($att->hasMissingClockOut()) {
-            return ['working', '勤務中', 'success'];
+            return ['working', __('hq.roster_status_working', [], 'fr'), 'success'];
         }
 
         $hasAnyPunch = $att->lunch_in_at !== null || $att->dinner_in_at !== null;
         if (! $hasAnyPunch && $scheduled) {
-            return ['idle', '未打刻', 'warning'];
+            return ['idle', __('hq.roster_status_no_punch', [], 'fr'), 'warning'];
         }
 
         if (! $hasAnyPunch) {
-            return ['idle', '打刻なし', 'gray'];
+            return ['idle', __('hq.roster_status_no_punch_any', [], 'fr'), 'gray'];
         }
 
-        return ['finished', '退勤済', 'gray'];
+        return ['finished', __('hq.roster_status_left', [], 'fr'), 'gray'];
     }
 }

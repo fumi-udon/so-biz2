@@ -17,9 +17,12 @@ class StaffAbsenceResource extends AdminOnlyResource
 {
     protected static ?string $model = StaffAbsence::class;
 
-    protected static ?string $navigationGroup = '店舗・勤怠管理';
-
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('hq.nav_group_store', [], 'fr');
+    }
 
     protected static ?string $modelLabel = '確定欠勤';
 
