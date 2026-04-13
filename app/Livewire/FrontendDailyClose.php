@@ -27,6 +27,8 @@ class FrontendDailyClose extends Component
 
     private const ERR_RECETTES_DINNER_BEFORE_2210 = 'Les données seront synchronisées après 22h00. Réessayez plus tard.';
 
+    private const ERR_RECETTES_DINNER_BEFORE_2050_SUN = 'Les données seront synchronisées après 20h50 (dimanche). Réessayez plus tard.';
+
     private const ERR_RECETTES_API_GENERIC = 'Impossible de récupérer les ventes. Vérifiez la connexion ou réessayez plus tard.';
 
     /** @var array<string, mixed> */
@@ -709,9 +711,16 @@ class FrontendDailyClose extends Component
         }
 
         if ($shift === 'dinner') {
-            $cutoff = Carbon::today($tz)->setTime(22, 10, 0);
-            if ($now->lt($cutoff)) {
-                return self::ERR_RECETTES_DINNER_BEFORE_2210;
+            if ($now->isSunday()) {
+                $cutoff = Carbon::today($tz)->setTime(20, 50, 0);
+                if ($now->lt($cutoff)) {
+                    return self::ERR_RECETTES_DINNER_BEFORE_2050_SUN;
+                }
+            } else {
+                $cutoff = Carbon::today($tz)->setTime(22, 10, 0);
+                if ($now->lt($cutoff)) {
+                    return self::ERR_RECETTES_DINNER_BEFORE_2210;
+                }
             }
         }
 
