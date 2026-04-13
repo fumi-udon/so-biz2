@@ -13,3 +13,11 @@ Artisan::command('inspire', function () {
 Schedule::call(function () {
     AttendanceEditLog::where('created_at', '<', now()->subMonths(2))->delete();
 })->daily()->name('purge-attendance-edit-logs')->withoutOverlapping();
+
+// 退勤打刻漏れの自動補完（深夜バッチ）
+// timezone を明示して BusinessDate と整合させる（深夜01:00 = 飲食店の前営業日）
+Schedule::command('app:auto-clock-out')
+    ->dailyAt('01:00')
+    ->timezone(config('app.business_timezone'))
+    ->withoutOverlapping()
+    ->name('auto-clock-out');

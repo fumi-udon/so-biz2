@@ -93,11 +93,29 @@ class AttendancesTable
     {
         $text = self::formatMealRange($record, $meal);
         $hasPunch = $text !== '—';
+
         $boxClass = $hasPunch
             ? 'inline-flex max-w-full rounded-lg border border-emerald-300/80 bg-emerald-100 px-2 py-1 font-mono text-xs font-bold tabular-nums text-emerald-950 shadow-sm ring-1 ring-emerald-200/80 dark:border-emerald-700/50 dark:bg-emerald-950/50 dark:text-emerald-100 dark:ring-emerald-800/50'
             : 'inline-flex rounded-lg border border-slate-200 bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700/80';
 
-        return new HtmlString('<span class="'.$boxClass.'">'.e($text).'</span>');
+        $isAuto = $meal === 'lunch'
+            ? (bool) ($record->is_lunch_auto_clocked_out ?? false)
+            : (bool) ($record->is_dinner_auto_clocked_out ?? false);
+
+        // is_edited_by_admin はレコード単位フラグ。
+        // どちらかのミールが手修正されると両方の自動補完区間に ✏️ が付く仕様。
+        $isEdited = $isAuto && (bool) ($record->is_edited_by_admin ?? false);
+
+        $badge = '';
+        if ($isAuto) {
+            if ($isEdited) {
+                $badge = ' <span title="Sortie auto — corrigée manuellement" class="ml-1 inline-flex items-center rounded border border-violet-300/70 bg-violet-100 px-1 py-px text-[9px] font-bold text-violet-800 dark:border-violet-700/50 dark:bg-violet-950/50 dark:text-violet-200">🤖✏️</span>';
+            } else {
+                $badge = ' <span title="Sortie complémentée automatiquement" class="ml-1 inline-flex items-center rounded border border-sky-300/70 bg-sky-100 px-1 py-px text-[9px] font-bold text-sky-800 dark:border-sky-700/50 dark:bg-sky-950/50 dark:text-sky-200">🤖</span>';
+            }
+        }
+
+        return new HtmlString('<span class="'.$boxClass.'">'.e($text).$badge.'</span>');
     }
 
     public static function tipMealBadgeHtml(Attendance $record, string $meal): HtmlString

@@ -29,6 +29,8 @@ class Attendance extends Model
         'is_dinner_tip_applied',
         'is_dinner_tip_denied',
         'is_edited_by_admin',
+        'is_lunch_auto_clocked_out',
+        'is_dinner_auto_clocked_out',
         'admin_note',
         'in_note',
         'out_note',
@@ -54,6 +56,8 @@ class Attendance extends Model
             'is_dinner_tip_applied' => 'boolean',
             'is_dinner_tip_denied' => 'boolean',
             'is_edited_by_admin' => 'boolean',
+            'is_lunch_auto_clocked_out' => 'boolean',
+            'is_dinner_auto_clocked_out' => 'boolean',
             'tip_weight_override' => 'integer',
         ];
     }

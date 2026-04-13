@@ -31,6 +31,25 @@ class FixedShiftSchedule
     }
 
     /**
+     * 指定した曜日・食事区分のシフト終了時刻（"HH:MM" 文字列）を返す。
+     * シフト未定義・$slot[1] 非存在・フォーマット不正なら null。
+     *
+     * @param  'lunch'|'dinner'|string  $mealKey
+     */
+    public static function end(Staff $staff, string $dayKey, string $mealKey): ?string
+    {
+        $slot = data_get($staff->fixed_shifts, "{$dayKey}.{$mealKey}");
+
+        if (! is_array($slot) || ! isset($slot[1]) || ! is_string($slot[1])) {
+            return null;
+        }
+
+        $s = trim($slot[1]);
+
+        return $s !== '' ? $s : null;
+    }
+
+    /**
      * 指定した曜日にランチまたはディナーいずれかのシフトが存在するか。
      */
     public static function hasShiftOnDay(Staff $staff, string $dayKey): bool
