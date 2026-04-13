@@ -7,7 +7,7 @@ use App\Models\Finance;
 use App\Models\Setting;
 use App\Models\Staff;
 use App\Services\BistronipponOrdersRecettesService;
-use App\Services\TimecardPinValidator;
+use App\Services\StaffPinAuthenticationService;
 use App\Support\BusinessDate;
 use App\Support\CaisseMoneyInputNormalizer;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -265,7 +265,13 @@ class FrontendDailyClose extends Component
             return;
         }
 
-        $pinError = app(TimecardPinValidator::class)->validate($staff, $this->gatePinInput);
+        $pinError = app(StaffPinAuthenticationService::class)->verify(
+            $staff,
+            $this->gatePinInput,
+            'daily-close-gate',
+            5,
+            60,
+        );
         if ($pinError !== null) {
             $this->addError('gatePinInput', $pinError);
             $this->gatePinInput = '';
