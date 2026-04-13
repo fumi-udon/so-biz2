@@ -46,7 +46,7 @@ class HeadquartersAttendanceArcadeWidget extends Widget
             ->orderBy('name')
             ->get();
 
-        // 当月分 Attendance を一括取得し、スタッフ別 + 日付別にインデックス
+        // Attendances du mois → index par staff et par date
         $allAttendances = Attendance::query()
             ->whereIn('staff_id', $staffList->pluck('id'))
             ->whereBetween('date', [$start, $end])
@@ -59,7 +59,7 @@ class HeadquartersAttendanceArcadeWidget extends Widget
             $attendanceMap[$att->staff_id][$dateStr] = $att;
         }
 
-        // 遅刻カウント: late_minutes > 0 の行数
+        // Retards : lignes avec late_minutes > 0
         $lateCounts = $allAttendances
             ->filter(fn (Attendance $a) => (int) ($a->late_minutes ?? 0) > 0)
             ->groupBy('staff_id')

@@ -14,9 +14,9 @@ use Filament\Widgets\Widget;
 
 class HeadquartersDashboard extends Dashboard
 {
-    protected static ?string $title = '本部ダッシュボード';
+    protected static ?string $title = 'Tableau de bord siège';
 
-    protected static ?string $navigationLabel = '本部ダッシュボード';
+    protected static ?string $navigationLabel = 'Tableau de bord siège';
 
     public static function canAccess(): bool
     {

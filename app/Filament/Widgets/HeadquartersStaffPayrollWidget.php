@@ -47,7 +47,7 @@ class HeadquartersStaffPayrollWidget extends Widget
         return [
             'staff' => $staff,
             'totalWage' => $totalWage,
-            'totalHourlyLabel' => $withHourly > 0 ? $withHourly.' 名が時給制' : '—',
+            'totalHourlyLabel' => $withHourly > 0 ? $withHourly.' membre(s) à l\'heure' : '—',
         ];
     }
 }

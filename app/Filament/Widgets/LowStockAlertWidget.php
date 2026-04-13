@@ -32,7 +32,7 @@ class LowStockAlertWidget extends TableWidget
         $tableName = (new InventoryRecord)->getTable();
         $itemsTableName = (new InventoryItem)->getTable();
 
-        // プレフィックスを手動取得して完全なテーブル名を組み立てる（whereRaw / orderByRaw 用）
+        // Préfixe DB pour whereRaw / orderByRaw
         $prefix = DB::connection()->getTablePrefix();
         $fullTableName = $prefix.$tableName;
 
@@ -44,8 +44,8 @@ class LowStockAlertWidget extends TableWidget
         };
 
         return $table
-            ->heading('在庫低下アラート（本日・数値棚卸し／残量5以下）')
-            ->description('当日の棚卸し記録が数値で、残量が閾値以下の品目を最大5件表示します。')
+            ->heading('Alerte stock bas (inventaire numérique, reste ≤ 5)')
+            ->description('Articles inventoriés en quantité aujourd’hui avec reste sous le seuil (5 max).')
             ->query(
                 InventoryRecord::query()
                     ->select($tableName.'.*')
@@ -62,16 +62,20 @@ class LowStockAlertWidget extends TableWidget
             )
             ->columns([
                 TextColumn::make('inventoryItem.name')
-                    ->label('品目'),
+                    ->label('Article')
+                    ->extraCellAttributes(['class' => 'text-[12px] font-medium text-gray-950 dark:text-gray-100']),
                 TextColumn::make('inventoryItem.category')
-                    ->label('カテゴリ'),
+                    ->label('Catégorie')
+                    ->extraCellAttributes(['class' => 'text-[12px] text-gray-900 dark:text-gray-100']),
                 TextColumn::make('value')
-                    ->label('残量')
+                    ->label('Reste')
                     ->formatStateUsing(fn (?string $state): string => $state ?? '—')
                     ->color('danger')
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->extraCellAttributes(['class' => 'text-[12px]']),
                 TextColumn::make('inventoryItem.unit')
-                    ->label('単位'),
+                    ->label('Unité')
+                    ->extraCellAttributes(['class' => 'text-[12px] text-gray-900 dark:text-gray-100']),
             ])
             ->paginated(false);
     }

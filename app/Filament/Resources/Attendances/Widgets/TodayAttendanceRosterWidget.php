@@ -42,6 +42,7 @@ class TodayAttendanceRosterWidget extends Widget
      *         status: string,
      *         statusLabel: string,
      *         statusColor: string,
+     *         role_icon: string,
      *     }>
      * }
      */
@@ -58,8 +59,12 @@ class TodayAttendanceRosterWidget extends Widget
             ->keyBy('staff_id');
 
         $rows = Staff::query()
-            ->where('is_active', true)
-            ->orderBy('id')
+            ->where('staff.is_active', true)
+            ->with('jobLevel')
+            ->leftJoin('job_levels', 'job_levels.id', '=', 'staff.job_level_id')
+            ->orderByDesc('job_levels.level')
+            ->orderBy('staff.id')
+            ->select('staff.*')
             ->get()
             ->filter(fn (Staff $staff) => $attendances->has($staff->id) || FixedShiftSchedule::hasShiftOnDay($staff, $dayKey))
             ->map(function (Staff $staff) use ($attendances, $dayKey, $businessStart): array {
@@ -92,6 +97,12 @@ class TodayAttendanceRosterWidget extends Widget
                     default => 'gray',
                 };
 
+                $roleIcon = match ($roleCategory) {
+                    'kitchen' => 'heroicon-m-fire',
+                    'hall' => 'heroicon-m-user-group',
+                    default => 'heroicon-m-squares-2x2',
+                };
+
                 $lunchPlan = self::formatShiftPlan($staff, $dayKey, 'lunch');
                 $dinnerPlan = self::formatShiftPlan($staff, $dayKey, 'dinner');
                 [$status, $statusLabel, $statusColor] = self::resolveStatus($staff, $att, $dayKey);
@@ -114,6 +125,7 @@ class TodayAttendanceRosterWidget extends Widget
                     'statusLabel' => $statusLabel,
                     'statusColor' => $statusColor,
                     'role_raw' => $roleRaw,
+                    'role_icon' => $roleIcon,
                 ];
             });
 
@@ -123,6 +135,12 @@ class TodayAttendanceRosterWidget extends Widget
             $cb = $order[$b['role_category']] ?? 2;
             if ($ca !== $cb) {
                 return $ca <=> $cb;
+            }
+
+            $la = (int) ($a['staff']->jobLevel?->level ?? -1);
+            $lb = (int) ($b['staff']->jobLevel?->level ?? -1);
+            if ($la !== $lb) {
+                return $lb <=> $la;
             }
 
             $r = strcasecmp((string) ($a['role_raw'] ?? ''), (string) ($b['role_raw'] ?? ''));

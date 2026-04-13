@@ -13,9 +13,9 @@ class HeadquartersStatsWidget extends StatsOverviewWidget
 {
     protected static ?int $sort = -10;
 
-    protected ?string $heading = '本日の本部サマリー';
+    protected ?string $heading = 'Résumé siège (jour)';
 
-    protected ?string $description = '営業日基準（BusinessDate）';
+    protected ?string $description = 'Jour d’activité (BusinessDate)';
 
     /**
      * @return array<Stat>
@@ -67,24 +67,24 @@ class HeadquartersStatsWidget extends StatsOverviewWidget
 
         return [
             Stat::make(
-                '本日のリアルタイム人件費',
+                'Masse salariale (temps réel)',
                 number_format($laborCost, 0, '.', ' ').' DT',
             )
-                ->description('確定済み勤務区間 × 時給の合計')
+                ->description('Tranches validées × taux horaire')
                 ->icon('heroicon-o-banknotes')
                 ->color('success'),
             Stat::make(
-                '本日の出勤人数',
+                'Présences (lignes)',
                 (string) $attendanceCount,
             )
-                ->description('Attendance レコード数')
+                ->description('Nombre d’enregistrements présence')
                 ->icon('heroicon-o-users')
                 ->color('info'),
             Stat::make(
-                '本日のタスク完了率',
+                'Tâches complétées',
                 $taskRateLabel,
             )
-                ->description($totalTasks > 0 ? "完了 {$completedCount} / 全 {$totalTasks} 件" : '出勤者に割当のタスクなし')
+                ->description($totalTasks > 0 ? "Fait {$completedCount} / {$totalTasks}" : 'Aucune tâche assignée aux présents')
                 ->icon('heroicon-o-check-circle')
                 ->color('warning'),
         ];

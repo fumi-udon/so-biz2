@@ -55,14 +55,18 @@ services:
         # LinuxServer 版はマルチアーキ（arm64 / amd64）でマニフェストが安定
         image: 'lscr.io/linuxserver/phpmyadmin:latest'
         restart: unless-stopped
+        # LinuxServer 版 nginx ベースのコンテナでは sail ネットワーク内でも "mysql" サービス名の DNS 解決が
+        # 失敗するケースがある。laravel.test と同じく host.docker.internal 経由でホスト公開ポートへ繋ぐ。
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
         ports:
             - '${FORWARD_PHPMYADMIN_PORT:-8080}:80'
         environment:
             PUID: 1000
             PGID: 1000
             TZ: UTC
-            PMA_HOST: mysql
-            PMA_PORT: 3306
+            PMA_HOST: host.docker.internal
+            PMA_PORT: '${FORWARD_DB_PORT:-3306}'
             PMA_USER: '${DB_USERNAME}'
             PMA_PASSWORD: '${DB_PASSWORD}'
             PMA_ABSOLUTE_URI: 'http://localhost:${FORWARD_PHPMYADMIN_PORT:-8080}/'
