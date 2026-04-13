@@ -4,13 +4,12 @@ namespace App\Livewire;
 
 use App\Models\Attendance;
 use App\Models\Staff;
-use App\Services\TimecardPinValidator;
+use App\Services\StaffPinAuthenticationService;
 use App\Services\TimecardPunchOutcome;
 use App\Services\TimecardPunchService;
 use App\Services\TipCalculationService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 
@@ -106,7 +105,7 @@ class TimecardForm extends Component
             return null;
         }
 
-        $pinError = app(TimecardPinValidator::class)->validate($staff, $this->pinCode);
+        $pinError = app(StaffPinAuthenticationService::class)->verify($staff, $this->pinCode, 'timecard', 5, 60);
 
         if ($pinError !== null) {
             $this->addError('pinCode', $pinError);
@@ -305,20 +304,9 @@ class TimecardForm extends Component
             ->first();
 
         if ($attendance) {
-            $table = $attendance->getTable();
             if ($this->tipTargetShift === 'lunch') {
-                if (! Schema::hasColumn($table, 'is_lunch_tip_applied')) {
-                    return redirect()
-                        ->route('mypage.index', ['staff_id' => $this->authenticatedStaffId])
-                        ->with('error', 'La colonne de demande de tip est absente. Demandez la migration a un admin.');
-                }
                 $attendance->is_lunch_tip_applied = true;
             } elseif ($this->tipTargetShift === 'dinner') {
-                if (! Schema::hasColumn($table, 'is_dinner_tip_applied')) {
-                    return redirect()
-                        ->route('mypage.index', ['staff_id' => $this->authenticatedStaffId])
-                        ->with('error', 'La colonne de demande de tip est absente. Demandez la migration a un admin.');
-                }
                 $attendance->is_dinner_tip_applied = true;
             }
             $attendance->save();

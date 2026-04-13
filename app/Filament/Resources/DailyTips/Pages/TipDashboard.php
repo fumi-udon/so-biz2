@@ -9,7 +9,6 @@ use App\Models\DailyTipDistribution;
 use App\Models\Staff;
 use App\Support\BusinessDate;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Carbon;
 
@@ -19,14 +18,17 @@ class TipDashboard extends Page
 
     protected static string $view = 'filament.resources.daily-tips.pages.tip-dashboard';
 
-    protected static ?string $title = 'チップ支払い';
+    protected static ?string $title = 'Paiement des pourboires';
 
-    protected static ?string $navigationLabel = 'チップ支払い';
+    protected static ?string $navigationLabel = 'Paiement des pourboires';
 
     public string $week_start = '';
 
-    /** 月ジャンプ用（input type="month"） */
-    public string $month_picker = '';
+    /** Aller au mois : année (liste déroulante, libellés FR côté vue) */
+    public int $month_jump_year = 0;
+
+    /** Aller au mois : mois 1–12 */
+    public int $month_jump_month = 1;
 
     /** 週の開始曜日（Carbon: 日=0 … 土=6）。デフォルトは月曜。 */
     public int $startDayOfWeek = Carbon::MONDAY;
@@ -35,7 +37,7 @@ class TipDashboard extends Page
     {
         $anchor = BusinessDate::current();
         $this->week_start = $anchor->copy()->startOfWeek($this->startDayOfWeek)->toDateString();
-        $this->month_picker = Carbon::parse($this->week_start)->format('Y-m');
+        $this->syncMonthPicker();
     }
 
     public function previousWeek(): void
@@ -56,13 +58,26 @@ class TipDashboard extends Page
         $this->syncMonthPicker();
     }
 
-    public function updatedMonthPicker(): void
+    public function updatedMonthJumpYear(): void
     {
-        if ($this->month_picker === '') {
-            return;
-        }
+        $this->applyMonthJump();
+    }
 
-        [$y, $m] = array_map('intval', explode('-', $this->month_picker, 2));
+    public function updatedMonthJumpMonth(): void
+    {
+        $this->applyMonthJump();
+    }
+
+    /**
+     * Positionne la semaine affichée sur le 1er jour du mois choisi, puis début de semaine selon startDayOfWeek.
+     */
+    protected function applyMonthJump(): void
+    {
+        $y = max(1970, min(2100, $this->month_jump_year));
+        $m = max(1, min(12, $this->month_jump_month));
+        $this->month_jump_year = $y;
+        $this->month_jump_month = $m;
+
         $this->week_start = Carbon::create($y, $m, 1)
             ->startOfDay()
             ->startOfWeek($this->startDayOfWeek)
@@ -86,26 +101,66 @@ class TipDashboard extends Page
 
     protected function syncMonthPicker(): void
     {
-        $this->month_picker = Carbon::parse($this->week_start)->format('Y-m');
+        $c = Carbon::parse($this->week_start);
+        $this->month_jump_year = (int) $c->year;
+        $this->month_jump_month = (int) $c->month;
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function getMonthYearOptionsProperty(): array
+    {
+        $y = (int) now()->year;
+        $range = range($y - 4, $y + 2);
+        $current = $this->month_jump_year;
+        if ($current > 0 && ! in_array($current, $range, true)) {
+            $range[] = $current;
+            sort($range);
+        }
+
+        return $range;
+    }
+
+    /**
+     * Libellés mois en français (liste déroulante).
+     *
+     * @return array<int, string>
+     */
+    public function getFrenchMonthOptionsProperty(): array
+    {
+        return [
+            1 => 'janvier',
+            2 => 'février',
+            3 => 'mars',
+            4 => 'avril',
+            5 => 'mai',
+            6 => 'juin',
+            7 => 'juillet',
+            8 => 'août',
+            9 => 'septembre',
+            10 => 'octobre',
+            11 => 'novembre',
+            12 => 'décembre',
+        ];
     }
 
     protected function getHeaderActions(): array
     {
         return [
             Action::make('calculate')
-                ->label('チップ計算')
+                ->label('Calcul des pourboires')
                 ->icon('heroicon-o-calculator')
                 ->url(DailyTipResource::getUrl('calculate')),
             Action::make('list_all')
-                ->label('レコード一覧')
+                ->label('Liste des enregistrements')
                 ->icon('heroicon-o-table-cells')
                 ->url(DailyTipResource::getUrl('list_all')),
-            CreateAction::make(),
         ];
     }
 
     /**
-     * @return array{day_keys: list<string>, day_labels: list<string>, rows: list<array<string, mixed>>, week_total: float}
+     * @return array{day_keys: list<string>, day_labels: list<string>, rows: list<array<string, mixed>>, week_total: float, day_meal_totals: array<string, array{lunch: float, dinner: float, total: float}>, week_meal_totals: array{lunch: float, dinner: float, total: float}}
      */
     public function getWeekMatrixProperty(): array
     {
@@ -114,11 +169,12 @@ class TipDashboard extends Page
 
         $dayKeys = [];
         $dayLabels = [];
-        $wd = ['月', '火', '水', '木', '金', '土', '日'];
+        /** Jour ISO 1=lun. … 7=dim. (libellés courts à la française) */
+        $wdFr = [1 => 'lun.', 2 => 'mar.', 3 => 'mer.', 4 => 'jeu.', 5 => 'ven.', 6 => 'sam.', 7 => 'dim.'];
         for ($i = 0; $i < 7; $i++) {
             $d = $start->copy()->addDays($i);
             $dayKeys[] = $d->toDateString();
-            $dayLabels[] = $d->format('n/j').' '.$wd[$d->dayOfWeekIso - 1];
+            $dayLabels[] = $d->format('d/m').' '.$wdFr[$d->dayOfWeekIso];
         }
 
         $dists = DailyTipDistribution::query()
@@ -174,6 +230,35 @@ class TipDashboard extends Page
             $weekGrand += $amt;
         }
 
+        $dayLunchTotals = array_fill_keys($dayKeys, 0.0);
+        $dayDinnerTotals = array_fill_keys($dayKeys, 0.0);
+        foreach ($byStaff as $r) {
+            foreach ($dayKeys as $dk) {
+                $dayLunchTotals[$dk] += $r['days'][$dk]['lunch_amount'];
+                $dayDinnerTotals[$dk] += $r['days'][$dk]['dinner_amount'];
+            }
+        }
+
+        /** @var array<string, array{lunch: float, dinner: float, total: float}> Clés Y-m-d (alignées sur day_keys) pour éviter tout décalage d’index avec la vue. */
+        $dayMealTotals = [];
+        foreach ($dayKeys as $dk) {
+            $l = (float) ($dayLunchTotals[$dk] ?? 0.0);
+            $d = (float) ($dayDinnerTotals[$dk] ?? 0.0);
+            $dayMealTotals[$dk] = [
+                'lunch' => round($l, 3),
+                'dinner' => round($d, 3),
+                'total' => round($l + $d, 3),
+            ];
+        }
+
+        $sumL = array_sum($dayLunchTotals);
+        $sumD = array_sum($dayDinnerTotals);
+        $weekMealTotals = [
+            'lunch' => round($sumL, 3),
+            'dinner' => round($sumD, 3),
+            'total' => round($sumL + $sumD, 3),
+        ];
+
         $rows = collect($byStaff)
             ->sortBy(fn (array $r) => $r['staff']->name)
             ->values()
@@ -205,6 +290,8 @@ class TipDashboard extends Page
             'day_labels' => $dayLabels,
             'rows' => $rows,
             'week_total' => round($weekGrand, 3),
+            'day_meal_totals' => $dayMealTotals,
+            'week_meal_totals' => $weekMealTotals,
         ];
     }
 
@@ -244,7 +331,7 @@ class TipDashboard extends Page
         })->values()->all();
 
         return [
-            'month_label' => $ref->format('Y年 n月'),
+            'month_label' => $ref->locale('fr')->translatedFormat('F Y'),
             'pool' => round($pool, 3),
             'staff_bars' => $staffBars,
             'max' => $max,
@@ -256,7 +343,7 @@ class TipDashboard extends Page
         $start = Carbon::parse($this->week_start)->startOfDay();
         $end = $start->copy()->addDays(6);
 
-        return $start->format('Y/m/d').' — '.$end->format('m/d');
+        return 'Du '.$start->format('d/m/Y').' au '.$end->format('d/m/Y');
     }
 
     public function staffEditUrl(int $staffId): string

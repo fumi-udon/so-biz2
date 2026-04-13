@@ -35,12 +35,15 @@ return [
     'notify_duplicate_attendance' => 'Un pointage existe déjà pour ce jour. Ouverture de la fiche.',
     'notify_duplicate_table' => 'Un enregistrement existe déjà pour cette date. Redirection vers la modification.',
 
+    'tip_dashboard_day_total' => 'Total jour',
+    'tip_dashboard_day_total_hint' => "Somme de toute l'équipe (midi + soir)",
+
     'form_staff' => '👤 Employé',
     'form_date' => '📅 Date',
     'form_scheduled_in_lunch' => '⏰ Prévu (midi)',
-    'form_scheduled_in_lunch_help' => 'Instantané. Vide = rempli depuis les horaires fixes du jour.',
+    'form_scheduled_in_lunch_help' => 'Heure seulement. Vide = rempli depuis les horaires fixes du jour.',
     'form_scheduled_in_dinner' => '🏁 Prévu (soir)',
-    'form_scheduled_in_dinner_help' => 'Instantané. Vide = rempli depuis les horaires fixes du jour.',
+    'form_scheduled_in_dinner_help' => 'Heure seulement. Vide = rempli depuis les horaires fixes du jour.',
     'form_lunch_in' => '🏃 Arrivée (midi)',
     'form_lunch_out' => '🚪 Départ (midi)',
     'form_dinner_in' => '🏃 Arrivée (soir)',
@@ -53,8 +56,11 @@ return [
 
     'form_section_identity' => '🎮 Infos équipe',
     'form_section_planned' => '⏰ Horaires prévus',
+    'form_section_planned_desc' => 'La date est celle du champ « Date » ci-dessus. Saisissez uniquement les heures.',
     'form_section_lunch' => '☀️ Service midi',
+    'form_section_lunch_desc' => 'Même jour que la date sélectionnée. Saisissez uniquement les heures de pointage.',
     'form_section_dinner' => '🌙 Service soir',
+    'form_section_dinner_desc' => 'Même jour que la date sélectionnée. Saisissez uniquement les heures de pointage.',
     'form_section_late' => '⏱️ Retard',
     'form_section_notes' => '📝 Notes',
 
@@ -70,6 +76,11 @@ return [
     'toggle_dinner_apply_help' => 'Si pointage présent et éligible au partage, activer.',
     'toggle_dinner_deny' => 'Soir — exclure',
     'toggle_dinner_deny_help' => 'Exclure du partage pourboire.',
+
+    'validation_clock_in_required' => 'Saisissez au moins une heure d’entrée (midi ou soir).',
+
+    'form_create_submit' => 'Créer',
+    'form_create_cancel' => 'Annuler',
 
     'day_short_mon' => 'Lun',
     'day_short_tue' => 'Mar',

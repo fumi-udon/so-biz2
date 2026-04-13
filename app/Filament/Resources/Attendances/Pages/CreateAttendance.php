@@ -6,15 +6,34 @@ use App\Filament\Resources\Attendances\AttendanceResource;
 use App\Models\Attendance;
 use App\Support\AttendanceFormSaveData;
 use App\Traits\RedirectsToIndex;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Exceptions\Halt;
+use Illuminate\Contracts\Support\Htmlable;
 
 class CreateAttendance extends CreateRecord
 {
     use RedirectsToIndex;
 
     protected static string $resource = AttendanceResource::class;
+
+    public function getTitle(): string|Htmlable
+    {
+        return __('hq.action_new_punch', [], 'fr');
+    }
+
+    protected function getCreateFormAction(): Action
+    {
+        return parent::getCreateFormAction()
+            ->label(__('hq.form_create_submit', [], 'fr'));
+    }
+
+    protected function getCancelFormAction(): Action
+    {
+        return parent::getCancelFormAction()
+            ->label(__('hq.form_create_cancel', [], 'fr'));
+    }
 
     /**
      * @param  array<string, mixed>  $data

@@ -5,7 +5,6 @@ namespace App\Filament\Resources\DailyTips\Pages;
 use App\Filament\Resources\DailyTips\DailyTipResource;
 use App\Models\Attendance;
 use App\Models\DailyTip;
-use App\Models\DailyTipDistribution;
 use App\Models\Finance;
 use App\Models\Staff;
 use App\Services\TipCalculationService;
@@ -15,17 +14,21 @@ use App\Support\DailyTipAuditLogger;
 use App\Support\TipAttendanceScope;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
+use Filament\Support\Facades\FilamentView;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
 
 class CalculateTips extends Page
@@ -34,7 +37,7 @@ class CalculateTips extends Page
 
     protected static string $view = 'filament.resources.daily-tips.pages.calculate-tips';
 
-    protected static ?string $title = 'チップ計算';
+    protected static ?string $title = '🪙 Calcul de répartition';
 
     /** ページ標準ヘッダーを出さず、本文から入力を開始する */
     protected ?string $heading = '';
@@ -51,14 +54,14 @@ class CalculateTips extends Page
 
     public float $monthly_total = 0.0;
 
-    /** @var array<int, array<string, mixed>> */
-    public array $recent_averages = [];
-
     public bool $managerPinVerified = false;
 
     public ?int $managerStaffId = null;
 
     public string $managerPinInput = '';
+
+    /** Même jour + même service : un pourboire existe déjà en base (écrasement possible au prochain enregistrement). */
+    public bool $existingTipRecord = false;
 
     public function mount(): void
     {
@@ -74,16 +77,15 @@ class CalculateTips extends Page
         $this->hydrateTipAmountFromFinance();
         $this->recalculateRows();
         $this->refreshAnalytics();
+        $this->syncExistingTipFlag();
     }
 
     public function form(Form $form): Form
     {
         return $form
+            ->columns(1)
             ->schema([
-                Grid::make([
-                    'default' => 1,
-                    'md' => 2,
-                ])
+                Grid::make(['default' => 1, 'sm' => 2])
                     ->extraAttributes([
                         'class' => 'gap-y-2 gap-x-2',
                     ])
@@ -93,93 +95,128 @@ class CalculateTips extends Page
                             ->compact()
                             ->schema([
                                 DatePicker::make('business_date')
-                                    ->label('Date')
+                                    ->label('📅 Jour d’activité')
                                     ->required()
-                                    ->native(true)
-                                    ->live(debounce: 500)
+                                    ->native(false)
+                                    ->locale('fr')
+                                    ->displayFormat('d/m/Y')
+                                    ->weekStartsOnMonday()
+                                    ->live()
                                     ->afterStateUpdated(fn () => $this->afterConditionChanged())
-                                    ->extraInputAttributes(['class' => 'py-1.5 text-sm']),
+                                    ->helperText('Date de service pour la répartition.')
+                                    ->extraInputAttributes([
+                                        'class' => 'py-2 text-base text-gray-950 dark:text-white',
+                                    ]),
                             ])
                             ->extraAttributes([
-                                'class' => 'rounded-xl border-2 border-amber-200 bg-amber-50/50 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-700 dark:bg-amber-950/30 dark:ring-amber-900/40',
+                                'class' => 'rounded-2xl border-2 border-b-4 border-amber-400 bg-amber-50/90 p-4 shadow-sm ring-1 ring-amber-200/80 dark:border-amber-600 dark:bg-amber-950/40 dark:ring-amber-900/50',
                             ]),
                         Section::make()
                             ->heading(null)
                             ->compact()
                             ->schema([
                                 Select::make('shift')
-                                    ->label('Shift')
+                                    ->label('🍽️ Service')
                                     ->options([
-                                        'lunch' => 'Midi (L)',
-                                        'dinner' => 'Soir (D)',
+                                        'lunch' => '☀️ Midi',
+                                        'dinner' => '🌙 Soir',
                                     ])
                                     ->required()
                                     ->native(true)
-                                    ->live(debounce: 500)
+                                    ->live()
                                     ->afterStateUpdated(fn () => $this->afterConditionChanged())
-                                    ->extraInputAttributes(['class' => 'py-1.5 text-sm']),
+                                    ->extraInputAttributes([
+                                        'class' => 'py-2 text-sm text-gray-950 dark:text-white',
+                                    ]),
                             ])
                             ->extraAttributes([
-                                'class' => 'rounded-xl border-2 border-indigo-200 bg-indigo-50/50 shadow-sm ring-1 ring-indigo-200/80 dark:border-indigo-700 dark:bg-indigo-950/30 dark:ring-indigo-900/40',
+                                'class' => 'rounded-2xl border-2 border-b-4 border-sky-400 bg-sky-50/90 p-4 shadow-sm ring-1 ring-sky-200/80 dark:border-sky-600 dark:bg-sky-950/40 dark:ring-sky-900/50',
                             ]),
                     ]),
+                Placeholder::make('overwrite_notice_calculate')
+                    ->label(null)
+                    ->visible(fn () => $this->existingTipRecord)
+                    ->content(
+                        new HtmlString(
+                            '<div class="flex gap-2 rounded-xl border-2 border-rose-500 bg-rose-50 p-3 text-rose-950 shadow-sm ring-1 ring-rose-200/80 dark:border-rose-600 dark:bg-rose-950/50 dark:text-rose-50 dark:ring-rose-900/50" role="status">'
+                            .'<span class="shrink-0 text-lg leading-none" aria-hidden="true">⚠️</span>'
+                            .'<p class="text-sm font-semibold leading-snug">'
+                            .'<span class="font-black">Enregistrement existant</span> pour cette date et ce service. '
+                            .'Le prochain enregistrement <span class="underline">remplacera</span> le total et toutes les répartitions.'
+                            .'</p></div>'
+                        )
+                    )
+                    ->columnSpanFull(),
                 Section::make()
                     ->heading(null)
                     ->compact()
                     ->schema([
                         TextInput::make('total_amount')
-                            ->label('Tip total (DT)')
+                            ->label('💰 Total pourboires')
                             ->numeric()
                             ->minValue(0)
                             ->step(0.001)
                             ->required()
+                            ->suffix('DT')
                             ->live(debounce: 500)
                             ->afterStateUpdated(fn () => $this->recalculateRows())
+                            ->helperText('Jusqu’à 3 décimales.')
                             ->extraInputAttributes([
-                                'class' => 'py-2 text-2xl font-semibold tabular-nums leading-tight',
+                                'class' => 'py-2.5 text-2xl font-black tabular-nums leading-tight text-gray-950 dark:text-white',
                                 'step' => '0.001',
                                 'inputmode' => 'decimal',
                             ]),
                     ])
+                    ->columnSpanFull()
                     ->extraAttributes([
-                        'class' => 'rounded-xl border-2 border-sky-400 bg-sky-50/50 shadow-sm ring-1 ring-sky-300/70 dark:border-sky-600 dark:bg-sky-950/40 dark:ring-sky-800/50',
+                        'class' => 'rounded-2xl border-2 border-b-4 border-emerald-500 bg-emerald-50/90 p-4 shadow-sm ring-1 ring-emerald-200/80 dark:border-emerald-600 dark:bg-emerald-950/40 dark:ring-emerald-900/50',
                     ]),
                 Section::make()
                     ->heading(null)
                     ->compact()
+                    ->visible(fn () => $this->needsManagerPin())
                     ->schema([
                         Select::make('manager_staff_id')
-                            ->label('Manager')
+                            ->label('👤 Responsable (validation) > 200 DT ?')
                             ->options(fn (): array => $this->managerStaffOptions())
-                            ->placeholder('Choisir')
+                            ->placeholder('Choisir un responsable')
                             ->native(true)
-                            ->visible(fn () => $this->needsManagerPin())
                             ->live(debounce: 500)
                             ->afterStateUpdated(function (mixed $state): void {
                                 $this->managerStaffId = $state === '' || $state === null ? null : (int) $state;
                                 $this->managerPinVerified = false;
                             }),
                         TextInput::make('manager_pin')
-                            ->label('PIN manager')
+                            ->label('🔐 Code PIN responsable')
                             ->password()
                             ->maxLength(4)
-                            ->visible(fn () => $this->needsManagerPin())
                             ->live(debounce: 500)
                             ->afterStateUpdated(function (mixed $state): void {
                                 $this->managerPinInput = (string) ($state ?? '');
                                 $this->managerPinVerified = false;
                             }),
-                        Select::make('selected_staff_id')
-                            ->label('Ajouter staff')
-                            ->options(fn (): array => $this->availableStaffOptions)
-                            ->placeholder('— 追加 —')
-                            ->native(true)
-                            ->live(debounce: 500)
-                            ->afterStateUpdated(fn () => $this->afterStaffSelectChanged())
-                            ->extraInputAttributes(['class' => 'py-1.5 text-sm']),
                     ])
                     ->extraAttributes([
-                        'class' => 'rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900',
+                        'class' => 'rounded-2xl border-2 border-b-4 border-rose-400 bg-rose-50/90 p-4 shadow-sm ring-1 ring-rose-200/80 dark:border-rose-600 dark:bg-rose-950/40 dark:ring-rose-900/50',
+                    ]),
+                Section::make()
+                    ->heading(null)
+                    ->compact()
+                    ->schema([
+                        Hidden::make('selected_staff_id'),
+                        Placeholder::make('pointages_notice')
+                            ->label(null)
+                            ->content(
+                                new HtmlString(
+                                    '<p class="text-xs font-semibold leading-snug text-gray-950 dark:text-white">'
+                                    .'チップ付与は出勤簿(Pointages)と連動してます。 '
+                                    .'<span class="font-black text-sky-800 dark:text-sky-200">Pointages</span>.'
+                                    .'</p>'
+                                )
+                            ),
+                    ])
+                    ->extraAttributes([
+                        'class' => 'rounded-2xl border-2 border-b-4 border-sky-400 bg-sky-50/90 p-3 shadow-sm ring-1 ring-sky-200/80 dark:border-sky-600 dark:bg-sky-950/40 dark:ring-sky-900/50',
                     ]),
             ])
             ->statePath('data');
@@ -190,100 +227,47 @@ class CalculateTips extends Page
         return [];
     }
 
-    /**
-     * @return array<int, string>
-     */
-    public function getAvailableStaffOptionsProperty(): array
-    {
-        $selected = array_map(fn (array $row): int => (int) $row['staff_id'], $this->rows);
-        $businessDate = $this->data['business_date'] ?? BusinessDate::current()->toDateString();
-        $shift = $this->data['shift'] ?? 'lunch';
-
-        $eligibleIds = TipAttendanceScope::applyGoldenFormula(
-            Attendance::query()->whereDate('date', $businessDate),
-            $shift === 'dinner' ? 'dinner' : 'lunch',
-        )
-            ->whereNotIn('staff_id', $selected)
-            ->pluck('staff_id');
-
-        return Staff::query()
-            ->where('is_active', true)
-            ->whereIn('id', $eligibleIds)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
-    }
-
     protected function afterConditionChanged(): void
     {
         $this->loadRows();
         $this->hydrateTipAmountFromFinance();
         $this->recalculateRows();
         $this->refreshAnalytics();
+        $this->syncExistingTipFlag();
     }
 
-    protected function afterStaffSelectChanged(): void
+    /**
+     * Indique si un {@see DailyTip} existe déjà pour la date et le service courants (clé métier unique).
+     */
+    protected function syncExistingTipFlag(): void
     {
-        $raw = $this->data['selected_staff_id'] ?? null;
-        if ($raw === null || $raw === '') {
+        $rawDate = $this->data['business_date'] ?? null;
+        $shift = (string) ($this->data['shift'] ?? '');
+
+        if ($rawDate === null || $rawDate === '') {
+            $this->existingTipRecord = false;
+
             return;
         }
 
-        $this->addSelectedStaff((int) $raw);
-        $this->data['selected_staff_id'] = null;
-    }
+        if (! in_array($shift, ['lunch', 'dinner'], true)) {
+            $this->existingTipRecord = false;
 
-    public function addSelectedStaff(int $staffId): void
-    {
-        foreach ($this->rows as $row) {
-            if ((int) $row['staff_id'] === $staffId) {
-                return;
-            }
-        }
-
-        $staff = Staff::query()
-            ->where('is_active', true)
-            ->with('jobLevel')
-            ->find($staffId);
-
-        if (! $staff) {
             return;
         }
 
-        // tip_weight_override があれば優先、なければ jobLevel.default_weight にフォールバック
-        $businessDate = $this->data['business_date'] ?? BusinessDate::current()->toDateString();
-        $shift = $this->data['shift'] ?? 'lunch';
-        $attendance = Attendance::query()
-            ->where('staff_id', $staffId)
-            ->whereDate('date', $businessDate)
-            ->first();
+        try {
+            $businessDate = Carbon::parse($rawDate)->toDateString();
+        } catch (\Throwable) {
+            $this->existingTipRecord = false;
 
-        $eligible = $shift === 'lunch'
-            ? ($attendance && TipAttendanceScope::lunchEligible($attendance))
-            : ($attendance && TipAttendanceScope::dinnerEligible($attendance));
-        if (! $eligible) {
             return;
         }
 
-        $rawWeight = $attendance?->tip_weight_override
-            ?? $staff->jobLevel?->default_weight;
-        $base = $rawWeight === null
-            ? TipCalculationService::DEFAULT_DISTRIBUTION_WEIGHT
-            : (float) TipCalculationService::normalizeWeightScalar($rawWeight);
-        $defaultWeight = $this->snapTipWeightToMasterGrid($base);
-
-        $this->rows[] = [
-            'staff_id' => $staff->id,
-            'name' => $staff->name,
-            'job_level' => $staff->jobLevel?->name ?? 'Unassigned',
-            'weight' => $defaultWeight,
-            'amount' => 0.0,
-            'is_tardy_deprived' => false,
-            'is_manual_added' => true,
-            'note' => null,
-        ];
-
-        $this->recalculateRows();
+        $this->existingTipRecord = DailyTip::query()
+            ->whereDate('business_date', $businessDate)
+            ->where('shift', $shift)
+            ->exists();
     }
 
     public function removeStaff(int $staffId): void
@@ -317,10 +301,20 @@ class CalculateTips extends Page
             'data.shift' => ['required', 'in:lunch,dinner'],
             'data.total_amount' => ['required', 'numeric', 'min:0'],
         ], attributes: [
-            'data.business_date' => 'Date d’activité',
-            'data.shift' => 'Service',
-            'data.total_amount' => 'Montant total des pourboires',
+            'data.business_date' => 'jour d’activité',
+            'data.shift' => 'service',
+            'data.total_amount' => 'total pourboires',
         ]);
+
+        if (empty($this->rows)) {
+            Notification::make()
+                ->warning()
+                ->title('Aucun membre à valider')
+                ->body("Aucun membre présent pour ce service. Enregistrez d'abord les présences dans l'écran Pointages.")
+                ->send();
+
+            return;
+        }
 
         $savedTotal = $this->normalizedTotalAmount();
 
@@ -338,8 +332,8 @@ class CalculateTips extends Page
         if (! $lock->get()) {
             Notification::make()
                 ->warning()
-                ->title('Attention')
-                ->body('Un autre responsable traite déjà cette date et ce service. Patientez quelques secondes puis réessayez.')
+                ->title('Traitement en cours')
+                ->body('Un autre appareil valide déjà cette date et ce service. Réessayez dans quelques secondes.')
                 ->send();
 
             return;
@@ -459,20 +453,24 @@ class CalculateTips extends Page
             ->success()
             ->send();
 
-        $this->refreshAnalytics();
+        $url = DailyTipResource::getUrl('index');
+        $this->redirect($url, navigate: FilamentView::hasSpaMode($url));
     }
 
     protected function loadRows(): void
     {
-        $businessDate = $this->data['business_date'] ?? BusinessDate::current()->toDateString();
+        $rawDate = $this->data['business_date'] ?? null;
+        $businessDate = ($rawDate !== null && $rawDate !== '')
+            ? Carbon::parse($rawDate)->toDateString()
+            : BusinessDate::current()->toDateString();
         $shift = $this->data['shift'] ?? 'lunch';
 
         $attendances = TipAttendanceScope::applyGoldenFormula(
             Attendance::query()->whereDate('date', $businessDate),
             $shift === 'dinner' ? 'dinner' : 'lunch',
         )
-            ->whereHas('staff')
-            ->with(['staff' => fn ($query) => $query->with('jobLevel')])
+            ->whereHas('staff', fn ($q) => $q->withTrashed())
+            ->with(['staff' => fn ($query) => $query->withTrashed()->with('jobLevel')])
             ->get()
             ->filter(fn (Attendance $attendance): bool => $attendance->staff !== null)
             ->unique('staff_id')
@@ -574,29 +572,6 @@ class CalculateTips extends Page
         $this->monthly_total = (float) DailyTip::query()
             ->whereBetween('business_date', [$monthStart->toDateString(), $monthEnd->toDateString()])
             ->sum('total_amount');
-
-        $recent = DailyTipDistribution::query()
-            ->with('staff')
-            ->latest('id')
-            ->limit(300)
-            ->get()
-            ->groupBy('staff_id')
-            ->map(function ($group, $staffId): array {
-                $sample = $group->take(5);
-                $staffName = $sample->first()?->staff?->name ?? ('#'.$staffId);
-
-                return [
-                    'staff_name' => $staffName,
-                    'avg_amount' => round((float) $sample->avg('amount'), 3),
-                    'count' => $sample->count(),
-                ];
-            })
-            ->sortByDesc('avg_amount')
-            ->take(10)
-            ->values()
-            ->all();
-
-        $this->recent_averages = $recent;
     }
 
     protected function tipService(): TipCalculationService
@@ -630,15 +605,15 @@ class CalculateTips extends Page
             'data.manager_staff_id' => ['required', 'integer', 'exists:staff,id'],
             'data.manager_pin' => ['required', 'digits:4'],
         ], attributes: [
-            'data.manager_staff_id' => 'Responsable',
-            'data.manager_pin' => 'Code PIN (responsable)',
+            'data.manager_staff_id' => 'responsable',
+            'data.manager_pin' => 'code PIN',
         ]);
 
         $managerId = (int) ($this->data['manager_staff_id'] ?? 0);
         $key = 'tips-manager-pin:staff:'.$managerId.':'.(request()->ip() ?? 'unknown');
         if (RateLimiter::tooManyAttempts($key, 5)) {
             throw ValidationException::withMessages([
-                'data.manager_pin' => 'Code PIN bloqué, réessayez dans quelques minutes.',
+                'data.manager_pin' => 'Trop de tentatives PIN. Réessayez dans quelques minutes.',
             ]);
         }
 
@@ -661,12 +636,18 @@ class CalculateTips extends Page
 
     private function hydrateTipAmountFromFinance(): void
     {
-        $businessDate = (string) ($this->data['business_date'] ?? '');
-        $shift = (string) ($this->data['shift'] ?? 'lunch');
+        $rawDate = $this->data['business_date'] ?? null;
+        $shift = (string) ($this->data['shift'] ?? '');
 
-        if ($businessDate === '') {
+        if ($rawDate === null || $rawDate === '') {
             return;
         }
+
+        if (! in_array($shift, ['lunch', 'dinner'], true)) {
+            return;
+        }
+
+        $businessDate = Carbon::parse($rawDate)->toDateString();
 
         $finance = Finance::query()
             ->whereDate('business_date', $businessDate)
@@ -675,12 +656,14 @@ class CalculateTips extends Page
             ->latest('id')
             ->first();
 
-        if (! $finance) {
+        if ($finance === null) {
+            $this->data['total_amount'] = '0';
+
             return;
         }
 
-        $tip = (float) ($finance->final_tip_amount ?? $finance->chips ?? 0);
-        $this->data['total_amount'] = (string) round(max(0, $tip), 3);
+        $chips = (float) ($finance->chips ?? 0);
+        $this->data['total_amount'] = (string) round(max(0, $chips), 3);
     }
 
     /**
@@ -688,14 +671,16 @@ class CalculateTips extends Page
      */
     public function recentFinanceHistory()
     {
-        $from = Carbon::parse($this->data['business_date'] ?? BusinessDate::current()->toDateString())
-            ->subDays(2)
-            ->toDateString();
+        $rawDate = $this->data['business_date'] ?? null;
+        $baseDate = ($rawDate !== null && $rawDate !== '')
+            ? Carbon::parse($rawDate)->toDateString()
+            : BusinessDate::current()->toDateString();
+        $from = Carbon::parse($baseDate)->subDays(2)->toDateString();
 
         return Finance::query()
             ->whereDate('business_date', '>=', $from)
             ->orderByDesc('business_date')
-            ->orderByRaw("FIELD(shift, 'dinner', 'lunch')")
+            ->orderByRaw("CASE shift WHEN 'dinner' THEN 0 WHEN 'lunch' THEN 1 ELSE 2 END")
             ->get();
     }
 }

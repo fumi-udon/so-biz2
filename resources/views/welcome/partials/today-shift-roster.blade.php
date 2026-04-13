@@ -10,11 +10,8 @@
 <section class="mx-auto mt-4 w-full max-w-5xl px-3 pb-2" aria-labelledby="today-shift-roster-heading">
     <div class="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:shadow-gray-950/40">
         <div class="border-b border-slate-200 bg-slate-50 px-3 py-2 sm:px-4 dark:border-gray-700 dark:bg-gray-900">
-            <h3 id="today-shift-roster-heading" class="text-sm font-semibold text-gray-900 dark:text-white">
-                日別・時間帯別 人員配置
-            </h3>
             <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                <span class="font-medium text-gray-800 dark:text-gray-100">本日</span>
+                <span class="font-medium text-gray-800 dark:text-gray-100">TODAYS SHIFTS </span>
                 <span class="mx-1 text-gray-400 dark:text-gray-500">·</span>
                 <span>{{ $dayLabel }}</span>
                 <span class="mx-1 text-gray-400 dark:text-gray-500">·</span>

@@ -79,7 +79,7 @@ final class AttendanceFormSaveData
 
         if ($lunch === null && $dinner === null) {
             throw ValidationException::withMessages([
-                'lunch_in_at' => 'ランチまたはディナーのいずれかの入店時刻を入力してください。',
+                'lunch_in_at' => __('hq.validation_clock_in_required', [], 'fr'),
             ]);
         }
     }

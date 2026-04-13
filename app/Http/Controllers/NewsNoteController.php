@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\NewsNote;
 use App\Models\Staff;
+use App\Services\StaffPinAuthenticationService;
 use App\Support\BusinessDate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\View\View;
 
 class NewsNoteController extends Controller
@@ -34,44 +34,34 @@ class NewsNoteController extends Controller
             'pin_code.digits' => 'PIN: 4 chiffres.',
         ]);
 
-        $staffId = (int) $validated['staff_id'];
-        $rateLimitKey = 'news-pin:'.$staffId.':'.(request()->ip() ?? 'unknown');
-
-        if (RateLimiter::tooManyAttempts($rateLimitKey, self::RATE_LIMIT_MAX)) {
-            return redirect()->route('home')->with('error', 'Trop de tentatives PIN. Patientez quelques minutes.');
-        }
-
         $staff = Staff::query()
             ->with('jobLevel')
             ->where('is_active', true)
-            ->find($staffId);
+            ->find((int) $validated['staff_id']);
 
         if (! $staff) {
-            RateLimiter::hit($rateLimitKey, self::RATE_LIMIT_DECAY);
-
             return redirect()->route('home')->with('error', 'Personnel introuvable ou inactif.');
         }
 
-        if ($staff->pin_code === null || $staff->pin_code === '') {
-            return redirect()->route('home')->with('error', 'PIN non configure pour ce staff.');
-        }
+        $pinError = app(StaffPinAuthenticationService::class)->verify(
+            $staff,
+            $validated['pin_code'],
+            'news-pin',
+            self::RATE_LIMIT_MAX,
+            self::RATE_LIMIT_DECAY,
+        );
 
-        if (! hash_equals((string) $staff->pin_code, (string) $validated['pin_code'])) {
-            RateLimiter::hit($rateLimitKey, self::RATE_LIMIT_DECAY);
-
-            return redirect()->route('home')->with('error', 'PIN incorrect.');
+        if ($pinError !== null) {
+            return redirect()->route('home')->with('error', $pinError);
         }
 
         $level = (int) ($staff->jobLevel?->level ?? 0);
         $isManager = (bool) $staff->is_manager;
 
         if (! $isManager && $level < self::MIN_LEVEL) {
-            RateLimiter::hit($rateLimitKey, self::RATE_LIMIT_DECAY);
-
             return redirect()->route('home')->with('error', 'Acces refuse. Niveau '.(self::MIN_LEVEL).'+ ou manager requis.');
         }
 
-        RateLimiter::clear($rateLimitKey);
         $request->session()->put(self::SESSION_KEY, $staff->id);
 
         return redirect()->route('news.manage');

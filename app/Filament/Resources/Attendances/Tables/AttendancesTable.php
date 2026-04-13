@@ -49,24 +49,27 @@ class AttendancesTable
             ? (bool) ($record->is_lunch_tip_denied ?? false)
             : (bool) ($record->is_dinner_tip_denied ?? false);
 
+        // 1. Explicit exclusion always wins.
         if ($denied) {
             return 'denied';
         }
-        if ($clock && $applied && ! $denied) {
+
+        // 2. Flag-first: admin grant (with or without a physical clock-in) is sufficient.
+        if ($applied) {
             $eligible = $meal === 'lunch'
                 ? TipAttendanceScope::lunchEligible($record)
                 : TipAttendanceScope::dinnerEligible($record);
 
             return $eligible ? 'eligible' : 'neutral';
         }
-        if ($clock && ! $applied) {
+
+        // 3. Clocked in but admin has not yet validated the tip grant.
+        if ($clock) {
             return 'pending';
         }
-        if (! $clock) {
-            return 'no_punch';
-        }
 
-        return 'neutral';
+        // 4. No clock-in and no manual grant.
+        return 'no_punch';
     }
 
     public static function formatMealRange(Attendance $record, string $meal): string
@@ -182,6 +185,7 @@ class AttendancesTable
                     ->form(fn (Form $form): Form => AttendanceForm::configure($form))
                     ->using(function (array $data, Table $table): Model {
                         $data = AttendanceFormSaveData::normalizeForCreate($data);
+                        $data = AttendanceFormSaveData::finalizeForSave($data, null);
                         AttendanceFormSaveData::assertAtLeastOneMealClockIn($data);
 
                         $existing = Attendance::query()

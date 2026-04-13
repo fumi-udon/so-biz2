@@ -3,11 +3,11 @@
 namespace App\Filament\Resources\Attendances\Forms;
 
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 
@@ -37,29 +37,35 @@ class AttendanceForm
                             ->label(__('hq.form_date', [], 'fr'))
                             ->required()
                             ->native(false)
-                            ->displayFormat('d/m/Y'),
+                            ->locale('fr')
+                            ->displayFormat('d/m/Y')
+                            ->weekStartsOnMonday()
+                            ->live(debounce: 500),
                     ])
                     ->extraAttributes([
                         'class' => self::SKY_BLOCK,
                     ]),
 
                 Section::make(__('hq.form_section_planned', [], 'fr'))
+                    ->description(__('hq.form_section_planned_desc', [], 'fr'))
                     ->compact()
                     ->columns(['default' => 2, 'md' => 2])
                     ->schema([
-                        DateTimePicker::make('scheduled_in_at')
+                        TimePicker::make('scheduled_in_at')
                             ->label(__('hq.form_scheduled_in_lunch', [], 'fr'))
                             ->helperText(__('hq.form_scheduled_in_lunch_help', [], 'fr'))
                             ->nullable()
                             ->native(false)
-                            ->displayFormat('d/m/Y H:i')
+                            ->locale('fr')
+                            ->displayFormat('H:i')
                             ->seconds(false),
-                        DateTimePicker::make('scheduled_dinner_at')
+                        TimePicker::make('scheduled_dinner_at')
                             ->label(__('hq.form_scheduled_in_dinner', [], 'fr'))
                             ->helperText(__('hq.form_scheduled_in_dinner_help', [], 'fr'))
                             ->nullable()
                             ->native(false)
-                            ->displayFormat('d/m/Y H:i')
+                            ->locale('fr')
+                            ->displayFormat('H:i')
                             ->seconds(false),
                     ])
                     ->extraAttributes([
@@ -67,20 +73,23 @@ class AttendanceForm
                     ]),
 
                 Section::make(__('hq.form_section_lunch', [], 'fr'))
+                    ->description(__('hq.form_section_lunch_desc', [], 'fr'))
                     ->compact()
                     ->columns(['default' => 2, 'md' => 2])
                     ->schema([
-                        DateTimePicker::make('lunch_in_at')
+                        TimePicker::make('lunch_in_at')
                             ->label(__('hq.form_lunch_in', [], 'fr'))
                             ->nullable()
                             ->native(false)
-                            ->displayFormat('d/m/Y H:i')
+                            ->locale('fr')
+                            ->displayFormat('H:i')
                             ->seconds(false),
-                        DateTimePicker::make('lunch_out_at')
+                        TimePicker::make('lunch_out_at')
                             ->label(__('hq.form_lunch_out', [], 'fr'))
                             ->nullable()
                             ->native(false)
-                            ->displayFormat('d/m/Y H:i')
+                            ->locale('fr')
+                            ->displayFormat('H:i')
                             ->seconds(false),
                     ])
                     ->extraAttributes([
@@ -88,20 +97,23 @@ class AttendanceForm
                     ]),
 
                 Section::make(__('hq.form_section_dinner', [], 'fr'))
+                    ->description(__('hq.form_section_dinner_desc', [], 'fr'))
                     ->compact()
                     ->columns(['default' => 2, 'md' => 2])
                     ->schema([
-                        DateTimePicker::make('dinner_in_at')
+                        TimePicker::make('dinner_in_at')
                             ->label(__('hq.form_dinner_in', [], 'fr'))
                             ->nullable()
                             ->native(false)
-                            ->displayFormat('d/m/Y H:i')
+                            ->locale('fr')
+                            ->displayFormat('H:i')
                             ->seconds(false),
-                        DateTimePicker::make('dinner_out_at')
+                        TimePicker::make('dinner_out_at')
                             ->label(__('hq.form_dinner_out', [], 'fr'))
                             ->nullable()
                             ->native(false)
-                            ->displayFormat('d/m/Y H:i')
+                            ->locale('fr')
+                            ->displayFormat('H:i')
                             ->seconds(false),
                     ])
                     ->extraAttributes([
@@ -152,16 +164,20 @@ class AttendanceForm
                     ->schema([
                         Toggle::make('is_lunch_tip_applied')
                             ->label(__('hq.toggle_lunch_apply', [], 'fr'))
-                            ->helperText(__('hq.toggle_lunch_apply_help', [], 'fr')),
+                            ->helperText(__('hq.toggle_lunch_apply_help', [], 'fr'))
+                            ->default(true),
                         Toggle::make('is_lunch_tip_denied')
                             ->label(__('hq.toggle_lunch_deny', [], 'fr'))
-                            ->helperText(__('hq.toggle_lunch_deny_help', [], 'fr')),
+                            ->helperText(__('hq.toggle_lunch_deny_help', [], 'fr'))
+                            ->default(false),
                         Toggle::make('is_dinner_tip_applied')
                             ->label(__('hq.toggle_dinner_apply', [], 'fr'))
-                            ->helperText(__('hq.toggle_dinner_apply_help', [], 'fr')),
+                            ->helperText(__('hq.toggle_dinner_apply_help', [], 'fr'))
+                            ->default(true),
                         Toggle::make('is_dinner_tip_denied')
                             ->label(__('hq.toggle_dinner_deny', [], 'fr'))
-                            ->helperText(__('hq.toggle_dinner_deny_help', [], 'fr')),
+                            ->helperText(__('hq.toggle_dinner_deny_help', [], 'fr'))
+                            ->default(false),
                     ])
                     ->extraAttributes([
                         'class' => self::AMBER_BLOCK,
