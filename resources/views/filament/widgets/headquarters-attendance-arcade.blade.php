@@ -7,41 +7,34 @@
 <x-filament-widgets::widget>
     <x-filament::section :compact="true">
         <x-slot name="heading">
-            <span class="inline-flex items-center gap-1.5 rounded-r-md border-l-4 border-emerald-600 bg-white py-0.5 pl-2 pr-2 text-[12px] font-bold tracking-tight text-gray-950 shadow-sm ring-1 ring-gray-200 dark:border-emerald-500 dark:bg-gray-950 dark:text-white dark:ring-gray-700 sm:text-sm">
-                <span class="select-none text-[11px]" aria-hidden="true">🌟</span>
-                Synthèse présences (mois en cours)
+            <span class="inline-flex max-w-full items-center gap-1 rounded-r-md border-l-4 border-emerald-600 bg-white py-0.5 pl-1.5 pr-1.5 text-[11px] font-bold tracking-tight text-gray-950 shadow-sm ring-1 ring-gray-200 dark:border-emerald-500 dark:bg-gray-950 dark:text-white dark:ring-gray-700 sm:text-xs" title="Synthèse présences (mois en cours)">
+                <span class="select-none" aria-hidden="true">🌟</span>
+                <span class="truncate">Prés.·mois</span>
             </span>
         </x-slot>
         <x-slot name="description">
-            <div class="space-y-1">
-                <span class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50/90 px-1.5 py-0.5 text-[12px] font-semibold text-emerald-950 shadow-sm dark:border-emerald-600/40 dark:bg-emerald-950/40 dark:text-emerald-50">
+            <div class="space-y-0.5">
+                <span class="inline-flex max-w-full items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50/90 px-1 py-0.5 text-[10px] font-semibold text-emerald-950 dark:border-emerald-600/40 dark:bg-emerald-950/40 dark:text-emerald-50 sm:text-[11px]">
                     <span class="select-none opacity-80" aria-hidden="true">🪙</span>
-                    Période : {{ $monthLabel }} (1<sup>er</sup> → aujourd’hui)
+                    <span class="truncate">{{ $monthLabel }}</span>
                 </span>
-                <p class="text-[11px] font-medium leading-snug text-gray-900 dark:text-gray-100 sm:text-[12px]">
-                    <span class="font-bold text-gray-950 dark:text-gray-50">Retards (fois)</span> : lignes du mois avec <span class="font-mono">late_minutes &gt; 0</span>.<br>
-                    <span class="font-bold text-gray-950 dark:text-gray-50">Abs. équivalent (jours)</span> : jours comptés absents / fermeture. Ligne surlignée si <span class="font-bold text-amber-900 dark:text-amber-100">≥ 3 retards</span> ou <span class="font-bold text-amber-900 dark:text-amber-100">≥ 2 jours</span>.
+                <p class="text-[9px] font-medium leading-snug text-gray-900 dark:text-gray-100 sm:text-[10px]">
+                    Ret = <span class="font-mono">late&gt;0</span> · Abs = j. absents · <span class="text-amber-900 dark:text-amber-100">⚠ 3+ ret. / 2+j</span>
                 </p>
             </div>
         </x-slot>
 
         @if ($rows->isEmpty())
-            <p class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-2 py-2 text-[12px] font-semibold text-gray-800 dark:border-gray-600 dark:bg-gray-900/50 dark:text-gray-100 sm:text-sm">Aucun membre à afficher.</p>
+            <p class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-2 py-2 text-[11px] font-semibold text-gray-800 dark:border-gray-600 dark:bg-gray-900/50 dark:text-gray-100">Aucun membre.</p>
         @else
-            <div class="-mx-1 overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-950 md:mx-0">
-                <table class="w-full min-w-[20rem] border-collapse text-left text-[12px] leading-tight text-gray-950 sm:min-w-[22rem] sm:text-sm dark:text-gray-100">
+            <div class="w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-950">
+                <table class="w-full table-fixed border-collapse text-[10px] leading-tight text-gray-950 sm:text-[11px] dark:text-gray-100">
                     <thead>
                         <tr class="border-b border-emerald-100 bg-emerald-50 text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-50">
-                            <th class="whitespace-nowrap px-1 py-1 font-bold sm:px-2 sm:py-1.5">Membre</th>
-                            <th class="whitespace-nowrap px-1 py-1 text-right font-bold sm:px-2 sm:py-1.5">
-                                <span class="block">Retards</span>
-                                <span class="block text-[10px] font-semibold normal-case opacity-95 sm:text-[11px]">(fois)</span>
-                            </th>
-                            <th class="whitespace-nowrap px-1 py-1 text-right font-bold sm:px-2 sm:py-1.5">
-                                <span class="block">Abs. équ.</span>
-                                <span class="block text-[10px] font-semibold normal-case opacity-95 sm:text-[11px]">(jours)</span>
-                            </th>
-                            <th class="min-w-[4rem] px-1 py-1 font-bold sm:min-w-[5rem] sm:px-2 sm:py-1.5">Échelle</th>
+                            <th class="w-[36%] px-0.5 py-1 text-left font-bold" title="Membre">N.</th>
+                            <th class="w-[18%] px-0.5 py-1 text-right font-bold" title="Retards (fois)">ret</th>
+                            <th class="w-[18%] px-0.5 py-1 text-right font-bold" title="Absence équivalente (jours)">abs</th>
+                            <th class="w-[28%] px-0.5 py-1 font-bold" title="Échelle relative">~</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -64,36 +57,34 @@
                                     'bg-amber-50/90 ring-1 ring-amber-300/80 dark:bg-amber-950/25 dark:ring-amber-600/40' => $warn,
                                 ])
                             >
-                                <td class="max-w-[8rem] truncate px-1 py-0.5 font-bold text-gray-950 dark:text-gray-50 sm:max-w-[12rem] sm:px-2 sm:py-1" title="{{ $staff->name }}">
+                                <td class="max-w-0 truncate px-0.5 py-0.5 font-bold text-gray-950 dark:text-gray-50" title="{{ $staff->name }}">
                                     {{ $staff->name }}
                                 </td>
-                                <td class="px-1 py-0.5 text-right sm:px-2 sm:py-1">
-                                    <span class="inline-flex min-w-[2.75rem] flex-col items-end rounded-md border px-1.5 py-0.5 font-mono tabular-nums font-bold sm:min-w-[3.25rem] {{ $latePillClass }}">
-                                        <span class="text-[12px] leading-none sm:text-sm">{{ $late }}</span>
-                                        <span class="text-[10px] font-semibold leading-none opacity-90">fois</span>
+                                <td class="px-0.5 py-0.5 text-right">
+                                    <span class="inline-flex min-w-0 flex-col items-end rounded border px-1 py-0.5 font-mono tabular-nums font-bold {{ $latePillClass }}">
+                                        <span class="text-[10px] leading-none sm:text-[11px]">{{ $late }}</span>
                                     </span>
                                 </td>
-                                <td class="px-1 py-0.5 text-right sm:px-2 sm:py-1">
+                                <td class="px-0.5 py-0.5 text-right">
                                     <span
                                         @class([
-                                            'inline-flex min-w-[2.75rem] flex-col items-end rounded-md border px-1.5 py-0.5 font-mono tabular-nums font-bold sm:min-w-[3.25rem]',
+                                            'inline-flex min-w-0 flex-col items-end rounded border px-1 py-0.5 font-mono tabular-nums font-bold',
                                             'border-amber-200 bg-amber-50 text-amber-950 ring-1 ring-amber-100 dark:border-amber-600/40 dark:bg-amber-950/35 dark:text-amber-50' => $abs > 0,
                                             'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300' => $abs === 0,
                                         ])
                                     >
-                                        <span class="text-[12px] leading-none sm:text-sm">{{ $abs }}</span>
-                                        <span class="text-[10px] font-semibold leading-none opacity-90">j.</span>
+                                        <span class="text-[10px] leading-none sm:text-[11px]">{{ $abs }}</span>
                                     </span>
                                 </td>
-                                <td class="px-1 py-0.5 align-middle sm:px-2 sm:py-1">
-                                    <div class="flex items-center gap-1.5">
-                                        <div class="h-2 min-w-[3rem] flex-1 overflow-hidden rounded border border-emerald-200 bg-gray-100 dark:border-emerald-800/50 dark:bg-gray-900 sm:min-w-[4rem]">
+                                <td class="px-0.5 py-0.5 align-middle">
+                                    <div class="flex items-center gap-1">
+                                        <div class="h-1.5 min-w-0 flex-1 overflow-hidden rounded border border-emerald-200 bg-gray-100 dark:border-emerald-800/50 dark:bg-gray-900">
                                             <div
                                                 class="h-full rounded-sm bg-gradient-to-r from-emerald-500 to-sky-400 dark:from-emerald-600 dark:to-sky-500"
                                                 style="width: {{ $pct }}%"
                                             ></div>
                                         </div>
-                                        <span class="shrink-0 font-mono text-[10px] tabular-nums text-gray-800 dark:text-gray-200 sm:text-[11px]">{{ $pct }}%</span>
+                                        <span class="shrink-0 font-mono text-[9px] tabular-nums text-gray-800 dark:text-gray-200 sm:text-[10px]">{{ $pct }}%</span>
                                     </div>
                                 </td>
                             </tr>

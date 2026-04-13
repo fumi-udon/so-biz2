@@ -63,19 +63,19 @@ class LowStockAlertWidget extends TableWidget
             ->columns([
                 TextColumn::make('inventoryItem.name')
                     ->label('Article')
-                    ->extraCellAttributes(['class' => 'text-[12px] font-medium text-gray-950 dark:text-gray-100']),
+                    ->extraCellAttributes(['class' => 'text-[11px] font-medium text-gray-950 dark:text-gray-100']),
                 TextColumn::make('inventoryItem.category')
                     ->label('Catégorie')
-                    ->extraCellAttributes(['class' => 'text-[12px] text-gray-900 dark:text-gray-100']),
+                    ->extraCellAttributes(['class' => 'text-[11px] text-gray-900 dark:text-gray-100']),
                 TextColumn::make('value')
                     ->label('Reste')
                     ->formatStateUsing(fn (?string $state): string => $state ?? '—')
                     ->color('danger')
                     ->weight('bold')
-                    ->extraCellAttributes(['class' => 'text-[12px]']),
+                    ->extraCellAttributes(['class' => 'text-[11px]']),
                 TextColumn::make('inventoryItem.unit')
                     ->label('Unité')
-                    ->extraCellAttributes(['class' => 'text-[12px] text-gray-900 dark:text-gray-100']),
+                    ->extraCellAttributes(['class' => 'text-[11px] text-gray-900 dark:text-gray-100']),
             ])
             ->paginated(false);
     }

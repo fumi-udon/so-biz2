@@ -4,34 +4,39 @@
 @endphp
 
 <x-filament-widgets::widget>
-    <div wire:poll.30s class="max-w-full">
+    <div wire:poll.30s class="w-full max-w-full overflow-hidden">
         <x-filament::section :compact="true" class="!fi-section-content-ctn">
             <x-slot name="heading">
-                <span class="text-base font-bold text-gray-950 dark:text-white">Présences du jour (temps réel)</span>
-                <span class="ml-2 text-[12px] font-normal text-gray-800 dark:text-gray-100">{{ $businessDate }}</span>
+                <span class="text-sm font-bold text-gray-950 dark:text-white">Présences · live</span>
+                <span class="ml-1.5 text-[11px] font-normal text-gray-800 dark:text-gray-100">{{ $businessDate }}</span>
             </x-slot>
             <x-slot name="description">
-                <span class="text-[12px] font-medium text-gray-900 dark:text-gray-100">Mise à jour toutes les 30 s · vert si en service</span>
+                <span class="text-[10px] font-medium text-gray-800 dark:text-gray-200">MAJ 30s · vert = en service</span>
             </x-slot>
 
             @if ($rows->isEmpty())
-                <p class="text-[12px] font-medium text-gray-800 dark:text-gray-100">Aucun membre à afficher.</p>
+                <p class="text-[11px] font-medium text-gray-800 dark:text-gray-100">Aucun membre.</p>
             @else
-                <div class="w-full overflow-x-auto rounded-md border border-gray-300 dark:border-gray-700">
-                    <table class="w-full text-left text-[12px] whitespace-nowrap">
+                <div class="w-full overflow-hidden rounded-md border border-gray-300 dark:border-gray-700">
+                    <table class="w-full table-fixed border-collapse text-left text-[11px]">
+                        <colgroup>
+                            <col class="w-[38%] sm:w-[40%]" />
+                            <col class="w-[31%] sm:w-[30%]" />
+                            <col class="w-[31%] sm:w-[30%]" />
+                        </colgroup>
                         <thead class="border-b-2 border-gray-400 bg-gray-50 dark:border-gray-600 dark:bg-gray-900">
                             <tr>
-                                <th class="px-2 py-1.5 font-bold text-[12px] text-gray-950 dark:text-gray-50">Équipe</th>
-                                <th class="bg-amber-50/50 px-2 py-1.5 text-center text-[12px] dark:bg-amber-950/30">
-                                    <div class="inline-flex items-center justify-center gap-1">
-                                        <x-filament::icon icon="heroicon-m-sun" class="h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400" />
-                                        <span class="font-bold text-amber-950 dark:text-amber-50">Déjeuner (AM)</span>
+                                <th class="px-1 py-1 font-bold text-[10px] uppercase tracking-wide text-gray-950 dark:text-gray-50 sm:px-1.5 sm:text-[11px]">Eq.</th>
+                                <th class="bg-amber-50/50 px-0.5 py-1 text-center dark:bg-amber-950/30" title="Déjeuner">
+                                    <div class="flex flex-col items-center gap-0 leading-none">
+                                        <x-filament::icon icon="heroicon-m-sun" class="mx-auto h-4 w-4 text-amber-700 dark:text-amber-400" />
+                                        <span class="text-[9px] font-black text-amber-950 dark:text-amber-50 sm:text-[10px]">AM</span>
                                     </div>
                                 </th>
-                                <th class="bg-indigo-50/50 px-2 py-1.5 text-center text-[12px] dark:bg-indigo-950/30">
-                                    <div class="inline-flex items-center justify-center gap-1">
-                                        <x-filament::icon icon="heroicon-m-moon" class="h-5 w-5 shrink-0 text-indigo-700 dark:text-indigo-400" />
-                                        <span class="font-bold text-indigo-950 dark:text-indigo-50">Dîner (PM)</span>
+                                <th class="bg-indigo-50/50 px-0.5 py-1 text-center dark:bg-indigo-950/30" title="Dîner">
+                                    <div class="flex flex-col items-center gap-0 leading-none">
+                                        <x-filament::icon icon="heroicon-m-moon" class="mx-auto h-4 w-4 text-indigo-700 dark:text-indigo-400" />
+                                        <span class="text-[9px] font-black text-indigo-950 dark:text-indigo-50 sm:text-[10px]">PM</span>
                                     </div>
                                 </th>
                             </tr>
@@ -73,57 +78,57 @@
                                 @endphp
                                 <tr wire:key="roster-{{ $staff->id }}" class="hover:bg-gray-50 dark:hover:bg-gray-900/50">
                                     <td @class([
-                                        'px-2 py-1.5 align-middle',
+                                        'px-1 py-1 align-middle sm:px-1.5',
                                         'bg-emerald-50/50 dark:bg-emerald-950/20' => $rowPulse,
                                     ])>
-                                        <div class="flex items-center gap-1.5">
+                                        <div class="flex min-w-0 items-center gap-1">
                                             <span class="inline-flex shrink-0" title="{{ $row['role_label'] ?? '' }}">
                                                 <x-filament::icon
                                                     :icon="$roleIcon"
-                                                    class="h-5 w-5 {{ $iconTone }}"
+                                                    class="h-3.5 w-3.5 sm:h-4 sm:w-4 {{ $iconTone }}"
                                                 />
                                             </span>
                                             <div @class([
-                                                'flex min-w-0 flex-1 items-center gap-1 rounded-sm px-1 py-0.5',
+                                                'flex min-w-0 flex-1 items-center gap-0.5 rounded-sm py-0.5',
                                                 'animate-pulse ring-1 ring-emerald-500 dark:ring-emerald-400' => $rowPulse,
                                             ])>
-                                                <span class="max-w-[88px] truncate text-[12px] font-semibold text-gray-950 dark:text-gray-50 sm:max-w-[140px]" title="{{ $staff->name }}">
+                                                <span class="min-w-0 flex-1 truncate text-[10px] font-semibold text-gray-950 dark:text-gray-50 sm:text-[11px]" title="{{ $staff->name }}">
                                                     {{ $staff->name }}
                                                 </span>
 
                                                 @if ($rowPulse)
-                                                    <span class="rounded-[2px] bg-emerald-600 px-1 py-[1px] text-[12px] font-black uppercase tracking-wider text-white dark:bg-emerald-500">IN</span>
+                                                    <span class="shrink-0 rounded-[2px] bg-emerald-600 px-0.5 py-px text-[9px] font-black text-white dark:bg-emerald-500 sm:text-[10px]">IN</span>
                                                 @elseif ($status === 'finished')
-                                                    <span class="rounded-[2px] bg-gray-300 px-1 py-[1px] text-[12px] font-bold text-gray-900 dark:bg-gray-100">OUT</span>
+                                                    <span class="shrink-0 rounded-[2px] bg-gray-300 px-0.5 py-px text-[9px] font-bold text-gray-900 dark:bg-gray-100 sm:text-[10px]">OUT</span>
                                                 @elseif ($status === 'no_show' || $status === 'idle')
-                                                    <span class="rounded-[2px] bg-amber-200 px-1 py-[1px] text-[12px] font-bold text-amber-950 dark:bg-amber-100">!</span>
+                                                    <span class="shrink-0 rounded-[2px] bg-amber-200 px-0.5 py-px text-[9px] font-bold text-amber-950 dark:text-amber-100 sm:text-[10px]">!</span>
                                                 @endif
                                             </div>
                                         </div>
                                     </td>
 
-                                    <td class="bg-amber-50/20 px-2 py-1.5 text-center align-middle dark:bg-amber-950/10">
-                                        <div class="inline-flex items-center gap-1 font-mono text-[12px] tabular-nums">
+                                    <td class="bg-amber-50/15 px-0.5 py-1 text-center align-middle dark:bg-amber-950/10">
+                                        <div class="inline-flex max-w-full flex-wrap items-center justify-center gap-0.5 font-mono text-[10px] tabular-nums leading-tight sm:text-[11px]">
                                             @if ($lStatus === 'none')
                                                 <span class="text-gray-700 dark:text-gray-200">—</span>
                                             @else
                                                 <span class="text-gray-900 dark:text-gray-100">{{ $lPlanned ?? '—' }}</span>
                                                 @if ($lIn)
-                                                    <span class="opacity-70 text-gray-600 dark:text-gray-300">▶</span>
+                                                    <span class="opacity-60">▶</span>
                                                     <span class="font-bold {{ $actualTimeColor($lStatus) }}">{{ $lIn }}</span>
                                                 @endif
                                             @endif
                                         </div>
                                     </td>
 
-                                    <td class="bg-indigo-50/20 px-2 py-1.5 text-center align-middle dark:bg-indigo-950/10">
-                                        <div class="inline-flex items-center gap-1 font-mono text-[12px] tabular-nums">
+                                    <td class="bg-indigo-50/15 px-0.5 py-1 text-center align-middle dark:bg-indigo-950/10">
+                                        <div class="inline-flex max-w-full flex-wrap items-center justify-center gap-0.5 font-mono text-[10px] tabular-nums leading-tight sm:text-[11px]">
                                             @if ($dStatus === 'none')
                                                 <span class="text-gray-700 dark:text-gray-200">—</span>
                                             @else
                                                 <span class="text-gray-900 dark:text-gray-100">{{ $dPlanned ?? '—' }}</span>
                                                 @if ($dIn)
-                                                    <span class="opacity-70 text-gray-600 dark:text-gray-300">▶</span>
+                                                    <span class="opacity-60">▶</span>
                                                     <span class="font-bold {{ $actualTimeColor($dStatus) }}">{{ $dIn }}</span>
                                                 @endif
                                             @endif
