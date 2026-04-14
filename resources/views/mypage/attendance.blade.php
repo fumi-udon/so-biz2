@@ -74,16 +74,65 @@
                 </div>
             </div>
 
+            @if ($monthHourlyEquivPaye !== null)
+                @php
+                    $hw = (float) $staff->hourly_wage;
+                    $hwLabel = number_format($hw, 3, '.', ' ');
+                    $payLabel = number_format($monthHourlyEquivPaye, 3, '.', ' ');
+                @endphp
+                <div
+                    class="relative mb-3 overflow-hidden rounded-2xl border-4 border-black bg-gradient-to-b from-sky-400 via-sky-500 to-sky-600 p-4 text-gray-950 shadow-[0_8px_0_0_rgba(0,0,0,1)] dark:from-slate-800 dark:via-slate-900 dark:to-slate-950 dark:text-white"
+                    x-data="{ sparkle: false }"
+                    x-init="setInterval(() => { sparkle = true; setTimeout(() => sparkle = false, 420); }, 5200)"
+                >
+                    <div class="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/25 dark:bg-white/10"></div>
+                    <div class="pointer-events-none absolute -bottom-8 left-1/4 h-16 w-32 rounded-full bg-black/10 dark:bg-black/30"></div>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex min-w-0 flex-1 items-start gap-3">
+                            <div
+                                class="flex h-14 w-14 shrink-0 select-none items-center justify-center rounded border-4 border-black bg-[#f7c948] text-2xl font-black text-gray-950 shadow-[inset_0_-4px_0_0_rgba(0,0,0,0.15)] animate-mario-bump dark:bg-[#e6b422] dark:text-gray-950"
+                                role="presentation"
+                                aria-hidden="true"
+                            >
+                                ?
+                            </div>
+                            <div class="min-w-0">
+                                <div class="mt-0.5 font-mono text-sm font-black leading-snug text-gray-950 drop-shadow-[0_1px_0_rgba(255,255,255,0.35)] dark:text-white dark:drop-shadow-none">
+                                    Salaire estime (ce mois)
+                                </div>
+                                <div class="mt-1 font-mono text-xs font-semibold text-gray-900/90 dark:text-slate-200">
+                                    <span class="whitespace-nowrap">{{ $hwLabel }} DT/h</span>
+                                    <span class="mx-1 font-black text-gray-950 dark:text-white">×</span>
+                                    <span class="whitespace-nowrap">Heures ce mois {{ $fmtHm($monthMinutes) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end sm:gap-1">
+                            <span
+                                class="inline-flex text-3xl leading-none motion-reduce:animate-none animate-mario-coin-float"
+                                role="presentation"
+                                aria-hidden="true"
+                            >🪙</span>
+                            <div
+                                class="rounded-xl border-4 border-black bg-white px-4 py-2 text-right font-mono text-lg font-black tabular-nums text-emerald-900 shadow-[inset_0_3px_0_0_rgba(0,0,0,0.06)] transition duration-150 dark:bg-amber-100 dark:text-emerald-950"
+                                :class="sparkle ? 'ring-4 ring-yellow-300 ring-offset-2 ring-offset-sky-500 scale-[1.02] dark:ring-amber-400 dark:ring-offset-slate-900' : ''"
+                            >
+                                {{ $payLabel }} <span class="text-base font-black">DT</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            @else
+                <div class="mb-3 rounded-2xl border-2 border-dashed border-slate-300 bg-white p-4 text-sm font-semibold text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    Pas de tarif horaire enregistre : l’estimation salaire de ce mois ne peut pas s’afficher.
+                </div>
+            @endif
+
             {{-- 勤怠テーブル（閲覧のみ・修正は Filament 管理画面） --}}
             <div class="mb-4">
                 <div class="mb-2">
                     <h3 class="text-base font-black text-slate-900">🧾 Tableau detaille des pointages</h3>
-                    <p class="mt-1 text-xs leading-relaxed text-slate-700">
-                        <span class="font-semibold text-slate-900">【日本語】</span>データの修正が必要な場合はマネージャーまでご連絡ください（管理画面 Filament でのみ変更可能です）。
-                    </p>
-                    <p class="mt-1 text-xs leading-relaxed text-slate-600">
-                        Lecture seule : les corrections se font par un manager via l&apos;admin Filament.
-                    </p>
                 </div>
 
                 <div class="rounded-xl border-2 border-black bg-white p-3 shadow-[0_6px_0_0_rgba(0,0,0,1)]">

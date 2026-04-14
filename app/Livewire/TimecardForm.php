@@ -7,7 +7,6 @@ use App\Models\Staff;
 use App\Services\StaffPinAuthenticationService;
 use App\Services\TimecardPunchOutcome;
 use App\Services\TimecardPunchService;
-use App\Services\TipCalculationService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -48,11 +47,11 @@ class TimecardForm extends Component
 
     public string $extraReason = '';
 
-    public bool $showTipModal = false;
+    public bool $showTipAwardModal = false;
 
-    public ?string $tipModalState = null;
+    public bool $showLateClockInModal = false;
 
-    public ?string $tipTargetShift = null;
+    public ?int $lateClockInMinutes = null;
 
     public bool $showPunchCompleteModal = false;
 
@@ -135,6 +134,8 @@ class TimecardForm extends Component
     {
         $this->bannerError = null;
         $this->bannerSuccess = null;
+        $this->showLateClockInModal = false;
+        $this->lateClockInMinutes = null;
 
         if ($this->step !== 2 || $this->authenticatedStaffId === null) {
             return;
@@ -155,7 +156,6 @@ class TimecardForm extends Component
         }
 
         $staff = Staff::query()
-            ->with('jobLevel')
             ->where('id', $this->authenticatedStaffId)
             ->where('is_active', true)
             ->first();
@@ -179,9 +179,23 @@ class TimecardForm extends Component
         $this->syncExtraMealDefault();
 
         if (in_array($action, ['lunch_in', 'dinner_in'], true)) {
-            $isLate = $outcome->postFlow === 'mypage_late' && ($outcome->lateMinutes ?? 0) > 0;
-            $isZeroWeight = TipCalculationService::normalizeWeightScalar($staff->jobLevel?->default_weight) <= 0.0;
-            $this->openTipResultModal($action, $isLate, $isZeroWeight);
+            if ($outcome->tipAutoApplied && $this->authenticatedStaffId !== null) {
+                session()->put('mypage_staff_id', $this->authenticatedStaffId);
+                $this->showTipAwardModal = true;
+                $url = route('mypage.index', ['staff_id' => $this->authenticatedStaffId]);
+                $this->js('setTimeout(function(){ window.location.href = '.json_encode($url).' }, 3800)');
+
+                return;
+            }
+
+            if ($outcome->postFlow === 'mypage_late' && ($outcome->lateMinutes ?? 0) > 0) {
+                $this->showLateClockInModal = true;
+                $this->lateClockInMinutes = (int) $outcome->lateMinutes;
+
+                return;
+            }
+
+            $this->bannerSuccess = 'Entree enregistree.';
 
             return;
         }
@@ -193,6 +207,8 @@ class TimecardForm extends Component
     {
         $this->bannerError = null;
         $this->bannerSuccess = null;
+        $this->showLateClockInModal = false;
+        $this->lateClockInMinutes = null;
 
         if ($this->step !== 2 || $this->authenticatedStaffId === null) {
             return;
@@ -224,7 +240,6 @@ class TimecardForm extends Component
         ]);
 
         $staff = Staff::query()
-            ->with('jobLevel')
             ->where('id', $this->authenticatedStaffId)
             ->where('is_active', true)
             ->first();
@@ -251,10 +266,7 @@ class TimecardForm extends Component
         $this->extraReason = '';
         $this->refreshShiftState($staff);
         $this->syncExtraMealDefault();
-
-        $action = $this->extraMeal === 'lunch' ? 'lunch_in' : 'dinner_in';
-        $isZeroWeight = TipCalculationService::normalizeWeightScalar($staff->jobLevel?->default_weight) <= 0.0;
-        $this->openTipResultModal($action, false, $isZeroWeight);
+        $this->bannerSuccess = 'Entree exceptionnelle enregistree.';
     }
 
     public function resetAfterPunch(): void
@@ -277,57 +289,35 @@ class TimecardForm extends Component
         $this->resetAfterPunch();
     }
 
-    public function applyForTip(): mixed
+    /**
+     * Fermeture manuelle du message pourboire (redirection immédiate vers Mon espace).
+     */
+    public function dismissTipAwardToMypage(): mixed
     {
-        if ($this->authenticatedStaffId === null || $this->tipTargetShift === null) {
+        $this->showTipAwardModal = false;
+
+        if ($this->authenticatedStaffId === null) {
             return redirect()->route('mypage.index');
         }
 
-        // weight = 0 のスタッフは自己申請不可（Manager 手動付与経路のみ許可）
-        $staffForWeight = Staff::query()
-            ->with('jobLevel')
-            ->where('id', $this->authenticatedStaffId)
-            ->where('is_active', true)
-            ->first();
-
-        if (TipCalculationService::normalizeWeightScalar($staffForWeight?->jobLevel?->default_weight) <= 0.0) {
-            session()->put('mypage_staff_id', $this->authenticatedStaffId);
-            $this->resetTipModalState();
-
-            return redirect()->route('mypage.index', ['staff_id' => $this->authenticatedStaffId]);
-        }
-
-        $dateString = app(TimecardPunchService::class)->resolveTargetBusinessDate()->toDateString();
-        $attendance = Attendance::query()
-            ->where('staff_id', $this->authenticatedStaffId)
-            ->where('date', $dateString)
-            ->first();
-
-        if ($attendance) {
-            if ($this->tipTargetShift === 'lunch') {
-                $attendance->is_lunch_tip_applied = true;
-            } elseif ($this->tipTargetShift === 'dinner') {
-                $attendance->is_dinner_tip_applied = true;
-            }
-            $attendance->save();
-        }
-
         session()->put('mypage_staff_id', $this->authenticatedStaffId);
-        $this->resetTipModalState();
 
         return redirect()->route('mypage.index', ['staff_id' => $this->authenticatedStaffId]);
     }
 
-    public function declineTipAndRedirect(): mixed
+    /**
+     * Fermeture du modal retard (entrée) : session Mon espace + redirection.
+     */
+    public function dismissLateModalToMypage(): mixed
     {
-        if ($this->authenticatedStaffId === null) {
-            $this->resetTipModalState();
+        $this->showLateClockInModal = false;
+        $this->lateClockInMinutes = null;
 
+        if ($this->authenticatedStaffId === null) {
             return redirect()->route('mypage.index');
         }
 
         session()->put('mypage_staff_id', $this->authenticatedStaffId);
-        $this->resetTipModalState();
 
         return redirect()->route('mypage.index', ['staff_id' => $this->authenticatedStaffId]);
     }
@@ -525,20 +515,6 @@ class TimecardForm extends Component
         $this->js('setTimeout(() => $wire.closePunchCompleteModal(), 4200)');
     }
 
-    private function openTipResultModal(string $action, bool $isLate, bool $isZeroWeight = false): void
-    {
-        $this->tipTargetShift = $action === 'lunch_in' ? 'lunch' : 'dinner';
-        $this->tipModalState = $isZeroWeight ? 'SKIP' : ($isLate ? 'LOSE' : 'WIN');
-        $this->showTipModal = true;
-    }
-
-    private function resetTipModalState(): void
-    {
-        $this->showTipModal = false;
-        $this->tipModalState = null;
-        $this->tipTargetShift = null;
-    }
-
     private function resetToStepOne(): void
     {
         $this->step = 1;
@@ -559,6 +535,8 @@ class TimecardForm extends Component
         $this->showPunchCompleteModal = false;
         $this->punchCompleteLabel = null;
         $this->noWorkDataToday = false;
-        $this->resetTipModalState();
+        $this->showTipAwardModal = false;
+        $this->showLateClockInModal = false;
+        $this->lateClockInMinutes = null;
     }
 }

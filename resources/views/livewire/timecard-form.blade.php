@@ -305,49 +305,71 @@
         @endif
     @endif
 
-    @if ($showTipModal)
+    @if ($showTipAwardModal)
         <div
-            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 dark:bg-black/80"
-            wire:click.self="declineTipAndRedirect"
-            wire:key="tip-result-overlay"
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-4 dark:bg-black/80"
+            wire:key="tip-award-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tip-award-title"
         >
-            <div class="w-full max-w-md" wire:click.stop>
-                @if ($tipModalState === 'WIN')
-                    <div class="rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 p-4 text-gray-950 dark:text-gray-950">
-                        <p class="mb-2 text-lg font-black">🎉 Bonjour 🎉</p>
-                        <p class="mb-4 text-sm font-bold">Arrivee a l'heure. Droit de demande de tip obtenu !</p>
-                        <button
-                            type="button"
-                            wire:click="applyForTip"
-                            class="w-full rounded-lg bg-black/85 px-3 py-2 text-sm font-extrabold text-yellow-200"
-                        >
-                            🪙 Get Your Tip!
-                        </button>
-                    </div>
-                @elseif ($tipModalState === 'LOSE')
-                    <div class="rounded-xl bg-gradient-to-r from-red-800 to-gray-900 p-4 text-gray-100">
-                        <p class="mb-2 text-lg font-black">⚠️ Retard enregistré.</p>
-                        <button
-                            type="button"
-                            wire:click="declineTipAndRedirect"
-                            class="w-full rounded-lg bg-gray-600 px-3 py-2 text-sm font-extrabold text-gray-100"
-                        >
-                            My page (retour)
-                        </button>
-                    </div>
-                @elseif ($tipModalState === 'SKIP')
-                    <div class="rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 p-4 text-gray-100">
-                        <p class="mb-2 text-lg font-black">✅ Pointage enregistre !</p>
-                        <p class="mb-4 text-sm font-bold">Merci pour votre ponctualite !</p>
-                        <button
-                            type="button"
-                            wire:click="declineTipAndRedirect"
-                            class="w-full rounded-lg bg-slate-500 px-3 py-2 text-sm font-extrabold text-gray-100 hover:bg-slate-400 active:scale-95 transition-all"
-                        >
-                            ▶ Mon espace
-                        </button>
-                    </div>
-                @endif
+            <div
+                class="w-full max-w-md rounded-2xl border-2 border-emerald-500/70 bg-slate-900 p-5 text-center shadow-2xl ring-1 ring-emerald-400/25 dark:border-emerald-400/50 dark:bg-slate-950 dark:ring-emerald-500/30"
+                wire:click.stop
+            >
+                <p id="tip-award-title" class="mb-1 text-xs font-black uppercase tracking-[0.28em] text-emerald-300">
+                    Pourboire
+                </p>
+                <p class="mb-3 text-lg font-extrabold leading-snug text-white sm:text-xl">
+                    Le pourboire a été attribué.
+                </p>
+                <p class="mb-4 text-sm font-medium text-slate-300">
+                    Redirection automatique vers Mon espace…
+                </p>
+                <button
+                    type="button"
+                    wire:click="dismissTipAwardToMypage"
+                    class="w-full rounded-xl border-2 border-emerald-400/80 bg-emerald-500 px-4 py-3 text-sm font-black text-slate-950 shadow-[0_4px_0_0_rgba(6,78,59,0.85)] transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-300/60 active:translate-y-0.5 active:shadow-none"
+                >
+                    Continuer vers Mon espace
+                </button>
+            </div>
+        </div>
+    @endif
+
+    @if ($showLateClockInModal)
+        <div
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 p-4 dark:bg-black/80"
+            wire:click.self="dismissLateModalToMypage"
+            wire:key="late-clock-in-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="late-clock-in-title"
+        >
+            <div
+                class="w-full max-w-md rounded-2xl border-2 border-rose-600/50 bg-gradient-to-br from-rose-950 via-slate-900 to-slate-950 p-5 text-center shadow-2xl ring-1 ring-rose-500/20 dark:border-rose-500/40 dark:from-rose-950 dark:via-slate-950 dark:to-black"
+                wire:click.stop
+            >
+                <p id="late-clock-in-title" class="mb-2 text-lg font-black text-white">
+                    Retard enregistré
+                </p>
+                <p class="mb-1 text-sm font-semibold text-rose-100/95">
+                    @if (($lateClockInMinutes ?? 0) > 0)
+                        +{{ $lateClockInMinutes }} min par rapport au créneau prévu.
+                    @else
+                        Votre pointage d’entrée a été enregistré avec un retard.
+                    @endif
+                </p>
+                <p class="mb-4 text-xs font-medium text-slate-300">
+                    Le pourboire automatique pour ce service ne s’applique pas.
+                </p>
+                <button
+                    type="button"
+                    wire:click="dismissLateModalToMypage"
+                    class="w-full rounded-xl border-2 border-slate-500/80 bg-slate-700 px-4 py-3 text-sm font-extrabold text-white shadow-[0_4px_0_0_rgba(15,23,42,0.9)] transition hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-300/50 active:translate-y-0.5 active:shadow-none"
+                >
+                    Mon espace (retour)
+                </button>
             </div>
         </div>
     @endif

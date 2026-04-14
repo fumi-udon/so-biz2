@@ -12,5 +12,6 @@ final class TimecardPunchOutcome
         public ?string $errorMessage = null,
         public string $postFlow = 'none',
         public ?int $lateMinutes = null,
+        public bool $tipAutoApplied = false,
     ) {}
 }

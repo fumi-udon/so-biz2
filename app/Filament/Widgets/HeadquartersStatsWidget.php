@@ -29,14 +29,16 @@ class HeadquartersStatsWidget extends StatsOverviewWidget
             ->with(['staff' => fn ($q) => $q->withTrashed()])
             ->get();
 
-        $laborCost = 0.0;
+        $laborCostMilliemes = 0;
         foreach ($attendances as $attendance) {
             $minutes = $attendance->workMinutes();
             $wage = $attendance->staff?->hourly_wage;
-            if ($minutes !== null && $minutes > 0 && $wage !== null && (int) $wage > 0) {
-                $laborCost += ($minutes / 60) * (int) $wage;
+            if ($minutes !== null && $minutes > 0 && $wage !== null && (float) $wage > 0.0) {
+                // 分 × 時給 ÷ 60 の順で計算し整数ミリーム単位に変換（累積浮動小数点誤差を最小化）
+                $laborCostMilliemes += (int) round($minutes * (float) $wage / 60 * 1000);
             }
         }
+        $laborCost = round($laborCostMilliemes / 1000, 3);
 
         $attendanceCount = $attendances->count();
 
@@ -68,7 +70,7 @@ class HeadquartersStatsWidget extends StatsOverviewWidget
         return [
             Stat::make(
                 'Masse salariale (temps réel)',
-                number_format($laborCost, 0, '.', ' ').' DT',
+                number_format($laborCost, 3, '.', ' ').' DT',
             )
                 ->description('Tranches validées × taux horaire')
                 ->icon('heroicon-o-banknotes')

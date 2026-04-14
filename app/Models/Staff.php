@@ -50,7 +50,7 @@ class Staff extends Model
             'extra_profile' => 'array',
             'is_active' => 'boolean',
             'is_manager' => 'boolean',
-            'hourly_wage' => 'integer',
+            'hourly_wage' => 'decimal:3',
         ];
     }
 

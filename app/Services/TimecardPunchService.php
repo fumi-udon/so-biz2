@@ -131,9 +131,10 @@ final class TimecardPunchService
 
         $recordedLate = false;
         $lateDelta = 0;
+        $tipAutoApplied = false;
 
         try {
-            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $targetDate, $action, &$recordedLate, &$lateDelta): void {
+            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $targetDate, $action, &$recordedLate, &$lateDelta, &$tipAutoApplied): void {
                 $attendance = Attendance::query()->firstOrCreate(
                     [
                         'staff_id' => $staff->id,
@@ -166,6 +167,26 @@ final class TimecardPunchService
                 $lateDelta = max(0, $attendance->late_minutes - $beforeLate);
                 $recordedLate = $attendance->late_minutes > $beforeLate;
 
+                if ($action === 'lunch_in') {
+                    $mealLate = AttendanceLateCalculator::lateMinutesForMeal(
+                        $attendance->lunch_in_at,
+                        $attendance->scheduled_in_at
+                    );
+                    if ($mealLate === 0) {
+                        $attendance->is_lunch_tip_applied = true;
+                        $tipAutoApplied = true;
+                    }
+                } elseif ($action === 'dinner_in') {
+                    $mealLate = AttendanceLateCalculator::lateMinutesForMeal(
+                        $attendance->dinner_in_at,
+                        $attendance->scheduled_dinner_at
+                    );
+                    if ($mealLate === 0) {
+                        $attendance->is_dinner_tip_applied = true;
+                        $tipAutoApplied = true;
+                    }
+                }
+
                 $attendance->save();
             });
         } catch (QueryException $e) {
@@ -184,10 +205,10 @@ final class TimecardPunchService
 
         if ($isClockIn) {
             if ($recordedLate && $lateDelta > 0) {
-                return new TimecardPunchOutcome(true, null, 'mypage_late', $lateDelta);
+                return new TimecardPunchOutcome(true, null, 'mypage_late', $lateDelta, false);
             }
 
-            return new TimecardPunchOutcome(true, null, 'mypage_success');
+            return new TimecardPunchOutcome(true, null, 'mypage_success', null, $tipAutoApplied);
         }
 
         return new TimecardPunchOutcome(true, null, 'timecard_success');

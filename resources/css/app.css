@@ -12,4 +12,37 @@
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --animate-mario-bump: mario-bump 2.75s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+    --animate-mario-coin-float: mario-coin-float 0.9s ease-in-out infinite;
+}
+
+@keyframes mario-bump {
+    0%,
+    82%,
+    100% {
+        transform: translateY(0) scale(1);
+    }
+
+    85% {
+        transform: translateY(8px) scale(0.96, 0.9);
+    }
+
+    92% {
+        transform: translateY(-6px) scale(1.03, 1.06);
+    }
+
+    96% {
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes mario-coin-float {
+    0%,
+    100% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+        transform: translateY(-10px) rotate(14deg);
+    }
 }

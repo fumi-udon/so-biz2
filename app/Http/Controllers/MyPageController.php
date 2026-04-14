@@ -729,6 +729,7 @@ class MyPageController extends Controller
         $weekMinutes = 0;
         $monthMinutes = 0;
         $monthLateCount = 0;
+        $monthHourlyEquivPaye = null;
 
         if ($staff) {
             $monthAttendances = Attendance::query()
@@ -757,6 +758,10 @@ class MyPageController extends Controller
                     $monthLateCount++;
                 }
             }
+
+            if ($staff->hourly_wage !== null && (float) $staff->hourly_wage > 0.0) {
+                $monthHourlyEquivPaye = round($monthMinutes * (float) $staff->hourly_wage / 60, 3);
+            }
         }
 
         $editLogs = $staff
@@ -781,6 +786,7 @@ class MyPageController extends Controller
             'weekMinutes' => $weekMinutes,
             'monthMinutes' => $monthMinutes,
             'monthLateCount' => $monthLateCount,
+            'monthHourlyEquivPaye' => $monthHourlyEquivPaye,
             'editLogs' => $editLogs,
         ]);
     }

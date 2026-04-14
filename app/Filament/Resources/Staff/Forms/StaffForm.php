@@ -80,6 +80,8 @@ class StaffForm
                     ->numeric()
                     ->label('時給')
                     ->suffix('DT')
+                    ->step(0.001)
+                    ->rules(['nullable', 'numeric', 'min:0', 'decimal:0,3'])
                     ->nullable(),
                 TextInput::make('target_weekly_hours')
                     ->numeric()
