@@ -13,4 +13,15 @@ return [
     */
     'auto_clock_out_penalty_minutes' => (int) env('AUTO_CLOCK_OUT_PENALTY_MINUTES', 5),
 
+    /*
+    |--------------------------------------------------------------------------
+    | 出勤打刻解禁ウィンドウ（分）
+    |--------------------------------------------------------------------------
+    |
+    | lunch_in / dinner_in ボタンは、シフト開始時刻の N 分前から有効になる。
+    | デフォルト 60 分前。ENV: PUNCH_IN_OPEN_BEFORE_SHIFT_MINUTES で上書き可。
+    |
+    */
+    'punch_in_open_before_shift_minutes' => (int) env('PUNCH_IN_OPEN_BEFORE_SHIFT_MINUTES', 60),
+
 ];

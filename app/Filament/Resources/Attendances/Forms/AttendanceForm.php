@@ -158,25 +158,25 @@ class AttendanceForm
                     ]),
 
                 Section::make(__('hq.section_tip_title', [], 'fr'))
-                    ->description(__('hq.section_tip_desc', [], 'fr'))
+                    // ->description(__('hq.section_tip_desc', [], 'fr'))
                     ->compact()
                     ->columns(['default' => 2, 'md' => 4])
                     ->schema([
                         Toggle::make('is_lunch_tip_applied')
                             ->label(__('hq.toggle_lunch_apply', [], 'fr'))
-                            ->helperText(__('hq.toggle_lunch_apply_help', [], 'fr'))
-                            ->default(true),
+                            // ->helperText(__('hq.toggle_lunch_apply_help', [], 'fr'))
+                            ->default(false),
                         Toggle::make('is_lunch_tip_denied')
                             ->label(__('hq.toggle_lunch_deny', [], 'fr'))
-                            ->helperText(__('hq.toggle_lunch_deny_help', [], 'fr'))
+                            // ->helperText(__('hq.toggle_lunch_deny_help', [], 'fr'))
                             ->default(false),
                         Toggle::make('is_dinner_tip_applied')
                             ->label(__('hq.toggle_dinner_apply', [], 'fr'))
-                            ->helperText(__('hq.toggle_dinner_apply_help', [], 'fr'))
-                            ->default(true),
+                            // ->helperText(__('hq.toggle_dinner_apply_help', [], 'fr'))
+                            ->default(false),
                         Toggle::make('is_dinner_tip_denied')
                             ->label(__('hq.toggle_dinner_deny', [], 'fr'))
-                            ->helperText(__('hq.toggle_dinner_deny_help', [], 'fr'))
+                            // ->helperText(__('hq.toggle_dinner_deny_help', [], 'fr'))
                             ->default(false),
                     ])
                     ->extraAttributes([

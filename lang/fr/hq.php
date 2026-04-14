@@ -19,6 +19,11 @@ return [
     'col_tip_d' => '💰 Tip S',
     'col_late_min' => '🐢 Retard',
     'col_actions' => '🍄 Action',
+    'col_am' => '☀ AM',
+    'col_pm' => '🌙 PM',
+    'col_late_short' => '⏱',
+    'action_edit_icon' => '✏️',
+    'action_delete_icon' => '🗑',
 
     'filter_staff' => 'Collaborateur',
     'filter_month' => 'Mois affiché',

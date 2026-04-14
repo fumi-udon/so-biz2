@@ -60,6 +60,17 @@ class TimecardForm extends Component
     /** Aujourd'hui: aucun creneau dejeuner/diner prevu dans fixed_shifts (hors pointage en cours). */
     public bool $noWorkDataToday = false;
 
+    /**
+     * 「次の打刻可能時刻」案内。
+     * null = 案内不要（窓が開いているか、シフトなし）。
+     *
+     * @var array{lunch: string|null, dinner: string|null}
+     */
+    public array $punchInOpensAt = [
+        'lunch' => null,
+        'dinner' => null,
+    ];
+
     public function mount(): void
     {
         $agent = request()->header('User-Agent', '');
@@ -331,9 +342,11 @@ class TimecardForm extends Component
         $s = $this->shiftState;
 
         return match ($action) {
-            'lunch_in' => ! ($s['lunch_scheduled'] && ! $s['lunch_in'] && ! $s['lunch_out']),
+            // IN: シフトあり・未打刻 かつ 窓が開いている（punchInOpensAt が null = 窓open）
+            'lunch_in' => ! ($s['lunch_scheduled'] && ! $s['lunch_in'] && $this->punchInOpensAt['lunch'] === null),
             'lunch_out' => ! ($s['lunch_in'] && ! $s['lunch_out']),
-            'dinner_in' => ! ($s['dinner_scheduled'] && ! $s['dinner_in'] && ! $s['dinner_out']),
+            // dinner_in: ランチ未退勤でも dinner 窓が開いていれば許可（退勤忘れの許容）
+            'dinner_in' => ! ($s['dinner_scheduled'] && ! $s['dinner_in'] && $this->punchInOpensAt['dinner'] === null),
             'dinner_out' => ! ($s['dinner_in'] && ! $s['dinner_out']),
             default => true,
         };
@@ -465,15 +478,14 @@ class TimecardForm extends Component
 
     private function refreshShiftState(Staff $staff): void
     {
-        $dateString = app(TimecardPunchService::class)->resolveTargetBusinessDate()->toDateString();
         $svc = app(TimecardPunchService::class);
+        $bd = $svc->resolveTargetBusinessDate();
+        $dateString = $bd->toDateString();
 
         $att = Attendance::query()
             ->where('staff_id', $staff->id)
             ->where('date', $dateString)
             ->first();
-
-        $bd = $svc->resolveTargetBusinessDate();
 
         $this->shiftState = [
             'lunch_scheduled' => $svc->isMealScheduled($staff, $bd, 'lunch'),
@@ -482,6 +494,21 @@ class TimecardForm extends Component
             'lunch_out' => $att !== null && $att->lunch_out_at !== null,
             'dinner_in' => $att !== null && $att->dinner_in_at !== null,
             'dinner_out' => $att !== null && $att->dinner_out_at !== null,
+        ];
+
+        // 案内帯：窓が閉じているサービスだけ解禁時刻を保持（窓が開いたら null に戻す）。
+        // ランチIN済みは案内不要（lunch_in が true の場合はスキップ）。
+        $lunchNeedsInfo = $this->shiftState['lunch_scheduled']
+            && ! $this->shiftState['lunch_in']
+            && ! $svc->isPunchInWindowOpen($staff, $bd, 'lunch');
+
+        $dinnerNeedsInfo = $this->shiftState['dinner_scheduled']
+            && ! $this->shiftState['dinner_in']
+            && ! $svc->isPunchInWindowOpen($staff, $bd, 'dinner');
+
+        $this->punchInOpensAt = [
+            'lunch' => $lunchNeedsInfo ? $svc->punchInOpensAtDisplay($staff, $bd, 'lunch') : null,
+            'dinner' => $dinnerNeedsInfo ? $svc->punchInOpensAtDisplay($staff, $bd, 'dinner') : null,
         ];
     }
 
@@ -538,5 +565,6 @@ class TimecardForm extends Component
         $this->showTipAwardModal = false;
         $this->showLateClockInModal = false;
         $this->lateClockInMinutes = null;
+        $this->punchInOpensAt = ['lunch' => null, 'dinner' => null];
     }
 }

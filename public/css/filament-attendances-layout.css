@@ -1,35 +1,38 @@
 /**
- * Loaded only on filament.admin.resources.attendances.index — horizontal scroll
- * for wide tables on narrow viewports (Filament standard table layout preserved).
+ * Pointages page — high-density layout override.
+ * Loaded only on filament.admin.resources.attendances.index via AdminPanelProvider renderHook.
+ *
+ * The table now uses Filament Column Layout API (Split/Stack), which renders
+ * records as flex divs — NOT a <table>. Horizontal-scroll rules removed.
+ *
+ * The inner record content wrapper receives Filament's default `py-4 gap-y-3`.
+ * We reduce these to pack more rows on screen.
+ *
+ * Structure (Layout-mode records):
+ *   .fi-ta-record           ← outer wrapper (our RECORD_BLOCK + .att-dense-row)
+ *     > div.flex.items-center   ← checkbox / reorder wrapper
+ *       > div.flex.w-full.flex-col.gap-y-3.py-4   ← Filament inner wrapper  ← TARGET
  */
-.fi-resource-list-records-page .fi-ta-content-ctn {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+
+/* Target only our dense-row cards, not other pages */
+.att-dense-row > div > div {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    gap: 0.25rem !important;
 }
 
-.fi-resource-list-records-page .fi-ta-table {
-    width: max-content;
-    min-width: 100%;
-    table-layout: auto;
+/* Slightly tighten the Split flex gap inside each record */
+.att-dense-row .fi-ta-split {
+    gap: 0.5rem;
+    row-gap: 0.125rem;
 }
 
-.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile {
-    display: table !important;
-}
-
-.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > thead {
-    display: table-header-group !important;
-}
-
-.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > tbody {
-    display: table-row-group !important;
-}
-
-.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > tbody > tr {
-    display: table-row !important;
-}
-
-.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell,
-.fi-resource-list-records-page .fi-ta-table.fi-ta-table-stacked-on-mobile > thead > tr > .fi-ta-header-cell {
-    display: table-cell !important;
+/*
+ * Column-layout mode hard-codes action alignment as `start md:end` in Filament.
+ * Keep Edit + Delete icon buttons on one row, flush right, with a tight gap.
+ */
+.fi-resource-list-records-page .fi-ta-record .fi-ta-actions {
+    flex-wrap: nowrap !important;
+    gap: 0.25rem !important;
+    justify-content: flex-end !important;
 }

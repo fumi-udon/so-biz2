@@ -18,6 +18,7 @@ use Filament\Tables\Actions\CreateAction;
 use Filament\Tables\Actions\DeleteAction;
 use Filament\Tables\Actions\DeleteBulkAction;
 use Filament\Tables\Actions\EditAction;
+use Filament\Tables\Columns\Layout\Split;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Enums\FiltersLayout;
 use Filament\Tables\Filters\Filter;
@@ -30,31 +31,28 @@ use Illuminate\Support\HtmlString;
 
 class AttendancesTable
 {
-    private const string HEADER_CELL =
-        'text-xs font-black uppercase tracking-wide text-slate-900 dark:text-slate-100';
-
+    /** Compact card border — no heavy shadow to save vertical weight */
     private const string RECORD_BLOCK =
-        'mb-3 rounded-xl border-2 border-b-4 border-sky-300 bg-gradient-to-br from-white via-sky-50/70 to-cyan-50/50 shadow-md ring-1 ring-sky-200/70 dark:border-sky-700 dark:from-slate-900 dark:via-slate-900 dark:to-sky-950/40 dark:ring-sky-800/50';
+        'att-dense-row mb-px rounded-lg border border-b-2 border-sky-200 bg-white dark:border-sky-800 dark:bg-slate-900';
+
+    // ─── Tip state ───────────────────────────────────────────────────────────
 
     /**
      * @return 'eligible'|'denied'|'pending'|'no_punch'|'neutral'
      */
     private static function tipMealState(Attendance $record, string $meal): string
     {
-        $clock = $meal === 'lunch' ? $record->lunch_in_at !== null : $record->dinner_in_at !== null;
         $applied = $meal === 'lunch'
             ? (bool) ($record->is_lunch_tip_applied ?? false)
             : (bool) ($record->is_dinner_tip_applied ?? false);
         $denied = $meal === 'lunch'
             ? (bool) ($record->is_lunch_tip_denied ?? false)
             : (bool) ($record->is_dinner_tip_denied ?? false);
+        $clock = $meal === 'lunch' ? $record->lunch_in_at !== null : $record->dinner_in_at !== null;
 
-        // 1. Explicit exclusion always wins.
         if ($denied) {
             return 'denied';
         }
-
-        // 2. Flag-first: admin grant (with or without a physical clock-in) is sufficient.
         if ($applied) {
             $eligible = $meal === 'lunch'
                 ? TipAttendanceScope::lunchEligible($record)
@@ -62,25 +60,22 @@ class AttendancesTable
 
             return $eligible ? 'eligible' : 'neutral';
         }
-
-        // 3. Clocked in but admin has not yet validated the tip grant.
         if ($clock) {
             return 'pending';
         }
 
-        // 4. No clock-in and no manual grant.
         return 'no_punch';
     }
 
+    // ─── Format helpers ───────────────────────────────────────────────────────
+
     public static function formatMealRange(Attendance $record, string $meal): string
     {
-        $inKey = $meal === 'lunch' ? 'lunch_in_at' : 'dinner_in_at';
-        $outKey = $meal === 'lunch' ? 'lunch_out_at' : 'dinner_out_at';
-        $in = $record->{$inKey};
-        $out = $record->{$outKey};
+        $in = $meal === 'lunch' ? $record->lunch_in_at : $record->dinner_in_at;
+        $out = $meal === 'lunch' ? $record->lunch_out_at : $record->dinner_out_at;
 
         if (! $in && ! $out) {
-            return '—';
+            return '';
         }
 
         $inStr = $in instanceof Carbon ? $in->format('H:i') : '—';
@@ -89,78 +84,116 @@ class AttendancesTable
         return $inStr.' – '.$outStr;
     }
 
-    public static function mealRangeHtml(Attendance $record, string $meal): HtmlString
+    // ─── HTML builders ────────────────────────────────────────────────────────
+
+    /**
+     * One line: 14/04/2026 | Staff name
+     */
+    private static function identityLineHtml(Attendance $record): HtmlString
     {
-        $text = self::formatMealRange($record, $meal);
-        $hasPunch = $text !== '—';
+        $dateStr = $record->date instanceof Carbon
+            ? $record->date->format('d/m/Y')
+            : Carbon::parse($record->date)->format('d/m/Y');
+        $name = e((string) ($record->staff?->name ?? '—'));
 
-        $boxClass = $hasPunch
-            ? 'inline-flex max-w-full rounded-lg border border-emerald-300/80 bg-emerald-100 px-2 py-1 font-mono text-xs font-bold tabular-nums text-emerald-950 shadow-sm ring-1 ring-emerald-200/80 dark:border-emerald-700/50 dark:bg-emerald-950/50 dark:text-emerald-100 dark:ring-emerald-800/50'
-            : 'inline-flex rounded-lg border border-slate-200 bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700/80';
+        return new HtmlString(
+            '<span class="inline-flex min-w-0 max-w-full items-center gap-1.5 text-[12px] leading-none">'
+            .'<span class="shrink-0 font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-200">'.e($dateStr).'</span>'
+            .'<span class="shrink-0 text-slate-400 dark:text-slate-500">|</span>'
+            .'<span class="min-w-0 truncate font-bold text-slate-900 dark:text-white">'.$name.'</span>'
+            .'</span>'
+        );
+    }
 
-        $isAuto = $meal === 'lunch'
+    /**
+     * One compact line per meal:
+     *   ☀ 13:43 – 15:00  ✓   (tip eligible in amber)
+     *   🌙 ——                 (no punch)
+     */
+    private static function mealSegmentHtml(Attendance $record, string $meal): string
+    {
+        $isLunch = $meal === 'lunch';
+        $icon = $isLunch
+            ? '<span class="text-amber-500 dark:text-amber-400 text-[12px]" title="Service midi">☀</span>'
+            : '<span class="text-indigo-500 dark:text-indigo-400 text-[12px]" title="Service soir">🌙</span>';
+
+        $timeText = self::formatMealRange($record, $meal);
+        $hasPunch = $timeText !== '';
+
+        $isAuto = $isLunch
             ? (bool) ($record->is_lunch_auto_clocked_out ?? false)
             : (bool) ($record->is_dinner_auto_clocked_out ?? false);
-
-        // is_edited_by_admin はレコード単位フラグ。
-        // どちらかのミールが手修正されると両方の自動補完区間に ✏️ が付く仕様。
         $isEdited = $isAuto && (bool) ($record->is_edited_by_admin ?? false);
 
-        $badge = '';
-        if ($isAuto) {
+        if ($hasPunch) {
+            $suffix = '';
             if ($isEdited) {
-                $badge = ' <span title="Sortie auto — corrigée manuellement" class="ml-1 inline-flex items-center rounded border border-violet-300/70 bg-violet-100 px-1 py-px text-[9px] font-bold text-violet-800 dark:border-violet-700/50 dark:bg-violet-950/50 dark:text-violet-200">🤖✏️</span>';
-            } else {
-                $badge = ' <span title="Sortie complémentée automatiquement" class="ml-1 inline-flex items-center rounded border border-sky-300/70 bg-sky-100 px-1 py-px text-[9px] font-bold text-sky-800 dark:border-sky-700/50 dark:bg-sky-950/50 dark:text-sky-200">🤖</span>';
+                $suffix = '<span class="text-violet-400 text-[8px]" title="Sortie auto-corrigée">✏</span>';
+            } elseif ($isAuto) {
+                $suffix = '<span class="text-sky-400 text-[8px]" title="Sortie automatique">🤖</span>';
             }
+            $timeHtml = '<span class="font-mono tabular-nums text-[12px] text-slate-800 dark:text-gray-100">'.e($timeText).'</span>'.$suffix;
+        } else {
+            $timeHtml = '<span class="text-[12px] text-slate-500 dark:text-slate-400 tracking-widest">——</span>';
         }
 
-        return new HtmlString('<span class="'.$boxClass.'">'.e($text).$badge.'</span>');
+        // Tip indicator: short text + color so mobile users understand without tooltip
+        $tipState = self::tipMealState($record, $meal);
+        $tipHtml = match ($tipState) {
+            'eligible' => '<span class="rounded px-0.5 text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/50" title="Tip éligible">Chp: 🪙</span>',
+            'denied' => '<span class="rounded px-0.5 text-[9px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 border border-rose-300/60 dark:border-rose-700/50" title="Tip exclu">Chp: ❌</span>',
+            'pending' => '<span class="rounded px-0.5 text-[9px] text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700" title="Tip non demandé">Chp: NO</span>',
+            default => '',
+        };
+
+        return '<span class="inline-flex items-center gap-1">'
+            .$icon
+            .$timeHtml
+            .($tipHtml !== '' ? $tipHtml : '')
+            .'</span>';
     }
 
-    public static function tipMealBadgeHtml(Attendance $record, string $meal): HtmlString
+    /**
+     * Both meals on one line: ☀ 13:43–15:00 🪙  ·  🌙 19:00–21:30 ✕
+     */
+    private static function mealsRowHtml(Attendance $record): HtmlString
     {
-        $state = self::tipMealState($record, $meal);
-        $text = match ($state) {
-            'eligible' => '🪙 '.__('hq.tip_eligible', [], 'fr'),
-            'denied' => '❌ '.__('hq.tip_denied', [], 'fr'),
-            'pending' => '⚪️ '.__('hq.tip_pending', [], 'fr'),
-            'no_punch' => '⚪️ '.__('hq.tip_no_punch', [], 'fr'),
-            'neutral' => '—',
-            default => '—',
-        };
+        $lunch = self::mealSegmentHtml($record, 'lunch');
+        $dinner = self::mealSegmentHtml($record, 'dinner');
 
-        $wrapClass = match ($state) {
-            'eligible' => 'inline-flex max-w-full items-center gap-0.5 rounded-full border border-amber-300/80 bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-950 shadow-sm ring-1 ring-amber-200/90 dark:border-amber-700/50 dark:bg-amber-950/45 dark:text-amber-100 dark:ring-amber-900/40',
-            'denied' => 'inline-flex max-w-full items-center gap-0.5 rounded-full border border-rose-300/80 bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-900 shadow-sm ring-1 ring-rose-200/90 dark:border-rose-700/50 dark:bg-rose-950/50 dark:text-rose-100 dark:ring-rose-900/40',
-            'pending' => 'inline-flex max-w-full items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-800 ring-1 ring-slate-200/90 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700/80',
-            'no_punch' => 'inline-flex max-w-full items-center gap-0.5 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700/80',
-            'neutral' => 'inline-flex max-w-full items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-xs font-bold text-slate-500 ring-1 ring-slate-200/80 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-400 dark:ring-slate-700/80',
-            default => 'inline-flex text-slate-400 dark:text-slate-500',
-        };
-
-        return new HtmlString('<span class="'.$wrapClass.'">'.e($text).'</span>');
+        return new HtmlString(
+            '<span class="inline-flex flex-wrap items-center gap-x-2 gap-y-0 text-[12px] leading-none">'
+            .$lunch
+            .'<span class="text-slate-300 dark:text-slate-600 select-none">·</span>'
+            .$dinner
+            .'</span>'
+        );
     }
 
-    public static function lateMinutesHtml(mixed $state): HtmlString
+    private static function lateRtdHtml(mixed $state): HtmlString
     {
         if ($state === null) {
-            return new HtmlString('<span class="text-slate-400 dark:text-slate-500">—</span>');
+            return new HtmlString(
+                '<span class="font-mono text-[12px] tabular-nums text-slate-600 dark:text-slate-400">RTD: —</span>'
+            );
         }
 
         $minutes = (int) $state;
+
         if ($minutes === 0) {
             return new HtmlString(
-                '<span class="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold tabular-nums text-slate-700 ring-1 ring-slate-200/80 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700/80">0</span>'
+                '<span class="font-mono text-[12px] tabular-nums text-slate-600 dark:text-slate-400">RTD: 0</span>'
             );
         }
 
         return new HtmlString(
-            '<span class="inline-flex animate-pulse rounded-full border border-rose-300 bg-rose-100 px-2 py-0.5 font-mono text-xs font-black tabular-nums text-rose-800 shadow-sm ring-1 ring-rose-300/90 dark:border-rose-600 dark:bg-rose-950/60 dark:text-rose-200 dark:ring-rose-800/60">'
-            .e((string) $minutes)
+            '<span class="inline-flex animate-pulse rounded px-1 font-mono text-[12px] font-black tabular-nums text-rose-800 dark:text-rose-200">'
+            .'RTD: '.e((string) $minutes)
             .'</span>'
         );
     }
+
+    // ─── Table definition ─────────────────────────────────────────────────────
 
     public static function configure(Table $table): Table
     {
@@ -168,7 +201,6 @@ class AttendancesTable
             ->defaultSort('date', 'desc')
             ->recordUrl(null)
             ->recordClasses(self::RECORD_BLOCK)
-            ->actionsColumnLabel(__('hq.col_actions', [], 'fr'))
             ->filters([
                 SelectFilter::make('staff_id')
                     ->label(__('hq.filter_staff', [], 'fr'))
@@ -227,52 +259,46 @@ class AttendancesTable
                     }),
             ])
             ->columns([
-                TextColumn::make('date')
-                    ->label(__('hq.col_date', [], 'fr'))
-                    ->date('d/m/Y')
-                    ->sortable()
-                    ->extraHeaderAttributes(['class' => self::HEADER_CELL]),
-                TextColumn::make('staff.name')
-                    ->label(__('hq.col_staff', [], 'fr'))
-                    ->searchable()
-                    ->weight('bold')
-                    ->extraHeaderAttributes(['class' => self::HEADER_CELL]),
-                TextColumn::make('lunch')
-                    ->label(__('hq.col_lunch', [], 'fr'))
-                    ->html()
-                    ->getStateUsing(fn (Attendance $record): HtmlString => self::mealRangeHtml($record, 'lunch'))
-                    ->extraHeaderAttributes(['class' => self::HEADER_CELL]),
-                TextColumn::make('dinner')
-                    ->label(__('hq.col_dinner', [], 'fr'))
-                    ->html()
-                    ->getStateUsing(fn (Attendance $record): HtmlString => self::mealRangeHtml($record, 'dinner'))
-                    ->extraHeaderAttributes(['class' => self::HEADER_CELL]),
-                TextColumn::make('tip_lunch')
-                    ->label(__('hq.col_tip_l', [], 'fr'))
-                    ->html()
-                    ->getStateUsing(fn (Attendance $record): HtmlString => self::tipMealBadgeHtml($record, 'lunch'))
-                    ->extraHeaderAttributes(['class' => self::HEADER_CELL]),
-                TextColumn::make('tip_dinner')
-                    ->label(__('hq.col_tip_d', [], 'fr'))
-                    ->html()
-                    ->getStateUsing(fn (Attendance $record): HtmlString => self::tipMealBadgeHtml($record, 'dinner'))
-                    ->extraHeaderAttributes(['class' => self::HEADER_CELL]),
-                TextColumn::make('late_minutes')
-                    ->label(__('hq.col_late_min', [], 'fr'))
-                    ->formatStateUsing(fn ($state): HtmlString => self::lateMinutesHtml($state))
-                    ->html()
-                    ->extraHeaderAttributes(['class' => self::HEADER_CELL]),
+                // ── Responsive: stacks on mobile, side-by-side on md+ ──────────
+                Split::make([
+
+                    // ① Date | Staff — one line
+                    TextColumn::make('identity_line')
+                        ->label('')
+                        ->html()
+                        ->getStateUsing(fn (Attendance $record): HtmlString => self::identityLineHtml($record))
+                        ->searchable(query: function (Builder $query, string $search): Builder {
+                            return $query->whereHas('staff', fn (Builder $q) => $q->where('name', 'like', "%{$search}%"));
+                        })
+                        ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('date', $direction))
+                        ->grow(false),
+
+                    // ② Both meals on one line: ☀ hh:mm–hh:mm 🪙 · 🌙 ——
+                    TextColumn::make('meals_row')
+                        ->label('☀ Midi  ·  🌙 Soir')
+                        ->html()
+                        ->getStateUsing(fn (Attendance $record): HtmlString => self::mealsRowHtml($record)),
+
+                    // ③ Retard — RTD: n
+                    TextColumn::make('late_minutes')
+                        ->label('')
+                        ->formatStateUsing(fn ($state): HtmlString => self::lateRtdHtml($state))
+                        ->html()
+                        ->grow(false),
+
+                ])->from('md'),
             ])
             ->actions([
                 EditAction::make()
-                    ->label(__('hq.action_edit_mushroom', [], 'fr'))
-                    ->icon(null)
-                    ->extraAttributes([
-                        'class' => 'inline-flex items-center justify-center rounded-xl border-2 border-b-4 border-red-700 bg-red-500 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-white shadow-md transition hover:bg-red-600 active:border-b-2 active:translate-y-0.5 dark:border-red-800 dark:bg-red-700 dark:hover:bg-red-600',
-                    ])
+                    ->label('')
+                    ->icon('heroicon-m-pencil-square')
+                    ->iconButton()
+                    ->tooltip(__('hq.action_edit', [], 'fr'))
+                    ->size('sm')
+                    ->color('warning')
                     ->slideOver()
                     ->form(fn (Form $form): Form => AttendanceForm::configure($form))
-                    ->using(function (array $data, Model $record, Table $table): Model {
+                    ->using(function (array $data, Model $record): Model {
                         /** @var Attendance $record */
                         $data = AttendanceFormSaveData::normalizeForRecord($record, $data);
                         AttendanceFormSaveData::assertAtLeastOneMealClockIn($data);
@@ -281,7 +307,13 @@ class AttendancesTable
 
                         return $record->refresh();
                     }),
-                DeleteAction::make(),
+                DeleteAction::make()
+                    ->label('')
+                    ->icon('heroicon-m-trash')
+                    ->iconButton()
+                    ->tooltip('Supprimer')
+                    ->size('sm')
+                    ->color('danger'),
             ])
             ->bulkActions([
                 BulkActionGroup::make([

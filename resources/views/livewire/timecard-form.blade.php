@@ -1,7 +1,7 @@
 @php
     $timecardNavStaffs = \App\Models\Staff::query()->where('is_active', true)->orderBy('name')->get();
 @endphp
-<div class="min-h-0" x-data="{ openMyPageModal: false }">
+<div class="min-h-0" x-data="{ openMyPageModal: false }" wire:poll.60s>
     <header class="border-b-4 border-black bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 text-white">
         <div class="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-2 sm:px-4">
             <a href="{{ route('home') }}" class="text-base font-black tracking-[0.18em] text-amber-300 drop-shadow">{{ config('app.name', 'SOYA BIZ') }}</a>
@@ -134,15 +134,23 @@
                     <p class="mb-3 text-center text-lg font-black tracking-widest text-white">LUNCH SIDE</p>
                     <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                         <div>
-                            <button
-                                type="button"
-                                wire:click="punch('lunch_in')"
-                                wire:loading.attr="disabled"
-                                @disabled($this->isPunchDisabled('lunch_in'))
-                                class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black px-4 py-4 text-lg font-black tracking-widest transition focus:outline-none focus:ring-2 {{ $this->isPunchDisabled('lunch_in') ? 'cursor-not-allowed border-gray-400 bg-gray-300 px-2 py-1.5 text-xs font-semibold tracking-normal text-gray-600 opacity-90' : 'bg-yellow-300 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)] hover:bg-yellow-200 focus:ring-yellow-300/60 active:translate-y-2 active:shadow-none' }}"
-                            >
-                                {{ $lunchInDone ? '✅ Entree dejeuner deja pointee' : 'Entree dejeuner' }}
-                            </button>
+                            @if (! $lunchInDone && $punchInOpensAt['lunch'] !== null)
+                                {{-- 案内帯: 打刻ウィンドウがまだ開いていない --}}
+                                <div class="flex min-h-[3.75rem] w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-600 bg-slate-800 px-3 py-3 text-center text-sm font-semibold leading-snug text-slate-200" role="status" aria-live="polite">
+                                    <!-- ⏰ Prochain pointage possible à <span class="font-mono font-black text-amber-300">{{ $punchInOpensAt['lunch'] }}</span> -->
+                                    No entry data available
+                                </div>
+                            @else
+                                <button
+                                    type="button"
+                                    wire:click="punch('lunch_in')"
+                                    wire:loading.attr="disabled"
+                                    @disabled($this->isPunchDisabled('lunch_in'))
+                                    class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black px-4 py-4 text-lg font-black tracking-widest transition focus:outline-none focus:ring-2 {{ $this->isPunchDisabled('lunch_in') ? 'cursor-not-allowed border-gray-400 bg-gray-300 px-2 py-1.5 text-xs font-semibold tracking-normal text-gray-600 opacity-90' : 'bg-yellow-300 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)] hover:bg-yellow-200 focus:ring-yellow-300/60 active:translate-y-2 active:shadow-none' }}"
+                                >
+                                    {{ $lunchInDone ? '✅ Entree dejeuner deja pointee' : 'Entree dejeuner' }}
+                                </button>
+                            @endif
                         </div>
                         <div>
                             <button
@@ -165,15 +173,23 @@
                     <p class="mb-3 text-center text-lg font-black tracking-widest text-white">DINNER SIDE</p>
                     <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                         <div>
-                            <button
-                                type="button"
-                                wire:click="punch('dinner_in')"
-                                wire:loading.attr="disabled"
-                                @disabled($this->isPunchDisabled('dinner_in'))
-                                class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black px-4 py-4 text-lg font-black tracking-widest transition focus:outline-none focus:ring-2 {{ $this->isPunchDisabled('dinner_in') ? 'cursor-not-allowed border-gray-400 bg-gray-300 px-2 py-1.5 text-xs font-semibold tracking-normal text-gray-600 opacity-90' : 'bg-cyan-300 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)] hover:bg-cyan-200 focus:ring-cyan-300/60 active:translate-y-2 active:shadow-none' }}"
-                            >
-                                {{ $dinnerInDone ? '✅ Entree diner deja pointee' : 'Entree diner' }}
-                            </button>
+                            @if (! $dinnerInDone && $punchInOpensAt['dinner'] !== null)
+                                {{-- 案内帯: 打刻ウィンドウがまだ開いていない --}}
+                                <div class="flex min-h-[3.75rem] w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-600 bg-slate-800 px-3 py-3 text-center text-sm font-semibold leading-snug text-slate-200" role="status" aria-live="polite">
+                                    <!-- ⏰ Prochain pointage possible à <span class="font-mono font-black text-amber-300">{{ $punchInOpensAt['dinner'] }}</span> -->
+                                    No entry data available
+                                </div>
+                            @else
+                                <button
+                                    type="button"
+                                    wire:click="punch('dinner_in')"
+                                    wire:loading.attr="disabled"
+                                    @disabled($this->isPunchDisabled('dinner_in'))
+                                    class="inline-flex w-full items-center justify-center rounded-xl border-2 border-black px-4 py-4 text-lg font-black tracking-widest transition focus:outline-none focus:ring-2 {{ $this->isPunchDisabled('dinner_in') ? 'cursor-not-allowed border-gray-400 bg-gray-300 px-2 py-1.5 text-xs font-semibold tracking-normal text-gray-600 opacity-90' : 'bg-cyan-300 text-black shadow-[0_8px_0_0_rgba(0,0,0,1)] hover:bg-cyan-200 focus:ring-cyan-300/60 active:translate-y-2 active:shadow-none' }}"
+                                >
+                                    {{ $dinnerInDone ? '✅ Entree diner deja pointee' : 'Entree diner' }}
+                                </button>
+                            @endif
                         </div>
                         <div>
                             <button

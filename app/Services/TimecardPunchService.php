@@ -7,6 +7,7 @@ use App\Models\Staff;
 use App\Models\User;
 use App\Support\AttendanceLateCalculator;
 use App\Support\BusinessDate;
+use App\Support\FixedShiftSchedule;
 use Filament\Notifications\Notification;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
@@ -59,6 +60,73 @@ final class TimecardPunchService
     }
 
     /**
+     * シフト開始時刻を Carbon に変換して返す。
+     * パース不能・シフト未登録の場合は null（= 打刻不可として扱う）。
+     *
+     * @param  'lunch'|'dinner'  $meal
+     */
+    public function shiftStartCarbon(Staff $staff, Carbon $businessDate, string $meal): ?Carbon
+    {
+        $dayKey = $this->englishDayKey($businessDate);
+        $startStr = FixedShiftSchedule::start($staff, $dayKey, $meal);
+
+        if ($startStr === null || $startStr === '') {
+            return null;
+        }
+
+        try {
+            [$h, $m] = array_map('intval', explode(':', $startStr, 2));
+
+            return $businessDate->copy()->setTime($h, $m, 0);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * 出勤打刻ウィンドウが開いているかを判定する。
+     *
+     * ルール:
+     *   - シフトが登録されていない → false（Extra Shift フローへ）
+     *   - シフト開始の N 分前（config: punch_in_open_before_shift_minutes）以降 → true
+     *   - それより前 → false
+     *
+     * @param  'lunch'|'dinner'  $meal
+     */
+    public function isPunchInWindowOpen(Staff $staff, Carbon $businessDate, string $meal): bool
+    {
+        $startAt = $this->shiftStartCarbon($staff, $businessDate, $meal);
+
+        if ($startAt === null) {
+            return false;
+        }
+
+        $openMinutes = (int) config('timecard.punch_in_open_before_shift_minutes', 60);
+        $windowOpensAt = $startAt->copy()->subMinutes($openMinutes);
+
+        return now()->greaterThanOrEqualTo($windowOpensAt);
+    }
+
+    /**
+     * 出勤打刻が解禁される時刻文字列（"HH:MM"）を返す。
+     * 解禁時刻が計算できない場合は null。
+     *
+     * @param  'lunch'|'dinner'  $meal
+     */
+    public function punchInOpensAtDisplay(Staff $staff, Carbon $businessDate, string $meal): ?string
+    {
+        $startAt = $this->shiftStartCarbon($staff, $businessDate, $meal);
+
+        if ($startAt === null) {
+            return null;
+        }
+
+        $openMinutes = (int) config('timecard.punch_in_open_before_shift_minutes', 60);
+
+        return $startAt->copy()->subMinutes($openMinutes)->format('H:i');
+    }
+
+    /**
      * 打刻アクションに対応する食事の予定だけをスナップショットする。
      * ランチ打刻でディナー予定を固定しない（ディナー打刻前のシフト変更を反映するため）。
      *
@@ -103,6 +171,20 @@ final class TimecardPunchService
 
         if ($action === 'dinner_in' && ! $this->isMealScheduled($staff, $targetDate, 'dinner')) {
             return new TimecardPunchOutcome(false, 'Aucun shift diner prevu aujourd\'hui. Utilisez la demande d\'aide.');
+        }
+
+        // ── 1時間前ルール（サーバ側強制）────────────────────────────────────────
+        // OUT アクションは時刻制限なし。IN のみ窓判定を適用。
+        if ($action === 'lunch_in' && ! $this->isPunchInWindowOpen($staff, $targetDate, 'lunch')) {
+            $at = $this->punchInOpensAtDisplay($staff, $targetDate, 'lunch') ?? '—';
+
+            return new TimecardPunchOutcome(false, "Pointage dejeuner disponible a partir de {$at}.");
+        }
+
+        if ($action === 'dinner_in' && ! $this->isPunchInWindowOpen($staff, $targetDate, 'dinner')) {
+            $at = $this->punchInOpensAtDisplay($staff, $targetDate, 'dinner') ?? '—';
+
+            return new TimecardPunchOutcome(false, "Pointage diner disponible a partir de {$at}.");
         }
 
         $existing = Attendance::query()
