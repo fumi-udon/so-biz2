@@ -8,9 +8,9 @@ return [
     |--------------------------------------------------------------------------
     |
     | 退勤打刻漏れ検出時に「予定退勤時刻 - N分」を自動退勤時刻として記録する。
-    | ランチ・ディナー共通の値。ENV で上書き可。デフォルト: 30分。
+    | ランチ・ディナー共通の値。ENV で上書き可。デフォルト: xx 分。
     |
     */
-    'auto_clock_out_penalty_minutes' => (int) env('AUTO_CLOCK_OUT_PENALTY_MINUTES', 30),
+    'auto_clock_out_penalty_minutes' => (int) env('AUTO_CLOCK_OUT_PENALTY_MINUTES', 5),
 
 ];

@@ -33,7 +33,7 @@ final class AutoClockOutService
     {
         $dateString = $businessDate->toDateString();
         $dayKey = strtolower($businessDate->copy()->locale('en')->dayName);
-        $penaltyMinutes = max(0, (int) config('timecard.auto_clock_out_penalty_minutes', 30));
+        $penaltyMinutes = max(0, (int) config('timecard.auto_clock_out_penalty_minutes', 5));
 
         $filled = [];
         $skipped = [];
