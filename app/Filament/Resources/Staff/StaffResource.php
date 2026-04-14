@@ -26,7 +26,7 @@ class StaffResource extends AdminOnlyResource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with('shop');
+        return parent::getEloquentQuery()->with(['shop', 'jobLevel']);
     }
 
     public static function form(Form $form): Form

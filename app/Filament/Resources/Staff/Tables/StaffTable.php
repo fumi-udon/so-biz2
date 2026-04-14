@@ -27,6 +27,12 @@ class StaffTable
                 TextColumn::make('name')
                     ->searchable(),
                 TextColumn::make('role'),
+                TextColumn::make('jobLevel.name')
+                    ->label('Job level')
+                    ->placeholder('—'),
+                TextColumn::make('hourly_wage')
+                    ->label('時給')
+                    ->formatStateUsing(fn ($state): string => $state === null ? '—' : number_format((float) $state, 3, '.', ' ').' DT/h'),
                 IconColumn::make('is_active')
                     ->boolean(),
             ])
