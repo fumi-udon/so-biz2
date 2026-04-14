@@ -336,110 +336,11 @@
         </section>
 
         @if ($staff)
-            @php
-                $todayBusinessDate = \App\Support\BusinessDate::current()->toDateString();
-            @endphp
-            <!-- <section class="mt-2 rounded-2xl border border-slate-300/80 bg-white/80 p-2 shadow-sm dark:border-slate-600/40 dark:bg-slate-900/60">
-                <h3 class="mb-2 text-sm font-bold text-slate-800 dark:text-slate-100">📊 Resultats mensuels de presence</h3>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-[11px]">
-                        <thead>
-                            <tr class="border-b border-slate-200 dark:border-slate-700">
-                                <th class="px-2 py-1 text-left font-semibold">Date</th>
-                                <th class="px-2 py-1 text-left font-semibold">LUNCH</th>
-                                <th class="px-2 py-1 text-left font-semibold">DINNER</th>
-                                <th class="px-2 py-1 text-left font-semibold">Statut</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse (($monthAttendances ?? collect()) as $row)
-                                @php
-                                    $dateValue = $row->date instanceof \Illuminate\Support\Carbon ? $row->date->toDateString() : \Illuminate\Support\Carbon::parse($row->date)->toDateString();
-                                    $isNotToday = $dateValue !== $todayBusinessDate;
-                                    $hasMissingClockOut = $isNotToday && (
-                                        ($row->lunch_in_at !== null && $row->lunch_out_at === null)
-                                        || ($row->dinner_in_at !== null && $row->dinner_out_at === null)
-                                    );
-                                @endphp
-                                <tr class="border-b border-slate-100 dark:border-slate-800 last:border-b-0">
-                                    <td class="px-2 py-1 font-mono">{{ \Illuminate\Support\Carbon::parse($dateValue)->format('m/d') }}</td>
-                                    <td class="px-2 py-1 font-mono">{{ $row->lunch_in_at?->format('H:i') ?? '--:--' }} - {{ $row->lunch_out_at?->format('H:i') ?? '--:--' }}</td>
-                                    <td class="px-2 py-1 font-mono">{{ $row->dinner_in_at?->format('H:i') ?? '--:--' }} - {{ $row->dinner_out_at?->format('H:i') ?? '--:--' }}</td>
-                                    <td class="px-2 py-1">
-                                        <div class="flex flex-wrap gap-1">
-                                            @if ((int) ($row->late_minutes ?? 0) > 0)
-                                                <span class="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800">Retard</span>
-                                            @endif
-                                            @if ($hasMissingClockOut)
-                                                <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">Pointage oublie</span>
-                                            @endif
-                                            @if ((int) ($row->late_minutes ?? 0) === 0 && ! $hasMissingClockOut)
-                                                <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">Normal</span>
-                                            @endif
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="4" class="px-2 py-2 text-center text-xs text-slate-500">Aucun enregistrement de presence ce mois.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-                <div
-                    x-data="{
-                        message: '',
-                        errorOpen: false,
-                        staffName: @js($staff->name ?? ''),
-                        sendWhatsapp() {
-                            if (this.message.trim() === '') {
-                                this.errorOpen = true;
-                                return;
-                            }
-                            const text = `[Demande de correction: ${this.staffName}]\n\n${this.message}`;
-                            window.open(`https://wa.me/21651992184?text=${encodeURIComponent(text)}`, '_blank');
-                        },
-                    }"
-                    class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-2 dark:border-emerald-700/40 dark:bg-emerald-900/20"
-                >
-                    <label class="mb-1 block text-xs font-semibold text-emerald-900 dark:text-emerald-200">Demande de correction (WhatsApp manager)</label>
-                    <textarea
-                        x-model="message"
-                        class="block w-full rounded-lg border border-emerald-300 bg-white px-2 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-emerald-600/40 dark:bg-slate-900 dark:text-slate-100"
-                        rows="2"
-                        placeholder="Ex.: merci de corriger l'oubli de pointage sortie diner du 30/03."
-                    ></textarea>
-                    <button
-                        type="button"
-                        class="mt-2 inline-flex items-center gap-1 rounded-lg bg-[#25D366] px-3 py-2 text-xs font-bold text-white transition hover:bg-green-600"
-                        @click="sendWhatsapp()"
-                    >
-                        <span>💬</span>
-                        <span>Envoyer au manager via WhatsApp</span>
-                    </button>
-
-                    <div
-                        x-show="errorOpen"
-                        x-cloak
-                        x-transition.opacity
-                        class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4"
-                        @click.self="errorOpen = false"
-                    >
-                        <div class="w-full max-w-sm rounded-xl border border-rose-200 bg-white p-4 shadow-xl">
-                            <h3 class="text-base font-bold text-rose-700">Erreur de saisie</h3>
-                            <p class="mt-2 text-sm text-slate-700">Veuillez saisir la demande avant l'envoi.</p>
-                            <button
-                                type="button"
-                                class="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
-                                @click="errorOpen = false"
-                            >
-                                Fermer
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </section> -->
+            <div class="mt-2 pb-4">
+                @include('mypage.partials.presence-summary')
+                @include('mypage.partials.presence-table')
+                @include('mypage.partials.presence-whatsapp-request')
+            </div>
         @endif
     </main>
 

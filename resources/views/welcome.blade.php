@@ -43,11 +43,6 @@
                 <p class="text-xs font-semibold text-black/75">Acces par PIN</p>
             </button>
 
-            <a href="{{ url('/mypage/attendance') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-yellow-300 via-amber-300 to-yellow-500 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
-                <p class="text-lg">📊</p>
-                <p class="text-sm font-black tracking-wide text-white">PRESENCE</p>
-                <p class="text-xs font-semibold text-white/80">Controle mensuel des presences</p>
-            </a>
 <!-- 
             <a href="{{ route('inventory.index') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-cyan-400 to-sky-300 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
                 <p class="text-lg">📦</p>
@@ -57,7 +52,7 @@
 
             <a href="{{ route('close-check.index') }}" class="group rounded-xl border-2 border-black bg-gradient-to-br from-rose-500 to-red-400 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
                 <p class="text-lg">🔒</p>
-                <p class="text-sm font-black tracking-wide text-white">Clôture des tâches</p>
+                <p class="text-sm font-black tracking-wide text-white">Close check</p>
                 <p class="text-xs font-semibold text-white/80">Vérification de fin de service</p>
             </a>
 
@@ -67,11 +62,6 @@
                 <p class="text-xs font-semibold text-white/80">Saisie caisse & PIN responsable</p>
             </a>
 
-            <!-- <a href="{{ route('mypage.attendance') }}" class="rounded-xl border-2 border-black bg-gradient-to-br from-violet-500 to-purple-400 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
-                <p class="text-lg">📊</p>
-                <p class="text-sm font-black tracking-wide text-white">Suivi des heures</p>
-                <p class="text-xs font-semibold text-white/80">Consulter les presences</p>
-            </a> -->
 
             <a href="{{ url('/admin') }}" class="rounded-xl border-2 border-black bg-gradient-to-br from-slate-800 to-slate-600 p-2 shadow-[0_5px_0_0_rgba(0,0,0,1)] transition hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
                 <p class="text-lg">⚙️</p>

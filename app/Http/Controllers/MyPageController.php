@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
-use App\Models\AttendanceEditLog;
 use App\Models\InventoryItem;
 use App\Models\InventoryRecord;
 use App\Models\RoutineTask;
@@ -115,6 +114,14 @@ class MyPageController extends Controller
         $monthLateDates = collect();
         $monthAbsentDates = collect();
         $monthAttendances = collect();
+
+        // Presence section: support ?month=YYYY-MM query param
+        $monthParam = $request->input('month');
+        $presenceMonthStart = Carbon::parse(
+            is_string($monthParam) && preg_match('/^\d{4}-\d{2}$/', $monthParam)
+                ? $monthParam.'-01'
+                : $businessDate->format('Y-m-01')
+        )->startOfMonth();
 
         if ($staff) {
             $completionCount = RoutineTaskLog::query()
@@ -435,6 +442,9 @@ class MyPageController extends Controller
             );
         }
 
+        // Presence data for the selected month
+        $presenceData = $this->calculatePresenceData($staff, $presenceMonthStart);
+
         $routinesPendingCount = 0;
         if ($staff && $routineTasks->isNotEmpty()) {
             foreach ($routineTasks as $task) {
@@ -485,6 +495,12 @@ class MyPageController extends Controller
             'monthAbsentDates' => $monthAbsentDates,
             'monthAttendances' => $monthAttendances,
             'statusResolver' => $statusResolver,
+            // Presence section
+            'presenceMonthStart' => $presenceMonthStart,
+            'presenceAttendances' => $presenceData['rows'],
+            'presenceMinutes' => $presenceData['minutes'],
+            'presenceLateCount' => $presenceData['lateCount'],
+            'presenceEquivPaye' => $presenceData['equivPaye'],
         ]);
     }
 
@@ -709,96 +725,40 @@ class MyPageController extends Controller
             ->with('status', 'Enregistre avec succes.');
     }
 
-    public function attendance(Request $request): View
+    /**
+     * 月次勤怠集計（Presence セクション用）。
+     * index() と calculatePresenceData() の両方から呼ばれる。
+     *
+     * @return array{rows: Collection, minutes: int, lateCount: int, equivPaye: float|null}
+     */
+    private function calculatePresenceData(?Staff $staff, Carbon $monthStart): array
     {
-        $staffList = Staff::query()
-            ->where('is_active', true)
-            ->with('jobLevel')
-            ->orderBy('name')
+        if (! $staff) {
+            return ['rows' => collect(), 'minutes' => 0, 'lateCount' => 0, 'equivPaye' => null];
+        }
+
+        $rows = Attendance::query()
+            ->where('staff_id', $staff->id)
+            ->whereYear('date', $monthStart->year)
+            ->whereMonth('date', $monthStart->month)
+            ->orderBy('date')
             ->get();
 
-        $staffId = $request->integer('staff_id') ?: null;
-        $staff = $staffId ? Staff::query()->where('id', $staffId)->where('is_active', true)->first() : null;
-
-        $monthParam = $request->input('month');
-        $monthStart = Carbon::parse(is_string($monthParam) && preg_match('/^\d{4}-\d{2}$/', $monthParam)
-            ? $monthParam.'-01'
-            : BusinessDate::current()->format('Y-m-01'))->startOfMonth();
-
-        $monthAttendances = collect();
-        $weekMinutes = 0;
-        $monthMinutes = 0;
-        $monthLateCount = 0;
-        $monthHourlyEquivPaye = null;
-
-        if ($staff) {
-            $monthAttendances = Attendance::query()
-                ->where('staff_id', $staff->id)
-                ->whereYear('date', $monthStart->year)
-                ->whereMonth('date', $monthStart->month)
-                ->orderBy('date')
-                ->get();
-
-            $businessCurrent = BusinessDate::current();
-            $weekStart = $businessCurrent->copy()->startOfWeek(Carbon::MONDAY);
-            $weekEnd = $businessCurrent->copy()->endOfWeek(Carbon::SUNDAY);
-
-            $weekRows = Attendance::query()
-                ->where('staff_id', $staff->id)
-                ->whereBetween('date', [$weekStart->toDateString(), $weekEnd->toDateString()])
-                ->get();
-
-            foreach ($weekRows as $row) {
-                $weekMinutes += $row->calculateTotalMinutes() ?? 0;
-            }
-
-            foreach ($monthAttendances as $row) {
-                $monthMinutes += $row->calculateTotalMinutes() ?? 0;
-                if (($row->late_minutes ?? 0) > 0) {
-                    $monthLateCount++;
-                }
-            }
-
-            if ($staff->hourly_wage !== null && (float) $staff->hourly_wage > 0.0) {
-                $monthHourlyEquivPaye = round($monthMinutes * (float) $staff->hourly_wage / 60, 3);
+        $minutes = 0;
+        $lateCount = 0;
+        foreach ($rows as $row) {
+            $minutes += $row->calculateTotalMinutes() ?? 0;
+            if (($row->late_minutes ?? 0) > 0) {
+                $lateCount++;
             }
         }
 
-        $editLogs = $staff
-            ? AttendanceEditLog::query()
-                ->where('target_staff_id', $staff->id)
-                ->where('created_at', '>=', now()->subMonth())
-                ->with([
-                    'editorStaff:id,name',
-                    'attendance:id,date',
-                ])
-                ->orderByDesc('created_at')
-                ->paginate(10)
-                ->withQueryString()
-            : null;
+        $equivPaye = null;
+        if ($staff->hourly_wage !== null && (float) $staff->hourly_wage > 0.0) {
+            $equivPaye = round($minutes * (float) $staff->hourly_wage / 60, 3);
+        }
 
-        return view('mypage.attendance', [
-            'staffList' => $staffList,
-            'staff' => $staff,
-            'monthStart' => $monthStart,
-            'monthAttendances' => $monthAttendances,
-            'attendances' => $monthAttendances,
-            'weekMinutes' => $weekMinutes,
-            'monthMinutes' => $monthMinutes,
-            'monthLateCount' => $monthLateCount,
-            'monthHourlyEquivPaye' => $monthHourlyEquivPaye,
-            'editLogs' => $editLogs,
-        ]);
-    }
-
-    public function updateAttendance(Request $request): RedirectResponse
-    {
-        return redirect()
-            ->route('mypage.attendance', array_filter([
-                'staff_id' => $request->input('staff_id'),
-                'month' => $request->input('month'),
-            ]))
-            ->with('error', 'La modification depuis Mon espace est désactivée. Contactez un manager (admin Filament).');
+        return compact('rows', 'minutes', 'lateCount', 'equivPaye');
     }
 
     private function roleCategory(string $role): string
@@ -824,27 +784,5 @@ class MyPageController extends Controller
         }
 
         return 'other';
-    }
-
-    /**
-     * Mon espace からの勤怠編集は廃止（Filament のみ）。互換のためルートは残す。
-     */
-    public function authorizeEdit(Request $request): JsonResponse
-    {
-        return response()->json([
-            'ok' => false,
-            'message' => 'Edition desactivee. Utilisez l\'admin Filament (manager).',
-        ], 403);
-    }
-
-    /**
-     * Mon espace からの勤怠編集は廃止（Filament のみ）。互換のためルートは残す。
-     */
-    public function patchAttendance(Request $request): JsonResponse
-    {
-        return response()->json([
-            'ok' => false,
-            'message' => 'Edition desactivee. Utilisez l\'admin Filament (manager).',
-        ], 403);
     }
 }

@@ -12,7 +12,6 @@
             <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Accueil</a>
             <a href="{{ route('timecard.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Pointage</a>
             <a href="{{ route('mypage.reauth') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Mon espace</a>
-            <a href="{{ route('mypage.attendance') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Presence</a>
             <a href="{{ route('inventory.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Inventory</a>
             <a href="{{ route('close-check.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Clôture tâches</a>
             @if ($showLogout)
@@ -28,7 +27,6 @@
             <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Accueil</a>
             <a href="{{ route('timecard.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Pointage</a>
             <a href="{{ route('mypage.reauth') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Mon espace</a>
-            <a href="{{ route('mypage.attendance') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Presence</a>
             <a href="{{ route('inventory.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Inventory</a>
             <a href="{{ route('close-check.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Clôture tâches</a>
             @if ($showLogout)

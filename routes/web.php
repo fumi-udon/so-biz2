@@ -156,10 +156,15 @@ Route::get('/mypage/reauth', [MyPageController::class, 'reauthenticate'])->name(
 Route::post('/mypage/open', [MyPageController::class, 'openByPin'])->name('mypage.open');
 Route::post('/mypage', [MyPageController::class, 'store'])->name('mypage.store');
 Route::post('/mypage/auto-logout', [MyPageController::class, 'autoLogout'])->name('mypage.auto-logout');
-Route::get('/mypage/attendance', [MyPageController::class, 'attendance'])->name('mypage.attendance');
-Route::post('/mypage/attendance', [MyPageController::class, 'updateAttendance'])->name('mypage.attendance.update');
-Route::post('/mypage/attendance/authorize-edit', [MyPageController::class, 'authorizeEdit'])->name('mypage.attendance.authorize-edit');
-Route::post('/mypage/attendance/patch', [MyPageController::class, 'patchAttendance'])->name('mypage.attendance.patch');
+// 旧 Presence 独立ページ → My page へ 302 リダイレクト（ブックマーク互換）
+Route::get('/mypage/attendance', function (Request $request) {
+    $params = array_filter([
+        'staff_id' => $request->integer('staff_id') ?: null,
+        'month' => $request->input('month') ?: null,
+    ]);
+
+    return redirect()->route('mypage.index', $params, 302);
+})->name('mypage.attendance');
 
 // 固定パスを {id} の前に並べること（ルータは上から順にマッチするため）
 Route::post('/news/auth', [NewsNoteController::class, 'auth'])->name('news.auth');
