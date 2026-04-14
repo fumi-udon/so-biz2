@@ -32,6 +32,11 @@ use Livewire\Component as LivewireComponent;
 
 class DailyTipResource extends AdminOnlyResource
 {
+    protected static function piloteCanAccessThisResource(): bool
+    {
+        return true;
+    }
+
     protected static ?string $model = DailyTip::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';

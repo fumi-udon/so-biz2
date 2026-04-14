@@ -149,7 +149,7 @@ class TipDashboard extends Page
     {
         return [
             Action::make('calculate')
-                ->label('Calcul des pourboires')
+                ->label('New Chips')
                 ->icon('heroicon-o-calculator')
                 ->url(DailyTipResource::getUrl('calculate')),
             Action::make('list_all')

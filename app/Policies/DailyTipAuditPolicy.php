@@ -11,6 +11,20 @@ class DailyTipAuditPolicy
     use HandlesAuthorization;
 
     /**
+     * pilote は監査ログを閲覧のみ（作成・更新・削除は不可）。
+     */
+    public function before(User $user, string $ability): ?bool
+    {
+        if (! $user->isPiloteOnly()) {
+            return null;
+        }
+
+        $allowed = ['viewAny', 'view'];
+
+        return in_array($ability, $allowed, true) ? true : false;
+    }
+
+    /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool

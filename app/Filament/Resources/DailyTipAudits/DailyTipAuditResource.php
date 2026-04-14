@@ -11,6 +11,11 @@ use Illuminate\Database\Eloquent\Builder;
 
 class DailyTipAuditResource extends AdminOnlyResource
 {
+    protected static function piloteCanAccessThisResource(): bool
+    {
+        return true;
+    }
+
     protected static ?string $model = DailyTipAudit::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
