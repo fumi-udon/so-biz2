@@ -18,7 +18,6 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -47,13 +46,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-            ->homeUrl(function (): string {
-                if (Auth::user()?->isCashier()) {
-                    return route('daily-close');
-                }
-
-                return url('/admin');
-            })
+            ->homeUrl(fn (): string => url('/admin'))
             // エクスポート完了時の「ダウンロード」リンクは DB 通知（ベルアイコン）に表示される
             ->databaseNotifications()
             ->colors([

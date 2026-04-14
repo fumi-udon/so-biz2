@@ -46,6 +46,8 @@ class User extends Authenticatable implements FilamentUser
     {
         $superAdminName = config('filament-shield.super_admin.name', 'super_admin');
 
+        // ROLE_PILOTE（通常パイロットアカウント）ロールを持ち、「super_admin」（Shield 設定で管理されるシステム最上位ロール）は持っていない場合のみ true。
+        // つまり、限定アカウントやデモアカウントのみを抽出する条件。
         return $this->hasRole(self::ROLE_PILOTE) && ! $this->hasRole($superAdminName);
     }
 
@@ -55,9 +57,12 @@ class User extends Authenticatable implements FilamentUser
         return $this->role === null || $this->role === '' || $this->role === 'admin';
     }
 
+    /**
+     * @deprecated Cashier ロールは廃止済み。常に false を返す。
+     */
     public function isCashier(): bool
     {
-        return $this->role === 'cashier';
+        return false;
     }
 
     public function getActivitylogOptions(): LogOptions

@@ -59,9 +59,9 @@ class UserResource extends Resource
                         ? '空欄のままならパスワードは変更されません。'
                         : null),
                 TextInput::make('role')
-                    ->label('ロール（既存・文字列）')
+                    ->label('ロール（レガシー・非推奨）')
                     ->maxLength(255)
-                    ->placeholder('admin / cashier など'),
+                    ->hidden(),
                 CheckboxList::make('roles')
                     ->label('Spatieロール')
                     ->relationship(
@@ -86,8 +86,9 @@ class UserResource extends Resource
                 TextColumn::make('email')
                     ->label('メールアドレス'),
                 TextColumn::make('role')
-                    ->label('ロール（既存）')
-                    ->placeholder('—'),
+                    ->label('ロール（レガシー）')
+                    ->placeholder('—')
+                    ->hidden(),
                 TextColumn::make('roles.name')
                     ->label('Spatieロール')
                     ->badge()

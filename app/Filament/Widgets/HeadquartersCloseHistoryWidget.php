@@ -18,8 +18,11 @@ class HeadquartersCloseHistoryWidget extends Widget
     public static function canView(): bool
     {
         $u = auth()->user();
+        $superAdmin = config('filament-shield.super_admin.name', 'super_admin');
 
-        return $u?->isAdmin() === true || $u?->isCashier() === true || $u?->isPiloteOnly() === true;
+        return $u?->hasRole($superAdmin) === true
+            || $u?->hasRole('Owner') === true
+            || $u?->isPiloteOnly() === true;
     }
 
     /**

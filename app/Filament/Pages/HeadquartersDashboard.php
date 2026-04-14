@@ -21,28 +21,16 @@ class HeadquartersDashboard extends Dashboard
     public static function canAccess(): bool
     {
         $user = auth()->user();
-        if ($user?->isPiloteOnly()) {
-            return true;
-        }
+        $superAdmin = config('filament-shield.super_admin.name', 'super_admin');
 
-        return $user?->isAdmin() === true || $user?->isCashier() === true;
+        return $user?->hasRole($superAdmin) === true
+            || $user?->hasRole('Owner') === true
+            || $user?->isPiloteOnly() === true;
     }
 
     public static function shouldRegisterNavigation(): bool
     {
-        $user = auth()->user();
-        if ($user?->isPiloteOnly()) {
-            return true;
-        }
-
-        return $user?->isAdmin() === true;
-    }
-
-    public function mount(): void
-    {
-        if (auth()->user()?->isCashier() === true) {
-            $this->redirect(route('daily-close'), navigate: true);
-        }
+        return static::canAccess();
     }
 
     /**
