@@ -123,10 +123,225 @@
                 </span>
             </div>
             <div
-                class="max-h-[min(52vh,30rem)] overflow-auto rounded-2xl border-2 border-b-4 border-indigo-500 bg-white shadow-md dark:border-indigo-600 dark:bg-gray-950"
+                class="rounded-2xl border-2 border-b-4 border-indigo-500 bg-white shadow-md dark:border-indigo-600 dark:bg-gray-950"
             >
+                {{-- Mobile : cartes empilées, pas de défilement horizontal --}}
+                <div
+                    class="md:hidden max-h-[min(60vh,32rem)] space-y-2 overflow-y-auto overflow-x-hidden p-2"
+                >
+                    <details
+                        class="group rounded-xl border-2 border-emerald-500 bg-emerald-50/95 shadow-sm ring-1 ring-emerald-200/70 dark:border-emerald-600 dark:bg-emerald-950/55 dark:ring-emerald-900/40"
+                    >
+                        <summary
+                            class="cursor-pointer list-none px-2.5 py-2 text-left text-[11px] font-black text-emerald-950 marker:content-none dark:text-emerald-100 [&::-webkit-details-marker]:hidden"
+                        >
+                            <span class="inline-flex w-full items-center justify-between gap-2">
+                                <span class="inline-flex min-w-0 items-center gap-1">
+                                    <span aria-hidden="true">📊</span>
+                                    <span class="uppercase tracking-wide"
+                                        >{{ __('hq.tip_dashboard_day_total', [], 'fr') }}</span
+                                    >
+                                </span>
+                                <span
+                                    class="shrink-0 text-[10px] font-semibold text-emerald-800 opacity-90 dark:text-emerald-200"
+                                    >▾</span
+                                >
+                            </span>
+                            <span
+                                class="mt-0.5 block text-[9px] font-semibold leading-tight text-emerald-900/90 dark:text-emerald-200/95"
+                            >
+                                {{ __('hq.tip_dashboard_day_total_hint', [], 'fr') }}
+                            </span>
+                        </summary>
+                        <div
+                            class="space-y-2 border-t border-emerald-300/90 p-2 pt-2 dark:border-emerald-700"
+                        >
+                            @foreach(($w['day_keys'] ?? []) as $idx => $dk)
+                                @php
+                                    $dayLabel = $w['day_labels'][$idx] ?? $dk;
+                                    $dt = $dayMealTotalsMap[$dk] ?? ['lunch' => 0.0, 'dinner' => 0.0, 'total' => 0.0];
+                                    $dl = (float) ($dt['lunch'] ?? 0);
+                                    $dd = (float) ($dt['dinner'] ?? 0);
+                                    $dz = (float) ($dt['total'] ?? 0);
+                                @endphp
+                                <div
+                                    class="flex flex-col gap-1 rounded-lg border border-emerald-300/80 bg-white/95 px-2 py-1.5 dark:border-emerald-700 dark:bg-emerald-950/40"
+                                >
+                                    <p
+                                        class="text-[10px] font-black leading-tight text-gray-950 dark:text-white"
+                                    >
+                                        {{ $dayLabel }}
+                                    </p>
+                                    <div
+                                        class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 font-mono text-[10px] tabular-nums"
+                                    >
+                                        <span class="inline-flex items-center gap-0.5">
+                                            <span aria-hidden="true">☀️</span>
+                                            <span
+                                                class="{{ $dl > 0 ? 'font-bold text-amber-700 dark:text-amber-400' : 'font-medium text-gray-500 dark:text-gray-500' }}"
+                                            >
+                                                {{ $tipSmart($dl) }}
+                                            </span>
+                                        </span>
+                                        <span class="inline-flex items-center gap-0.5">
+                                            <span aria-hidden="true">🌙</span>
+                                            <span
+                                                class="{{ $dd > 0 ? 'font-bold text-indigo-700 dark:text-indigo-400' : 'font-medium text-gray-500 dark:text-gray-500' }}"
+                                            >
+                                                {{ $tipSmart($dd) }}
+                                            </span>
+                                        </span>
+                                        <span class="inline-flex items-center gap-0.5">
+                                            <span class="font-black text-gray-900 dark:text-gray-100">Σ</span>
+                                            <span
+                                                class="{{ $dz > 0 ? 'font-black text-emerald-800 dark:text-emerald-400' : 'font-medium text-gray-500 dark:text-gray-500' }}"
+                                            >
+                                                {{ $tipSmart($dz) }}
+                                            </span>
+                                        </span>
+                                    </div>
+                                </div>
+                            @endforeach
+                            @php
+                                $wl = (float) ($weekMealTotalsRow['lunch'] ?? 0);
+                                $wd = (float) ($weekMealTotalsRow['dinner'] ?? 0);
+                                $wz = (float) ($weekMealTotalsRow['total'] ?? 0);
+                            @endphp
+                            <div
+                                class="rounded-lg border-2 border-emerald-500 bg-emerald-100/90 px-2 py-1.5 dark:border-emerald-600 dark:bg-emerald-900/50"
+                            >
+                                <p
+                                    class="mb-1 text-[10px] font-black uppercase tracking-wide text-emerald-950 dark:text-emerald-100"
+                                >
+                                    Σ semaine (caisse)
+                                </p>
+                                <div
+                                    class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 font-mono text-[10px] tabular-nums"
+                                >
+                                    <span class="inline-flex items-center gap-0.5">
+                                        <span aria-hidden="true">☀️</span>
+                                        <span
+                                            class="{{ $wl > 0 ? 'font-bold text-amber-800 dark:text-amber-300' : 'font-medium text-gray-600 dark:text-gray-400' }}"
+                                        >
+                                            {{ $tipSmart($wl) }}
+                                        </span>
+                                    </span>
+                                    <span class="inline-flex items-center gap-0.5">
+                                        <span aria-hidden="true">🌙</span>
+                                        <span
+                                            class="{{ $wd > 0 ? 'font-bold text-indigo-800 dark:text-indigo-300' : 'font-medium text-gray-600 dark:text-gray-400' }}"
+                                        >
+                                            {{ $tipSmart($wd) }}
+                                        </span>
+                                    </span>
+                                    <span class="inline-flex items-center gap-0.5">
+                                        <span class="font-black text-gray-950 dark:text-white">Σ</span>
+                                        <span
+                                            class="{{ $wz > 0 ? 'font-black text-emerald-900 dark:text-emerald-300' : 'font-medium text-gray-600 dark:text-gray-400' }}"
+                                        >
+                                            {{ $tipSmart($wz) }}
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    @forelse($w['rows'] as $ri => $row)
+                        <div
+                            class="rounded-xl border-2 border-indigo-400 bg-white p-2 shadow-sm dark:border-indigo-600 dark:bg-gray-950"
+                        >
+                            <div class="mb-2 flex items-start justify-between gap-2 border-b border-indigo-200 pb-1.5 dark:border-indigo-800">
+                                <a
+                                    href="{{ $this->staffEditUrl($row['staff_id']) }}"
+                                    class="min-w-0 flex-1 break-words text-xs font-bold text-primary-600 hover:underline dark:text-primary-400"
+                                    wire:navigate
+                                >
+                                    {{ $row['name'] }}
+                                </a>
+                                @php $wt = (float) $row['week_total']; @endphp
+                                <span
+                                    class="shrink-0 rounded-md border border-indigo-300 bg-indigo-50 px-1.5 py-0.5 font-mono text-[11px] font-black tabular-nums text-indigo-950 dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-100"
+                                >
+                                    Σ {{ $tipSmart($wt) }}
+                                </span>
+                            </div>
+                            <div class="space-y-1.5">
+                                @foreach($row['days'] as $di => $cell)
+                                    @php
+                                        $lRaw = (float) $cell['lunch_amount'];
+                                        $dRaw = (float) $cell['dinner_amount'];
+                                        $tRaw = (float) $cell['amount'];
+                                        $hasNote = filled($cell['note_hint']);
+                                        $dayLabel = $w['day_labels'][$di] ?? '';
+                                    @endphp
+                                    <div
+                                        class="rounded-lg border px-2 py-1.5 {{ $tRaw > 0 ? 'border-amber-300/90 bg-amber-50/90 dark:border-amber-700/80 dark:bg-amber-950/40' : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/60' }}"
+                                        @if($hasNote) title="{{ e($cell['note_hint']) }}" @endif
+                                    >
+                                        <p
+                                            class="mb-1 text-[10px] font-bold leading-tight text-gray-950 dark:text-white"
+                                        >
+                                            {{ $dayLabel }}
+                                        </p>
+                                        <div
+                                            class="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 font-mono text-[10px] tabular-nums leading-none"
+                                        >
+                                            <span class="inline-flex items-center gap-0.5">
+                                                <span aria-hidden="true">☀️</span>
+                                                <span
+                                                    class="{{ $lRaw > 0 ? 'font-bold text-amber-700 dark:text-amber-400' : 'font-medium text-gray-500 dark:text-gray-500' }}"
+                                                >
+                                                    {{ $tipSmart($lRaw) }}
+                                                </span>
+                                            </span>
+                                            <span class="inline-flex items-center gap-0.5">
+                                                <span aria-hidden="true">🌙</span>
+                                                <span
+                                                    class="{{ $dRaw > 0 ? 'font-bold text-indigo-700 dark:text-indigo-400' : 'font-medium text-gray-500 dark:text-gray-500' }}"
+                                                >
+                                                    {{ $tipSmart($dRaw) }}
+                                                </span>
+                                            </span>
+                                            <span class="inline-flex items-center gap-0.5">
+                                                <span class="font-black text-gray-900 dark:text-gray-100">Σ</span>
+                                                <span
+                                                    class="{{ $tRaw > 0 ? 'font-black text-emerald-800 dark:text-emerald-400' : 'font-medium text-gray-500 dark:text-gray-500' }}"
+                                                >
+                                                    {{ $tipSmart($tRaw) }}
+                                                </span>
+                                                @if($hasNote)
+                                                    <span class="text-[9px]" aria-hidden="true">📝</span>
+                                                @endif
+                                            </span>
+                                        </div>
+                                        @if($hasNote)
+                                            <p
+                                                class="mt-1 line-clamp-2 text-[9px] font-medium leading-snug text-gray-700 dark:text-gray-300"
+                                            >
+                                                {{ $cell['note_hint'] }}
+                                            </p>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @empty
+                        <div
+                            class="rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-3 py-6 text-center text-xs font-medium text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300"
+                        >
+                            Aucune répartition pour cette semaine. Utilisez « Calcul des pourboires » ou changez de
+                            semaine.
+                        </div>
+                    @endforelse
+                </div>
+
+                {{-- Tableau desktop (md+) : défilement vertical + horizontal si nécessaire (évite la coupe des colonnes) --}}
+                <div
+                    class="hidden max-h-[min(52vh,30rem)] overflow-auto md:block"
+                >
                 {{-- sm:text-xs は合計行の text-[10px] を上書きするためテーブル本体に付けない --}}
-                <table class="w-full min-w-[22rem] border-collapse text-[10px] sm:min-w-[24rem]">
+                <table class="w-full min-w-0 border-collapse text-[10px] md:min-w-[22rem] lg:min-w-[24rem]">
                     <thead class="sticky top-0 z-10 shadow-sm">
                         <tr
                             class="border-b-2 border-indigo-600 bg-indigo-100 dark:border-indigo-500 dark:bg-indigo-950"
@@ -288,7 +503,7 @@
                                     >
                                         <div
                                             class="mx-auto flex w-full min-w-[2.6rem] max-w-[3.5rem] flex-col gap-[1px] rounded border px-0.5 py-0.5 font-mono text-[9px] leading-none tabular-nums sm:min-w-[2.85rem] sm:max-w-none sm:text-[10px] {{ $tRaw > 0 ? 'border-amber-300/90 bg-amber-50/80 dark:border-amber-700/80 dark:bg-amber-950/40' : 'border-gray-200/90 bg-gray-50/60 dark:border-gray-700 dark:bg-gray-900/50' }}"
-                                            @if($hasNote) title="{{ $cell['note_hint'] }}" @endif
+                                            @if($hasNote) title="{{ e($cell['note_hint']) }}" @endif
                                         >
                                             <div class="flex items-center justify-between gap-0.5">
                                                 <span class="shrink-0 text-[7px] leading-none opacity-80" aria-hidden="true"
@@ -353,6 +568,7 @@
                         @endforelse
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
 
