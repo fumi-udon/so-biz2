@@ -350,7 +350,7 @@ class MyPageController extends Controller
                 ->whereHas('dailyTip')
                 ->whereHas('dailyTip', function ($query) use ($businessDate) {
                     // 3日前より前の日付
-                    $query->where('business_date', '<', $businessDate->copy()->subDays(3)->toDateString());
+                    $query->where('business_date', '<', $businessDate->copy()->subDays(1)->toDateString());
                 })
                 ->get()
                 ->groupBy(function (StaffTip $tip): string {
