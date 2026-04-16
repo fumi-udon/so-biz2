@@ -1,4 +1,5 @@
 ## [CRITICAL] Version Constraints — DO NOT MODIFY
+
 - PHP: 8.4.18 (FORBIDDEN: upgrade to 8.5+)
 - Laravel: 11.51.0 (FORBIDDEN: major update)
 - Filament: 3.3.49 (FORBIDDEN: v4 API or Schema patterns)
@@ -7,18 +8,21 @@
 - compose.yaml: preserve structure and indentation exactly
 
 ## [RULE] Color contrast (always)
+
 - Every background MUST have explicit foreground colors that remain readable in both light and dark (use `text-gray-950 dark:text-white` or a dedicated palette such as `bg-slate-900` + `text-slate-100`).
 - Never leave body text as default without checking: `bg-white` + `text-gray-900` / `dark:bg-gray-900` + `text-gray-100` (or equivalent) on the same element or its text children.
 - Custom modals/panels: either force a single contrast context (e.g. `dark` + dark `!bg-*` + light text) or duplicate Filament’s light/dark pairs; do not mix white Filament surfaces with theme-dependent text that can match the background.
 - After UI changes, mentally verify: light mode AND dark mode — no “invisible” text on tables, inputs, badges, or nested `fi-section` cards.
 
 ## [RULE] Filament v3 Frontend
-- USE: x-filament::* and x-filament-tables::* official Blade components
+
+- USE: x-filament::_ and x-filament-tables::_ official Blade components
 - FORBIDDEN: custom <div>/<table> layouts, inline styles, <style> tags
 - CSS: Tailwind utility classes only
 - DO NOT break Filament-generated class structures (fi-section, fi-input-wrp, etc.)
 
 ## [RULE] Compact UI
+
 - Reduce default spacing by one step (e.g. gap-y-4 → gap-y-2)
 - Remove empty fi-section-header via header(null)
 - Prefer table layout over card layout for list views
@@ -26,12 +30,14 @@
 - Responsive grid: grid-cols-1 md:grid-cols-2 lg:grid-cols-3
 
 ## [RULE] Robustness
+
 - Live inputs: wire:model.live.debounce.500ms required
 - Numeric inputs: numeric + step="0.001"
 - Images/large elements: aspect-video + overflow-hidden
 - On layout issues: replace custom implementation with standard Filament components first
 
 ## [RULE] Frontend Layout Safety (No-Drift)
+
 - One page, one CSS ecosystem: NEVER mix Bootstrap and Tailwind on the same page.
 - If a page uses any `x-filament::*` component, ALWAYS include `@filamentStyles` and `@filamentScripts(withCore: true)`.
 - Keep Tailwind syntax version consistent per project setup (do not mix v3/v4 utility names).
@@ -42,3 +48,11 @@
 - Do not put complex data logic in Blade; compute in Controller/Livewire and pass view-ready data.
 - Before finalizing UI changes, verify mobile (390px) and tablet (768px) for: initial render, input, error state, modal state, and navigation.
 - Final grep check for Tailwind pages: no `btn-`, `row`, `col-`, `data-bs-`, or Bootstrap CDN links.
+
+## [RULE] TALL Stack Hydration & State Safety (Guest UI)
+
+- FORBIDDEN: Injecting JSON data (`@json`, `@js`) directly into HTML attributes like `x-data` or `x-init`. It causes double-quote collision and DOM breakage.
+- REQUIRED: Use `<script type="application/json" id="data-xxx">` to pass large PHP arrays/objects to the frontend safely.
+- FORBIDDEN: `import Alpine from 'alpinejs'` in standard JS files when using Livewire 3 (causes double instantiation).
+- REQUIRED: Extend Alpine only via `document.addEventListener('alpine:init', () => { window.Alpine.store(...) })`.
+- REQUIRED: Ensure Tailwind v4 content scanning is configured via `@source` in `resources/css/app.css`, not `tailwind.config.js`.

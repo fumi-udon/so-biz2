@@ -4,8 +4,10 @@ use App\Http\Controllers\ClientInventoryController;
 use App\Http\Controllers\CloseCheckController;
 use App\Http\Controllers\MyPageController;
 use App\Http\Controllers\NewsNoteController;
+use App\Http\Middleware\SetGuestLocale;
 use App\Livewire\ClientOrderForm;
 use App\Livewire\FrontendDailyClose;
+use App\Livewire\GuestOrder\MenuPage as GuestMenuPage;
 use App\Livewire\TimecardForm;
 use App\Models\Attendance;
 use App\Models\NewsNote;
@@ -179,3 +181,14 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/input/{timing}/{staff_id}', [ClientInventoryController::class, 'input'])->name('input');
     Route::post('/store', [ClientInventoryController::class, 'store'])->name('store');
 });
+
+// ── Guest mobile order UI ──────────────────────────────────────────────────────
+// Isolated from Filament/admin. SetGuestLocale resolves fr|en from Accept-Language.
+// Ver2: tenantSlug resolved from tableToken directly (opaque signed token).
+Route::middleware(SetGuestLocale::class)
+    ->group(function () {
+        Route::get(
+            '/guest/menu/{tenantSlug}/{tableToken}',
+            GuestMenuPage::class
+        )->name('guest.menu');
+    });
