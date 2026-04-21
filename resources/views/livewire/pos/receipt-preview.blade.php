@@ -1,6 +1,7 @@
 <div
     class="fixed inset-0 z-[340] h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none bg-white text-gray-950 dark:bg-slate-950 dark:text-white"
     x-data="{ isPrinting: false }"
+    x-on:pos-print-lifecycle.window="if ($event.detail && $event.detail.phase === 'start') { isPrinting = true } else if ($event.detail && $event.detail.phase === 'end') { isPrinting = false }"
 >
     <div class="flex h-full min-h-0 flex-col">
         <header class="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
@@ -20,7 +21,6 @@
             <button
                 type="button"
                 x-bind:disabled="isPrinting"
-                x-on:click="isPrinting = true; setTimeout(() => { isPrinting = false }, 3000)"
                 wire:click="printFromPreview"
                 wire:loading.attr="disabled"
                 wire:target="printFromPreview"
@@ -34,8 +34,18 @@
         <main class="min-h-0 flex-1 overflow-y-auto overscroll-none p-3">
             <div class="mx-auto w-full max-w-md rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <div class="mb-2 text-center">
+                    @if (($this->viewData['intent'] ?? '') === 'copy')
+                        <p class="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-amber-800 dark:text-amber-300">DUPLICATA</p>
+                    @endif
                     <p class="text-sm font-black text-gray-950 dark:text-white">{{ $this->viewData['shop_name'] }}</p>
-                    <p class="text-[11px] text-gray-600 dark:text-slate-300">{{ $this->viewData['printed_at'] }}</p>
+                    @if (! empty($this->viewData['original_settled_at']))
+                        <p class="text-[11px] text-gray-600 dark:text-slate-300">{{ __('pos.duplicata_original_settled_line', ['at' => $this->viewData['original_settled_at']]) }}</p>
+                    @endif
+                    @if (($this->viewData['intent'] ?? '') === 'copy')
+                        <p class="text-[11px] text-gray-600 dark:text-slate-300">{{ __('pos.duplicata_generated_label') }}: {{ $this->viewData['printed_at'] }}</p>
+                    @else
+                        <p class="text-[11px] text-gray-600 dark:text-slate-300">{{ $this->viewData['printed_at'] }}</p>
+                    @endif
                 </div>
 
                 <div class="space-y-1 border-y border-dashed border-gray-300 py-2 dark:border-slate-600">
@@ -50,11 +60,29 @@
 
                 <div class="mt-2 space-y-1 text-xs">
                     <div class="flex items-center justify-between">
-                        <span class="text-gray-700 dark:text-slate-300">{{ __('pos.subtotal') }}</span>
+                        <span class="text-gray-700 dark:text-slate-300">{{ __('pos.receipt_subtotal') }}</span>
                         <span class="tabular-nums font-semibold text-gray-900 dark:text-slate-100">{{ $this->formatMinor((int) $this->viewData['subtotal_minor']) }}</span>
                     </div>
-                    <div class="flex items-center justify-between border-t border-gray-200 pt-1 text-sm dark:border-slate-700">
-                        <span class="font-bold text-gray-950 dark:text-white">{{ __('pos.subtotal') }}</span>
+                    @if ((int) ($this->viewData['order_discount_minor'] ?? 0) > 0)
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-700 dark:text-slate-300">{{ __('pos.receipt_order_discount') }}</span>
+                            <span class="tabular-nums font-semibold text-rose-700 dark:text-rose-300">−{{ $this->formatMinor((int) $this->viewData['order_discount_minor']) }}</span>
+                        </div>
+                    @endif
+                    @if ((int) ($this->viewData['rounding_adjustment_minor'] ?? 0) !== 0)
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-700 dark:text-slate-300">{{ __('pos.receipt_rounding') }}</span>
+                            <span @class([
+                                'tabular-nums font-semibold',
+                                'text-rose-700 dark:text-rose-300' => (int) ($this->viewData['rounding_adjustment_minor'] ?? 0) > 0,
+                                'text-emerald-800 dark:text-emerald-300' => (int) ($this->viewData['rounding_adjustment_minor'] ?? 0) < 0,
+                            ])>
+                                {{ $this->formatMinor(-1 * (int) ($this->viewData['rounding_adjustment_minor'] ?? 0)) }}
+                            </span>
+                        </div>
+                    @endif
+                    <div class="flex items-center justify-between border-t border-gray-200 pt-1 text-sm dark:border-slate-700 dark:border-slate-600">
+                        <span class="font-bold text-gray-950 dark:text-white">{{ __('pos.receipt_grand_total') }}</span>
                         <span class="tabular-nums font-black text-gray-950 dark:text-white">{{ $this->formatMinor((int) $this->viewData['total_minor']) }}</span>
                     </div>
                 </div>

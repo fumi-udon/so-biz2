@@ -8,8 +8,8 @@ use App\Support\MenuItemMoney;
 /**
  * Minimal ePOS-Print XML generator for the TM-m30II (58/80mm).
  *
- * Produces the exact payload the browser-side wrapper feeds to
- * `epson.ePOSPrint.send()`. The tags used are the common subset documented in
+ * Produces the exact XML the browser-side ePOSDevice driver sends over WebSocket.
+ * The tags used are the common subset documented in
  * Epson ePOS-Print XML Specification (addText / addFeedLine / addCut).
  *
  * This class is intentionally small, pure, and deterministic: given the same
@@ -30,7 +30,8 @@ final class EpsonReceiptXmlBuilder
      *   final_total_minor: int,
      *   tendered_minor?: int,
      *   change_minor?: int,
-     *   printed_at: string
+     *   printed_at: string,
+     *   duplicate_original_at?: string
      * }  $payload
      */
     public function build(array $payload): string
@@ -39,10 +40,18 @@ final class EpsonReceiptXmlBuilder
         $buf[] = '<?xml version="1.0" encoding="utf-8"?>';
         $buf[] = '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
 
+        if ($payload['intent'] === PrintIntent::Copy) {
+            $buf[] = $this->textLine('DUPLICATA', align: 'center', bold: true);
+            $buf[] = $this->feed(1);
+        }
+
         $buf[] = $this->textBlock($payload['shop_name'], bold: true, doubleSize: true, align: 'center');
         $buf[] = $this->feed(1);
         $buf[] = $this->textLine($this->intentLabel($payload['intent']).' — '.$payload['table_label'], align: 'center');
         $buf[] = $this->textLine($payload['printed_at'], align: 'center');
+        if (! empty($payload['duplicate_original_at'])) {
+            $buf[] = $this->textLine((string) $payload['duplicate_original_at'], align: 'center');
+        }
         $buf[] = $this->feed(1);
 
         foreach ($payload['lines'] as $line) {
@@ -78,7 +87,7 @@ final class EpsonReceiptXmlBuilder
         return match ($intent) {
             PrintIntent::Addition => 'ADDITION',
             PrintIntent::Receipt => 'REÇU',
-            PrintIntent::Copy => 'COPIE',
+            PrintIntent::Copy => 'DUPLICATA',
             PrintIntent::StaffCopy => 'STAFF',
         };
     }

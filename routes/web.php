@@ -201,3 +201,8 @@ Route::middleware(SetGuestLocale::class)
             GuestMenuPage::class
         )->name('guest.menu');
     });
+
+// ── Isolated Epson hardware sanity check (not wired into POS / Livewire) ─────
+Route::get('/printer-test', function () {
+    return view('printer-test');
+})->name('printer-test');

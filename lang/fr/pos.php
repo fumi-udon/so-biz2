@@ -101,6 +101,9 @@ return [
     'discount_reason' => 'Raison',
     'discount_apply' => 'Appliquer',
     'print_failed_title' => 'Impression échouée',
+    'print_failed_body_fallback' => 'Aucun détail. Contactez un administrateur.',
+    'print_error_close' => 'Fermer',
+    'print_error_code_line' => 'Code : :code',
     'print_ok_title' => 'Impression terminée',
 
     'staff_meal_auth_title' => 'Repas staff — qui commande ?',
@@ -115,4 +118,15 @@ return [
     'staff_meal_auth_ok' => 'Repas staff identifié',
     'staff_meal_auth_leave' => 'Quitter la table',
     'staff_meal_auth_confirm' => 'Valider',
+
+    'duplicata_original_settled_line' => 'Réglé le : :at',
+    'duplicata_generated_label' => 'Copie imprimée',
+    'settlement_history_nav' => 'Sessions réglées',
+    'settlement_history_duplicata' => 'DUPLICATA',
+    'settlement_history_back' => 'Retour à la liste',
+    'settlement_column_settled_at' => 'Réglé le',
+    'receipt_subtotal' => 'Sous-total',
+    'receipt_order_discount' => 'Remise',
+    'receipt_rounding' => 'Arrondi',
+    'receipt_grand_total' => 'TOTAL',
 ];

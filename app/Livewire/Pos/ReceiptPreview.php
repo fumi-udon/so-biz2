@@ -8,6 +8,7 @@ use App\Actions\RadTable\RecordAdditionPrintForSessionAction;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PrintIntent;
+use App\Enums\TableSessionStatus;
 use App\Exceptions\RevisionConflictException;
 use App\Models\OrderLine;
 use App\Models\PosOrder;
@@ -22,6 +23,8 @@ use App\Support\Pos\StaffTableSettlementPricing;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Throwable;
@@ -95,6 +98,11 @@ class ReceiptPreview extends Component
                 'final_total_minor' => (int) $this->printData['total_minor'],
                 'printed_at' => (string) $this->printData['printed_at'],
             ];
+            if ($this->dto->originalSettledAt !== null && $this->dto->originalSettledAt !== '') {
+                $xmlPayload['duplicate_original_at'] = __('pos.duplicata_original_settled_line', [
+                    'at' => $this->dto->originalSettledAt,
+                ]);
+            }
             $xmlPayload = array_merge($xmlPayload, $this->receiptTenderLinesForPrinter());
 
             $xml = app(EpsonReceiptXmlBuilder::class)->build($xmlPayload);
@@ -108,6 +116,11 @@ class ReceiptPreview extends Component
                 $payloadMeta['settlement_id'] = $settlementId;
             }
 
+            $idempotencyNonce = $this->printIntent === PrintIntent::Copy ? (string) Str::uuid() : null;
+            if ($idempotencyNonce !== null) {
+                $payloadMeta['nonce'] = $idempotencyNonce;
+            }
+
             $job = app(DispatchPrintJobAction::class)->execute(new DispatchPrintJobRequest(
                 shopId: $this->shopId,
                 tableSessionId: $this->tableSessionId,
@@ -115,6 +128,7 @@ class ReceiptPreview extends Component
                 sessionRevisionSnapshot: $this->expectedSessionRevision,
                 payloadXml: $xml,
                 payloadMeta: $payloadMeta,
+                idempotencyNonce: $idempotencyNonce,
             ));
 
             if ($this->printIntent === PrintIntent::Addition) {
@@ -178,6 +192,9 @@ class ReceiptPreview extends Component
             'subtotal_minor' => $this->dto->subtotalMinor,
             'total_minor' => $this->dto->totalMinor,
             'printed_at' => $this->dto->printedAt,
+            'original_settled_at' => $this->dto->originalSettledAt,
+            'order_discount_minor' => $this->orderDiscountMinor,
+            'rounding_adjustment_minor' => $this->roundingAdjustmentMinor,
         ];
     }
 
@@ -229,13 +246,21 @@ class ReceiptPreview extends Component
             ->orderBy('id')
             ->get();
 
+        $settlement = TableSessionSettlement::query()
+            ->where('table_session_id', $this->tableSessionId)
+            ->orderByDesc('id')
+            ->first();
+
+        $useSettlementSsot = $settlement !== null
+            && (
+                $this->printIntent === PrintIntent::Copy
+                || ($this->printIntent === PrintIntent::Receipt && $session->status === TableSessionStatus::Closed)
+            );
+
         $pricing = StaffTableSettlementPricing::calculateFromPosOrders(
             $this->orders,
             (int) $session->restaurant_table_id,
         );
-
-        $this->orderDiscountMinor = (int) $pricing->orderDiscountAppliedMinor;
-        $this->roundingAdjustmentMinor = (int) $pricing->roundingAdjustmentMinor;
 
         $shopName = (string) (Shop::query()->whereKey($this->shopId)->value('name') ?? '');
         $tableName = (string) ($session->restaurantTable?->name ?? '');
@@ -264,6 +289,54 @@ class ReceiptPreview extends Component
             }
         }
 
+        $lineSumMinor = (int) array_sum(array_column($lines, 'amount_minor'));
+
+        $originalSettledAt = null;
+        if ($settlement !== null && $settlement->settled_at !== null) {
+            $originalSettledAt = $settlement->settled_at->timezone(config('app.timezone'))->format('Y-m-d H:i');
+        }
+
+        $printedAt = Carbon::now()->format('Y-m-d H:i');
+
+        if ($useSettlementSsot) {
+            $this->orderDiscountMinor = (int) $settlement->order_discount_applied_minor;
+            $this->roundingAdjustmentMinor = (int) $settlement->rounding_adjustment_minor;
+
+            if ($lineSumMinor !== (int) $settlement->order_subtotal_minor) {
+                Log::warning('receipt_preview.settlement_line_subtotal_mismatch', [
+                    'shop_id' => $this->shopId,
+                    'table_session_id' => $this->tableSessionId,
+                    'intent' => $this->printIntent->value,
+                    'line_sum_minor' => $lineSumMinor,
+                    'settlement_order_subtotal_minor' => (int) $settlement->order_subtotal_minor,
+                    'settlement_id' => (int) $settlement->id,
+                ]);
+            }
+
+            $this->dto = new ReceiptPreviewData(
+                intent: $this->intent,
+                shopName: $shopName,
+                tableLabel: $tableLabel,
+                lines: $lines,
+                subtotalMinor: (int) $settlement->order_subtotal_minor,
+                totalMinor: (int) $settlement->final_total_minor,
+                printedAt: $printedAt,
+                originalSettledAt: $originalSettledAt,
+            );
+
+            return;
+        }
+
+        $this->orderDiscountMinor = (int) $pricing->orderDiscountAppliedMinor;
+        $this->roundingAdjustmentMinor = (int) $pricing->roundingAdjustmentMinor;
+
+        if ($this->printIntent === PrintIntent::Copy && $settlement === null) {
+            Log::warning('receipt_preview.copy_without_settlement', [
+                'shop_id' => $this->shopId,
+                'table_session_id' => $this->tableSessionId,
+            ]);
+        }
+
         $this->dto = new ReceiptPreviewData(
             intent: $this->intent,
             shopName: $shopName,
@@ -271,7 +344,8 @@ class ReceiptPreview extends Component
             lines: $lines,
             subtotalMinor: (int) $pricing->orderSubtotalMinor,
             totalMinor: (int) $pricing->finalTotalMinor,
-            printedAt: Carbon::now()->format('Y-m-d H:i'),
+            printedAt: $printedAt,
+            originalSettledAt: $settlement !== null ? $originalSettledAt : null,
         );
     }
 
@@ -290,7 +364,7 @@ class ReceiptPreview extends Component
      */
     private function receiptTenderLinesForPrinter(): array
     {
-        if ($this->printIntent !== PrintIntent::Receipt) {
+        if (! in_array($this->printIntent, [PrintIntent::Receipt, PrintIntent::Copy], true)) {
             return [];
         }
 
@@ -315,7 +389,7 @@ class ReceiptPreview extends Component
 
     private function latestSettlementIdForMeta(): ?int
     {
-        if ($this->printIntent !== PrintIntent::Receipt) {
+        if (! in_array($this->printIntent, [PrintIntent::Receipt, PrintIntent::Copy], true)) {
             return null;
         }
 

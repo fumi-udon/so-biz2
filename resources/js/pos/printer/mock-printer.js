@@ -33,6 +33,14 @@ export class MockPrinter extends PrinterInterface {
         const mode = this._readMockMode();
         const latency = mode === 'slow' ? Math.min(timeoutMs - 100, 3_000) : this._simulateLatencyMs;
 
+        if (typeof opts.onDispatched === 'function') {
+            try {
+                opts.onDispatched();
+            } catch {
+                /* ignore */
+            }
+        }
+
         const promise = new Promise((resolve) => {
             const start = Date.now();
             const timer = setTimeout(() => {

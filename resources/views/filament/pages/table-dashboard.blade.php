@@ -217,6 +217,9 @@
                             out.timeout_ms = Math.max(1000, Math.min(300000, Number(o.timeout_ms)));
                             out.timeoutMs = out.timeout_ms;
                         }
+                        if (o.connect_timeout_ms != null && !Number.isNaN(Number(o.connect_timeout_ms))) {
+                            out.connect_timeout_ms = Math.max(3000, Math.min(120000, Number(o.connect_timeout_ms)));
+                        }
                         return out;
                     }
 
@@ -243,6 +246,7 @@
                             url: '',
                             timeoutMs: 10000,
                         };
+                        window.PosConfig = null;
                         return;
                     }
 
@@ -253,8 +257,21 @@
                         url: buildServiceUrl(device),
                         timeoutMs: Number(device.timeout_ms ?? device.timeoutMs ?? 10000),
                     };
+                    window.PosConfig = {
+                        ip: String(device.printer_ip ?? ''),
+                        port: Number(device.printer_port ?? 8043),
+                        deviceId: String(device.device_id ?? 'local_printer'),
+                        crypto: !!device.crypto,
+                        buffer: !!device.buffer,
+                        connectTimeoutMs: Number(device.connect_timeout_ms ?? 20000),
+                        printTimeoutMs: Number(device.timeout_ms ?? device.timeoutMs ?? 10000),
+                        idleDisconnectMs: Number(device.idle_disconnect_ms ?? 60000),
+                        deviceInUseRetryMax: Number(device.device_in_use_retry_max ?? 5),
+                        deviceInUseRetryDelayMs: Number(device.device_in_use_retry_delay_ms ?? 3000),
+                    };
                 })();
             </script>
+            @vite(['resources/js/app.js'])
         @endpush
     @endif
 

@@ -11,21 +11,6 @@ class CloseTaskPolicy
     use HandlesAuthorization;
 
     /**
-     * pilote は CloseTask の閲覧（viewAny / view）のみ。作成・更新・削除は Spatie に委ねず拒否し、
-     * 誤付与権限や Filament アクション経由の破壊的操作を防ぐ。
-     */
-    public function before(User $user, string $ability): ?bool
-    {
-        if (! $user->isPiloteOnly()) {
-            return null;
-        }
-
-        $allowed = ['viewAny', 'view'];
-
-        return in_array($ability, $allowed, true) ? true : false;
-    }
-
-    /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool

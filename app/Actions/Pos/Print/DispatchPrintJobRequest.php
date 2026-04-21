@@ -13,6 +13,9 @@ use InvalidArgumentException;
  * two distinct "Addition" presses at different revisions produce two
  * distinct print_jobs rows — but a double-click at the same revision is
  * deduplicated to one row.
+ *
+ * {@see PrintIntent::Copy}: optional `idempotencyNonce` is mixed into the key
+ * so intentional reprints ("one more copy") are not collapsed into one job.
  */
 final readonly class DispatchPrintJobRequest
 {
@@ -25,6 +28,7 @@ final readonly class DispatchPrintJobRequest
         /** @var array<string, mixed>|null */
         public ?array $payloadMeta = null,
         public ?int $orderId = null,
+        public ?string $idempotencyNonce = null,
     ) {
         if ($shopId < 1 || $tableSessionId < 1) {
             throw new InvalidArgumentException('shopId and tableSessionId must be positive');
@@ -35,13 +39,20 @@ final readonly class DispatchPrintJobRequest
         if (trim($payloadXml) === '') {
             throw new InvalidArgumentException('payloadXml is required');
         }
+        if ($intent !== PrintIntent::Copy && $idempotencyNonce !== null && $idempotencyNonce !== '') {
+            throw new InvalidArgumentException('idempotencyNonce is only supported for Copy intent');
+        }
     }
 
     public function idempotencyKey(): string
     {
-        return hash(
-            'sha256',
-            $this->tableSessionId.':'.$this->sessionRevisionSnapshot.':'.$this->intent->value
-        );
+        $material = $this->tableSessionId.':'.$this->sessionRevisionSnapshot.':'.$this->intent->value;
+        if ($this->intent === PrintIntent::Copy
+            && $this->idempotencyNonce !== null
+            && $this->idempotencyNonce !== '') {
+            $material .= ':'.$this->idempotencyNonce;
+        }
+
+        return hash('sha256', $material);
     }
 }

@@ -101,6 +101,9 @@ return [
     'discount_reason' => 'Reason',
     'discount_apply' => 'Apply',
     'print_failed_title' => 'Print failed',
+    'print_failed_body_fallback' => 'No details available. Contact an administrator.',
+    'print_error_close' => 'Dismiss',
+    'print_error_code_line' => 'Code: :code',
     'print_ok_title' => 'Print done',
 
     'staff_meal_auth_title' => 'Staff meal — who is ordering?',
@@ -115,4 +118,15 @@ return [
     'staff_meal_auth_ok' => 'Staff meal identified',
     'staff_meal_auth_leave' => 'Leave table',
     'staff_meal_auth_confirm' => 'Confirm',
+
+    'duplicata_original_settled_line' => 'Settled: :at',
+    'duplicata_generated_label' => 'Copy printed',
+    'settlement_history_nav' => 'Settled sessions',
+    'settlement_history_duplicata' => 'DUPLICATA',
+    'settlement_history_back' => 'Back to list',
+    'settlement_column_settled_at' => 'Settled at',
+    'receipt_subtotal' => 'Subtotal',
+    'receipt_order_discount' => 'Discount',
+    'receipt_rounding' => 'Rounding',
+    'receipt_grand_total' => 'TOTAL',
 ];

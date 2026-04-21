@@ -2,8 +2,8 @@
  * PrinterInterface — minimal contract every printer driver must implement.
  *
  * Implementations are intentionally small so the Livewire bridge doesn't
- * have to know whether the currently-selected driver is the real ePOS HTTP
- * printer (production) or the Mock (no hardware / dev env).
+ * have to know whether the currently-selected driver is the real ePOSDevice
+ * WebSocket printer (production) or the Mock (no hardware / dev env).
  *
  *   send(jobKey, xmlPayload, opts?) → Promise<{ ok: true }>
  *                                   | Promise<{ ok: false, code, message }>

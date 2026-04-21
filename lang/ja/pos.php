@@ -101,6 +101,9 @@ return [
     'discount_reason' => '理由',
     'discount_apply' => '適用',
     'print_failed_title' => '印刷失敗',
+    'print_failed_body_fallback' => '詳細は取得できませんでした。管理者に連絡してください。',
+    'print_error_close' => '閉じる',
+    'print_error_code_line' => 'コード: :code',
     'print_ok_title' => '印刷完了',
 
     'staff_meal_auth_title' => '賄い — 誰の注文ですか？',
@@ -115,4 +118,15 @@ return [
     'staff_meal_auth_ok' => '賄いとして記録しました',
     'staff_meal_auth_leave' => '卓を閉じる',
     'staff_meal_auth_confirm' => '確定',
+
+    'duplicata_original_settled_line' => '精算: :at',
+    'duplicata_generated_label' => '複写を印刷',
+    'settlement_history_nav' => '精算済みセッション',
+    'settlement_history_duplicata' => 'DUPLICATA',
+    'settlement_history_back' => '一覧へ戻る',
+    'settlement_column_settled_at' => '精算日時',
+    'receipt_subtotal' => '小計',
+    'receipt_order_discount' => '割引',
+    'receipt_rounding' => '端数調整',
+    'receipt_grand_total' => 'TOTAL',
 ];

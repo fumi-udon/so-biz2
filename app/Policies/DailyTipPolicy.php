@@ -11,24 +11,6 @@ class DailyTipPolicy
     use HandlesAuthorization;
 
     /**
-     * pilote への安全なアクションを一元管理するゲートウェイ（AttendancePolicy と同様）。
-     *
-     * - 許可リストに含まれる ability → true
-     * - 含まれない破壊的 ability → false
-     * - pilote でないユーザー → null（Spatie の通常フローへ委譲）
-     */
-    public function before(User $user, string $ability): ?bool
-    {
-        if (! $user->isPiloteOnly()) {
-            return null;
-        }
-
-        $allowed = ['viewAny', 'view', 'create', 'update'];
-
-        return in_array($ability, $allowed, true) ? true : false;
-    }
-
-    /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool

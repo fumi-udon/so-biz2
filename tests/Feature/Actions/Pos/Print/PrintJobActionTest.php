@@ -62,6 +62,48 @@ final class PrintJobActionTest extends TestCase
         $this->assertDatabaseCount('print_jobs', 1);
     }
 
+    public function test_copy_intent_with_distinct_nonces_creates_two_print_jobs(): void
+    {
+        $shop = $this->makeShop('pj-copy-nonce');
+        $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
+
+        $make = fn (string $nonce): DispatchPrintJobRequest => new DispatchPrintJobRequest(
+            shopId: (int) $shop->id,
+            tableSessionId: (int) $session->id,
+            intent: PrintIntent::Copy,
+            sessionRevisionSnapshot: 5,
+            payloadXml: '<epos-print/>',
+            idempotencyNonce: $nonce,
+        );
+
+        $a = app(DispatchPrintJobAction::class)->execute($make('nonce-a'));
+        $b = app(DispatchPrintJobAction::class)->execute($make('nonce-b'));
+
+        $this->assertNotSame((int) $a->id, (int) $b->id);
+        $this->assertDatabaseCount('print_jobs', 2);
+    }
+
+    public function test_copy_intent_same_nonce_returns_existing_row(): void
+    {
+        $shop = $this->makeShop('pj-copy-same');
+        $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
+
+        $req = new DispatchPrintJobRequest(
+            shopId: (int) $shop->id,
+            tableSessionId: (int) $session->id,
+            intent: PrintIntent::Copy,
+            sessionRevisionSnapshot: 2,
+            payloadXml: '<epos-print/>',
+            idempotencyNonce: 'same-nonce',
+        );
+
+        $first = app(DispatchPrintJobAction::class)->execute($req);
+        $second = app(DispatchPrintJobAction::class)->execute($req);
+
+        $this->assertSame((int) $first->id, (int) $second->id);
+        $this->assertDatabaseCount('print_jobs', 1);
+    }
+
     public function test_different_revision_produces_new_print_job(): void
     {
         $shop = $this->makeShop('pj-rev');
@@ -227,6 +269,19 @@ final class PrintJobActionTest extends TestCase
         $this->assertStringContainsString('Couscous', $xml);
         $this->assertStringContainsString('Thé', $xml);
         $this->assertStringContainsString('<cut type="feed"', $xml);
+
+        $xmlCopy = app(EpsonReceiptXmlBuilder::class)->build([
+            'shop_name' => 'S',
+            'table_label' => 'T1',
+            'intent' => PrintIntent::Copy,
+            'lines' => [['qty' => 1, 'name' => 'X', 'amount_minor' => 100]],
+            'subtotal_minor' => 100,
+            'final_total_minor' => 100,
+            'printed_at' => '2026-04-19 12:34',
+            'duplicate_original_at' => 'Settled: 2026-04-19 11:00',
+        ]);
+        $this->assertStringContainsString('DUPLICATA', $xmlCopy);
+        $this->assertStringContainsString('Settled: 2026-04-19 11:00', $xmlCopy);
     }
 
     private function makePendingJob(string $suffix, ?Shop $shop = null): PrintJob

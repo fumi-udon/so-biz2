@@ -1,15 +1,14 @@
 import { PrinterFactory } from './printer-factory.js';
+import { resolvePosPrinterStaffMessage } from './pos-printer-staff-messages.js';
 
 /**
  * PrintController — binds Livewire's browser-dispatched print events to
  * the active Printer driver and dispatches the result back. Only one
- * instance should exist per page. Installed from the blade template:
- *
- *   <script>window.PosPrintController && window.PosPrintController.install();</script>
+ * instance should exist per page. Installed from resources/js/app.js.
  *
  * Wire event contract (from Livewire PrinterBridge):
  *   in  → 'pos-trigger-print'   { printJobId, jobKey, xml, opts? }
- *   out → 'pos-print-ack'       { printJobId, ok, code?, message? }
+ *   out → 'pos-print-ack'       { printJobId, ok, code?, message?, staffMessage?, displayCode? }
  *         'pos-print-dispatched'{ printJobId }
  */
 class PrintControllerImpl {
@@ -23,7 +22,10 @@ class PrintControllerImpl {
         this._installed = true;
         this._driver = PrinterFactory.resolveDriver();
 
-        window.addEventListener('pos-trigger-print', (e) => this._onTrigger(e));
+        // Livewire 3 dispatches from the component root element with bubbling.
+        // Bubbling reaches `document` but not `window`, so listening on `window`
+        // never fires for PHP `$this->dispatch('pos-trigger-print', ...)`.
+        document.addEventListener('pos-trigger-print', (e) => this._onTrigger(e));
     }
 
     async _onTrigger(event) {
@@ -35,17 +37,51 @@ class PrintControllerImpl {
             return;
         }
 
-        this._dispatchLivewire('pos-print-dispatched', { printJobId });
-
+        this._emitLifecycle('start', printJobId);
         try {
-            const res = await this._driver.send(jobKey, xml, opts ?? {});
-            this._dispatchAck(printJobId, res);
+            const res = await this._driver.send(jobKey, xml, {
+                ...(opts ?? {}),
+                printJobId,
+                onDispatched: () => this._dispatchLivewire('pos-print-dispatched', { printJobId }),
+            });
+            if (res.ok) {
+                this._dispatchAck(printJobId, { ...res, staffMessage: null, displayCode: null });
+            } else {
+                const mapped = resolvePosPrinterStaffMessage(res.code, res.message);
+                this._dispatchAck(printJobId, {
+                    ...res,
+                    staffMessage: mapped.staffMessage,
+                    displayCode: mapped.displayCode,
+                });
+            }
         } catch (e) {
+            const mapped = resolvePosPrinterStaffMessage('JS_THROW', e && e.message ? e.message : String(e));
             this._dispatchAck(printJobId, {
                 ok: false,
                 code: 'JS_THROW',
                 message: (e && e.message) ? e.message : String(e),
+                staffMessage: mapped.staffMessage,
+                displayCode: mapped.displayCode,
             });
+        } finally {
+            this._emitLifecycle('end', printJobId);
+        }
+    }
+
+    /**
+     * @param {'start'|'end'} phase
+     * @param {number} printJobId
+     */
+    _emitLifecycle(phase, printJobId) {
+        try {
+            window.dispatchEvent(
+                new CustomEvent('pos-print-lifecycle', {
+                    detail: { phase, printJobId },
+                    bubbles: true,
+                }),
+            );
+        } catch {
+            /* ignore */
         }
     }
 
@@ -64,6 +100,8 @@ class PrintControllerImpl {
             ok: !!res.ok,
             code: res.code ?? null,
             message: res.message ?? null,
+            staffMessage: res.staffMessage ?? null,
+            displayCode: res.displayCode ?? null,
         });
     }
 

@@ -13,7 +13,8 @@ use App\Models\ShopPrinterSetting;
  *   printer_port:string,
  *   device_id:string,
  *   crypto:bool,
- *   timeout_ms:int
+ *   timeout_ms:int,
+ *   connect_timeout_ms:int
  * }
  * @phpstan-type JsConfig array{
  *   driver:string,
@@ -42,6 +43,11 @@ final class PosPrinterClientConfig
         $deviceId = (string) ($defaults['device_id'] ?? 'local_printer');
         $crypto = (bool) ($defaults['crypto'] ?? true);
         $timeoutMs = (int) ($defaults['timeout_ms'] ?? 10_000);
+        $connectTimeoutMs = (int) config('pos.printer.connect_timeout_ms', 20_000);
+        $idleDisconnectMs = (int) config('pos.printer.idle_disconnect_ms', 60_000);
+        $deviceInUseRetryMax = (int) config('pos.printer.device_in_use_retry_max', 5);
+        $deviceInUseRetryDelayMs = (int) config('pos.printer.device_in_use_retry_delay_ms', 3_000);
+        $buffer = (bool) config('pos.printer.buffer', false);
 
         if ($shopId > 0) {
             $row = ShopPrinterSetting::query()->where('shop_id', $shopId)->first();
@@ -62,6 +68,11 @@ final class PosPrinterClientConfig
             'url' => $url,
             'timeoutMs' => $timeoutMs,
             'timeout_ms' => $timeoutMs,
+            'connect_timeout_ms' => $connectTimeoutMs,
+            'idle_disconnect_ms' => $idleDisconnectMs,
+            'device_in_use_retry_max' => $deviceInUseRetryMax,
+            'device_in_use_retry_delay_ms' => $deviceInUseRetryDelayMs,
+            'buffer' => $buffer,
             'printer_ip' => $ip,
             'printer_port' => $port,
             'device_id' => $deviceId,
@@ -70,7 +81,7 @@ final class PosPrinterClientConfig
     }
 
     /**
-     * Minimal object for {@see window.posPrinterConfig} (EpsonHttpPrinter / PrinterFactory).
+     * Minimal object for {@see window.posPrinterConfig} (legacy SOAP URL + timeout; see also {@see window.PosConfig}).
      *
      * @return array{driver:string,url:string,timeoutMs:int}
      */
