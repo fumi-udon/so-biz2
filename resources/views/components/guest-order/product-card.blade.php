@@ -7,7 +7,7 @@
 
 @php
     $styleCount = count($item['styles'] ?? []);
-    $priceFormatted = number_format($item['from_price_minor'] / 1000, 3, '.', '') . ' DT';
+    $priceFormatted = \App\Support\MenuItemMoney::formatMinorForDisplay((int) ($item['from_price_minor'] ?? 0));
 @endphp
 
 <article

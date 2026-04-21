@@ -23,7 +23,10 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_DATABASE" value="testing"/>
+        <!-- DB は .env.testing（MySQL / Sail の soya_biz2_test）を使用。DB_URL だけ上書きして DSN 混線を防ぐ -->
+        <!-- ホストで phpunit を叩くとき CLI に pdo_mysql が必要。`could not find driver` のときは
+             Ubuntu/WSL: sudo apt install php8.3-mysql（バージョンは php -v に合わせる）。
+             Sail ならコンテナ内の PHP を使う: ./vendor/bin/sail artisan test -->
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

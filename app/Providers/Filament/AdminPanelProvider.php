@@ -24,21 +24,27 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
-        // Filament v3 では Panel に ->echo() は無く、レイアウトは config('filament.broadcasting.echo') を参照する。
-        // 以下はご指定の Pusher（Echo）設定と同等（認可付き通知用に auth 等は従来どおり維持）。
+        // Filament v3 does not expose ->echo() on Panel, so it reads
+        // config('filament.broadcasting.echo') at render time.
+        // When key is missing, hard-disable Echo to avoid runtime crash:
+        // "You must pass your app key when you instantiate Pusher."
+        $pusherKey = env('VITE_PUSHER_APP_KEY');
+
         config([
-            'filament.broadcasting.echo' => [
-                'broadcaster' => 'pusher',
-                'key' => env('VITE_PUSHER_APP_KEY'),
-                'cluster' => env('VITE_PUSHER_APP_CLUSTER'),
-                'wsHost' => env('VITE_PUSHER_HOST', 'ws-'.env('VITE_PUSHER_APP_CLUSTER').'.pusher.com'),
-                'wsPort' => env('VITE_PUSHER_PORT', 443),
-                'wssPort' => env('VITE_PUSHER_PORT', 443),
-                'forceTLS' => true,
-                'authEndpoint' => '/broadcasting/auth',
-                'disableStats' => true,
-                'encrypted' => true,
-            ],
+            'filament.broadcasting.echo' => filled($pusherKey)
+                ? [
+                    'broadcaster' => 'pusher',
+                    'key' => $pusherKey,
+                    'cluster' => env('VITE_PUSHER_APP_CLUSTER'),
+                    'wsHost' => env('VITE_PUSHER_HOST', 'ws-'.env('VITE_PUSHER_APP_CLUSTER').'.pusher.com'),
+                    'wsPort' => env('VITE_PUSHER_PORT', 443),
+                    'wssPort' => env('VITE_PUSHER_PORT', 443),
+                    'forceTLS' => true,
+                    'authEndpoint' => '/broadcasting/auth',
+                    'disableStats' => true,
+                    'encrypted' => true,
+                ]
+                : null,
         ]);
 
         return $panel

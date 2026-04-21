@@ -426,10 +426,11 @@
         class="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 p-4"
         @click.self="openMyPageModal = false"
     >
-        <div class="w-full max-w-md rounded-2xl border-4 border-black bg-white p-4 text-gray-900 shadow-[0_12px_0_0_rgba(0,0,0,1)] dark:bg-gray-950 dark:text-gray-100">
-            <h2 class="mb-1 text-xl font-black tracking-wider text-gray-900 dark:text-white">Connexion Mon espace</h2>
-            <p class="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Selectionnez le personnel et saisissez le PIN.</p>
-            <p class="-mt-2 mb-3 text-[10px] text-gray-400 dark:text-gray-500">本人確認</p>
+        <x-staff-pin-auth-card
+            title="Connexion Mon espace"
+            subtitle="Selectionnez le personnel et saisissez le PIN."
+            note="本人確認"
+        >
             <form method="POST" action="{{ route('mypage.open') }}" class="space-y-2">
                 @csrf
                 <div>
@@ -473,6 +474,6 @@
                     </button>
                 </div>
             </form>
-        </div>
+        </x-staff-pin-auth-card>
     </div>
 </div>

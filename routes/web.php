@@ -2,12 +2,14 @@
 
 use App\Http\Controllers\ClientInventoryController;
 use App\Http\Controllers\CloseCheckController;
+use App\Http\Controllers\KdsAuthController;
 use App\Http\Controllers\MyPageController;
 use App\Http\Controllers\NewsNoteController;
 use App\Http\Middleware\SetGuestLocale;
 use App\Livewire\ClientOrderForm;
 use App\Livewire\FrontendDailyClose;
 use App\Livewire\GuestOrder\MenuPage as GuestMenuPage;
+use App\Livewire\Kds\KdsDashboard;
 use App\Livewire\TimecardForm;
 use App\Models\Attendance;
 use App\Models\NewsNote;
@@ -144,6 +146,13 @@ Route::get('/', function (Request $request) {
 })->name('home');
 
 Route::get('/order/{table_number}', ClientOrderForm::class)->name('order.table');
+
+Route::get('/kds/login', [KdsAuthController::class, 'showLoginForm'])->name('kds.login');
+Route::post('/kds/login', [KdsAuthController::class, 'login'])->name('kds.login.submit');
+
+Route::middleware('kds.auth')->group(function () {
+    Route::get('/kds', KdsDashboard::class)->name('kds.dashboard');
+});
 
 Route::get('/timecard', TimecardForm::class)->name('timecard.index');
 

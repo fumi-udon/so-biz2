@@ -2,17 +2,24 @@
 
 namespace App\Livewire\GuestOrder;
 
+use App\Actions\GuestOrder\SubmitGuestOrderAction;
+use App\Exceptions\GuestOrderForbiddenException;
+use App\Exceptions\GuestOrderValidationException;
+use App\Models\MenuItem;
+use App\Models\Shop;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Throwable;
 
 #[Layout('layouts.guest-order')]
 class MenuPage extends Component
 {
     /**
-     * Ordered menu catalogue.
-     * Ver1: dummy array. Ver2: replace resolveMenu() with DB/Filament query.
+     * Ordered menu catalogue (DB-backed Shop → categories → items).
      *
      * @var array<string, mixed>
      */
@@ -34,10 +41,18 @@ class MenuPage extends Component
      */
     public array $translations = [];
 
+    /** Route param: tenant slug (Ver2: resolve tenant / brand id). */
+    public string $tenantSlug = '';
+
+    /** Route param: opaque table token from QR (Ver2: validate + bind session). */
+    public string $tableToken = '';
+
     public function mount(string $tenantSlug, string $tableToken): void
     {
-        $this->theme        = $this->resolveTheme($tenantSlug);
-        $this->catalog      = $this->resolveCatalog($tenantSlug);
+        $this->tenantSlug = $tenantSlug;
+        $this->tableToken = $tableToken;
+        $this->theme = $this->resolveTheme($this->themeKeyForLookup($tenantSlug));
+        $this->catalog = $this->resolveCatalog($tenantSlug);
         $this->translations = $this->resolveTranslations();
     }
 
@@ -46,260 +61,246 @@ class MenuPage extends Component
         return view('livewire.guest-order.menu-page');
     }
 
+    /**
+     * Persist guest cart as a POS order (Zero Trust pricing in {@see SubmitGuestOrderAction}).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function submitOrder(array $payload): void
+    {
+        try {
+            $result = app(SubmitGuestOrderAction::class)->execute(
+                $this->tenantSlug,
+                $this->tableToken,
+                $payload,
+            );
+            $this->dispatch('guest-order-saved', orderId: $result->posOrderId);
+        } catch (GuestOrderForbiddenException|GuestOrderValidationException $e) {
+            $this->dispatch('guest-order-error', message: $e->getMessage());
+        } catch (Throwable $e) {
+            Log::error('guest_order_submit_failed', [
+                'exception' => $e,
+            ]);
+            $this->dispatch('guest-order-error', message: __('Unable to submit order. Please try again.'));
+        }
+    }
+
     // ─── Resolution methods (Ver2: replace bodies with real lookups) ──────────
 
     /**
-     * Resolve brand tokens for a given tenant slug.
-     *
-     * @return array<string, mixed>
+     * DB `shops.slug` と theme 定義のキーが1対1で一致しないと `resolveTheme` だけ
+     * Bistro フォールバックになり、ヘッダ/配色は別店・カタログは正店という不整合が出る。
+     * ここで正規化する（例: ショップ表が `currykitano`、テーマ定義は `curry-kitano`）。
      */
-    private function resolveTheme(string $tenantSlug): array
+    private function themeKeyForLookup(string $tenantSlug): string
     {
-        $themes = [
-            'bistronippon' => [
-                'slug'              => 'bistronippon',
-                'display_name'      => 'Bistro Nippon.',
-                'logo_url'          => asset('images/tenants/bistronippon/logo.svg'),
-                'primary_hex'       => '#1e3a8a',
-                'on_primary_hex'    => '#ffffff',
-                'accent_hex'        => '#3b82f6',
-                'danger_hex'        => '#dc2626',
-                'surface_hex'       => '#f8fafc',
-                'cart_bg_hex'       => '#0f172a',
-                'button_radius_rem' => '0.75rem',
-                'card_radius_rem'   => '1rem',
-                'font_url'          => 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap',
-                'font_family'       => "'Noto Sans JP', 'Instrument Sans', ui-sans-serif, sans-serif",
-            ],
-            'soya' => [
-                'slug'              => 'soya',
-                'display_name'      => 'Söya',
-                'logo_url'          => asset('images/tenants/soya/logo.svg'),
-                'primary_hex'       => '#14532d',
-                'on_primary_hex'    => '#ffffff',
-                'accent_hex'        => '#22c55e',
-                'danger_hex'        => '#dc2626',
-                'surface_hex'       => '#fafaf5',
-                'cart_bg_hex'       => '#1a2e1a',
-                'button_radius_rem' => '1.5rem',
-                'card_radius_rem'   => '1.25rem',
-                'font_url'          => 'https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap',
-                'font_family'       => "'Zen Kaku Gothic New', 'Instrument Sans', ui-sans-serif, sans-serif",
-            ],
-            'curry-kitano' => [
-                'slug'              => 'curry-kitano',
-                'display_name'      => 'Curry Kitano',
-                'logo_url'          => asset('images/tenants/curry-kitano/logo.svg'),
-                'primary_hex'       => '#7c2d12',
-                'on_primary_hex'    => '#ffffff',
-                'accent_hex'        => '#f97316',
-                'danger_hex'        => '#dc2626',
-                'surface_hex'       => '#fff8f0',
-                'cart_bg_hex'       => '#431407',
-                'button_radius_rem' => '0.5rem',
-                'card_radius_rem'   => '0.75rem',
-                'font_url'          => 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap',
-                'font_family'       => "'Noto Serif JP', ui-serif, serif",
-            ],
-        ];
-
-        return $themes[$tenantSlug] ?? $themes['bistronippon'];
+        return match (trim($tenantSlug)) {
+            'currykitano' => 'curry-kitano',
+            default => $tenantSlug,
+        };
     }
 
     /**
-     * Resolve the ordered menu catalogue for a given tenant slug.
-     * from_price_minor is always min(styles[].price_minor) for display.
+     * Resolve brand tokens for a given theme key (after {@see themeKeyForLookup}).
+     *
+     * @return array<string, mixed>
+     */
+    private function resolveTheme(string $themeKey): array
+    {
+        $themes = [
+            'bistronippon' => [
+                'slug' => 'bistronippon',
+                'display_name' => 'Bistro Nippon.',
+                'logo_url' => asset('images/tenants/bistronippon/logo.svg'),
+                'primary_hex' => '#1e3a8a',
+                'on_primary_hex' => '#ffffff',
+                'accent_hex' => '#3b82f6',
+                'danger_hex' => '#dc2626',
+                'surface_hex' => '#f8fafc',
+                'cart_bg_hex' => '#0f172a',
+                'button_radius_rem' => '0.75rem',
+                'card_radius_rem' => '1rem',
+                'font_url' => 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap',
+                'font_family' => "'Noto Sans JP', 'Instrument Sans', ui-sans-serif, sans-serif",
+            ],
+            'soya' => [
+                'slug' => 'soya',
+                'display_name' => 'Söya',
+                'logo_url' => asset('images/tenants/soya/logo.svg'),
+                'primary_hex' => '#14532d',
+                'on_primary_hex' => '#ffffff',
+                'accent_hex' => '#22c55e',
+                'danger_hex' => '#dc2626',
+                'surface_hex' => '#fafaf5',
+                'cart_bg_hex' => '#1a2e1a',
+                'button_radius_rem' => '1.5rem',
+                'card_radius_rem' => '1.25rem',
+                'font_url' => 'https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap',
+                'font_family' => "'Zen Kaku Gothic New', 'Instrument Sans', ui-sans-serif, sans-serif",
+            ],
+            'curry-kitano' => [
+                'slug' => 'curry-kitano',
+                'display_name' => 'Curry Kitano',
+                'logo_url' => asset('images/tenants/curry-kitano/logo.svg'),
+                'primary_hex' => '#7c2d12',
+                'on_primary_hex' => '#ffffff',
+                'accent_hex' => '#f97316',
+                'danger_hex' => '#dc2626',
+                'surface_hex' => '#fff8f0',
+                'cart_bg_hex' => '#431407',
+                'button_radius_rem' => '0.5rem',
+                'card_radius_rem' => '0.75rem',
+                'font_url' => 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap',
+                'font_family' => "'Noto Serif JP', ui-serif, serif",
+            ],
+        ];
+
+        return $themes[$themeKey] ?? $themes['bistronippon'];
+    }
+
+    /**
+     * Resolve the ordered menu catalogue for a given tenant slug (Shop.slug).
+     * Display price uses min(base from_price_minor, min(styles[].price_minor)).
      *
      * @return array<string, mixed>
      */
     private function resolveCatalog(string $tenantSlug): array
     {
-        // Shared dummy catalogue (same across all tenants for Ver1)
+        $shop = Shop::query()
+            ->where('slug', $tenantSlug)
+            ->where('is_active', true)
+            ->with([
+                'menuCategories' => static function ($query): void {
+                    $query->where('is_active', true)
+                        ->orderBy('sort_order')
+                        ->orderBy('name');
+                },
+                'menuCategories.menuItems' => static function ($query): void {
+                    $query->where('is_active', true)
+                        ->orderBy('sort_order')
+                        ->orderBy('name');
+                },
+            ])
+            ->first();
+
+        if ($shop === null) {
+            return [
+                'meta' => self::defaultMeta(null),
+                'categories' => [],
+            ];
+        }
+
+        $categories = [];
+        foreach ($shop->menuCategories as $category) {
+            $items = [];
+            foreach ($category->menuItems as $item) {
+                $items[] = $this->mapMenuItemToCatalogArray($item);
+            }
+
+            $categories[] = [
+                'id' => $this->catalogIdForCategory($category->slug, $category->getKey()),
+                'label' => $category->name,
+                'items' => $items,
+            ];
+        }
+
         return [
-            'meta' => [
-                'currency'              => 'TND',
-                'price_divisor'         => 1000,
+            'meta' => self::defaultMeta($shop->id),
+            'categories' => $categories,
+        ];
+    }
+
+    /**
+     * @return array{currency: string, price_divisor: int, merge_identical_lines: bool, shop_id?: int}
+     */
+    private static function defaultMeta(?int $shopId = null): array
+    {
+        $meta = [
+            'currency' => 'TND',
+            'price_divisor' => 1000,
+            'merge_identical_lines' => true,
+        ];
+        if ($shopId !== null && $shopId > 0) {
+            $meta['shop_id'] = $shopId;
+        }
+
+        return $meta;
+    }
+
+    private function catalogIdForCategory(?string $slug, int|string $id): string
+    {
+        if (is_string($slug) && $slug !== '') {
+            return $slug;
+        }
+
+        return (string) $id;
+    }
+
+    private function catalogIdForMenuItem(int|string $id): string
+    {
+        return (string) $id;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapMenuItemToCatalogArray(MenuItem $item): array
+    {
+        $payload = is_array($item->options_payload) ? $item->options_payload : [];
+        $styles = array_values(array_filter(
+            is_array($payload['styles'] ?? null) ? $payload['styles'] : [],
+            static fn ($row): bool => is_array($row),
+        ));
+        $toppings = array_values(array_filter(
+            is_array($payload['toppings'] ?? null) ? $payload['toppings'] : [],
+            static fn ($row): bool => is_array($row),
+        ));
+
+        $rules = array_merge(
+            [
+                'style_required' => false,
                 'merge_identical_lines' => true,
             ],
-            'categories' => [
-                [
-                    'id'    => 'entrees-tapas',
-                    'label' => 'ENTRÉES & TAPAS',
-                    'items' => [
-                        [
-                            'id'               => 'soupe-miso',
-                            'name'             => 'Soupe miso wakame',
-                            'description'      => 'Soupe miso aux algues vertes.',
-                            'image'            => asset('images/dummy/soupe-miso.jpg'),
-                            'from_price_minor' => 8000,
-                            'styles'           => [
-                                ['id' => 'classic', 'name' => 'Classic', 'price_minor' => 8000],
-                            ],
-                            'toppings' => [],
-                            'rules'    => ['style_required' => false, 'merge_identical_lines' => true],
-                        ],
-                        [
-                            'id'               => 'gyoza',
-                            'name'             => 'Gyoza grillés',
-                            'description'      => 'Raviolis grillés poulet bœuf.',
-                            'image'            => asset('images/dummy/gyoza.jpg'),
-                            'from_price_minor' => 12000,
-                            'styles'           => [
-                                ['id' => 'poulet',   'name' => 'Poulet',       'price_minor' => 12000],
-                                ['id' => 'boeuf',    'name' => 'Bœuf',         'price_minor' => 13000],
-                                ['id' => 'legumes',  'name' => 'Légumes',      'price_minor' => 11000],
-                                ['id' => 'crevettes','name' => 'Crevettes',    'price_minor' => 14000],
-                            ],
-                            'toppings' => [],
-                            'rules'    => ['style_required' => true, 'merge_identical_lines' => true],
-                        ],
-                        [
-                            'id'               => 'croquettes',
-                            'name'             => 'Croquettes (2 pièces)',
-                            'description'      => 'Croquettes sauce teriyaki.',
-                            'image'            => asset('images/dummy/croquettes.jpg'),
-                            'from_price_minor' => 8000,
-                            'styles'           => [
-                                ['id' => 'default', 'name' => 'Classic', 'price_minor' => 8000],
-                            ],
-                            'toppings' => [],
-                            'rules'    => ['style_required' => false, 'merge_identical_lines' => true],
-                        ],
-                        [
-                            'id'               => 'paiko',
-                            'name'             => 'Paiko poulet frit',
-                            'description'      => 'Poulet frit sauce japonaise.',
-                            'image'            => asset('images/dummy/paiko.jpg'),
-                            'from_price_minor' => 19000,
-                            'styles'           => [
-                                ['id' => 'regular', 'name' => 'Regular',  'price_minor' => 19000],
-                                ['id' => 'spicy',   'name' => 'Spicy',    'price_minor' => 20000],
-                            ],
-                            'toppings' => [
-                                ['id' => 'extra-sauce', 'name' => 'Sauce supplémentaire', 'price_delta_minor' => 1500],
-                            ],
-                            'rules' => ['style_required' => true, 'merge_identical_lines' => true],
-                        ],
-                    ],
-                ],
-                [
-                    'id'    => 'riz-rice',
-                    'label' => 'RIZ / RICE',
-                    'items' => [
-                        [
-                            'id'               => 'donburi-poulet',
-                            'name'             => 'Donburi Poulet Teriyaki',
-                            'description'      => 'Riz japonais, poulet teriyaki maison.',
-                            'image'            => asset('images/dummy/donburi.jpg'),
-                            'from_price_minor' => 22000,
-                            'styles'           => [
-                                ['id' => 'small',  'name' => 'Small  (S)', 'price_minor' => 22000],
-                                ['id' => 'medium', 'name' => 'Medium (M)', 'price_minor' => 26000],
-                                ['id' => 'large',  'name' => 'Large  (L)', 'price_minor' => 30000],
-                            ],
-                            'toppings' => [
-                                ['id' => 'oeuf-onsen', 'name' => 'Œuf onsen', 'price_delta_minor' => 2500],
-                            ],
-                            'rules' => ['style_required' => true, 'merge_identical_lines' => true],
-                        ],
-                    ],
-                ],
-                [
-                    'id'    => 'ramen',
-                    'label' => 'RAMEN',
-                    'items' => [
-                        [
-                            'id'               => 'ramen-tokyo',
-                            'name'             => 'RAMEN TOKYO SAUCE SOJA',
-                            'description'      => 'Bouillon sauce soja, œuf.',
-                            'image'            => asset('images/dummy/ramen-tokyo.jpg'),
-                            'from_price_minor' => 29000,
-                            'styles'           => [
-                                ['id' => 'chicken-veg', 'name' => 'poulet & légumes',  'price_minor' => 29000],
-                                ['id' => 'paiko',       'name' => 'paiko poulet frits','price_minor' => 33000],
-                                ['id' => 'beef-bbq',    'name' => 'bœuf bbq (150g)',   'price_minor' => 43000],
-                                ['id' => 'seafood',     'name' => 'fruits de mer',     'price_minor' => 39000],
-                                ['id' => 'shrimp',      'name' => 'crevettes',         'price_minor' => 35000],
-                            ],
-                            'toppings' => [
-                                ['id' => 'wakame', 'name' => 'algues wakame',        'price_delta_minor' => 3500],
-                                ['id' => 'spicy',  'name' => 'spicy',               'price_delta_minor' => 1000],
-                                ['id' => 'diable', 'name' => 'diable spicy',        'price_delta_minor' => 2000],
-                                ['id' => 'nori',   'name' => 'feuilles de nori 4p.','price_delta_minor' => 2500],
-                                ['id' => 'menma',  'name' => 'pousses de bambou',   'price_delta_minor' => 2000],
-                            ],
-                            'rules' => ['style_required' => true, 'merge_identical_lines' => true],
-                        ],
-                        [
-                            'id'               => 'ramen-sapporo-spicy',
-                            'name'             => 'RAMEN SAPPORO MISO SPICY 🌶️',
-                            'description'      => 'Bouillon miso pimenté, œuf.',
-                            'image'            => asset('images/dummy/ramen-sapporo.jpg'),
-                            'from_price_minor' => 29000,
-                            'styles'           => [
-                                ['id' => 'chicken-veg', 'name' => 'poulet & légumes',  'price_minor' => 29000],
-                                ['id' => 'paiko',       'name' => 'paiko poulet frits','price_minor' => 33000],
-                                ['id' => 'beef-bbq',    'name' => 'bœuf bbq (150g)',   'price_minor' => 43000],
-                                ['id' => 'seafood',     'name' => 'fruits de mer',     'price_minor' => 39000],
-                            ],
-                            'toppings' => [
-                                ['id' => 'wakame', 'name' => 'algues wakame',        'price_delta_minor' => 3500],
-                                ['id' => 'spicy',  'name' => 'spicy',               'price_delta_minor' => 1000],
-                                ['id' => 'diable', 'name' => 'diable spicy',        'price_delta_minor' => 2000],
-                                ['id' => 'nori',   'name' => 'feuilles de nori 4p.','price_delta_minor' => 2500],
-                            ],
-                            'rules' => ['style_required' => true, 'merge_identical_lines' => true],
-                        ],
-                        [
-                            'id'               => 'ramen-tantan',
-                            'name'             => 'RAMEN TANTAN SPICY',
-                            'description'      => 'Bouillon sésame miso, bœuf.',
-                            'image'            => asset('images/dummy/ramen-tantan.jpg'),
-                            'from_price_minor' => 28000,
-                            'styles'           => [
-                                ['id' => 'chicken-veg', 'name' => 'poulet & légumes',  'price_minor' => 28000],
-                                ['id' => 'beef',        'name' => 'bœuf',              'price_minor' => 35000],
-                                ['id' => 'seafood',     'name' => 'fruits de mer',     'price_minor' => 36000],
-                            ],
-                            'toppings' => [
-                                ['id' => 'wakame', 'name' => 'algues wakame', 'price_delta_minor' => 3500],
-                                ['id' => 'spicy',  'name' => 'spicy',        'price_delta_minor' => 1000],
-                            ],
-                            'rules' => ['style_required' => true, 'merge_identical_lines' => true],
-                        ],
-                    ],
-                ],
-                [
-                    'id'    => 'udon',
-                    'label' => 'UDON',
-                    'items' => [
-                        [
-                            'id'               => 'udon-nippon',
-                            'name'             => 'Udon Nippon au gingembre',
-                            'description'      => 'Bouillon gingembre sauce soja.',
-                            'image'            => asset('images/dummy/udon.jpg'),
-                            'from_price_minor' => 30000,
-                            'styles'           => [
-                                ['id' => 'chicken-veg', 'name' => 'poulet & légumes', 'price_minor' => 30000],
-                                ['id' => 'paiko',       'name' => 'paiko frits',      'price_minor' => 34000],
-                                ['id' => 'beef-bbq',    'name' => 'bœuf bbq (150g)',  'price_minor' => 44000],
-                                ['id' => 'seafood',     'name' => 'fruits de mer',    'price_minor' => 40000],
-                                ['id' => 'ebi',         'name' => 'crevettes ebi',    'price_minor' => 36000],
-                                ['id' => 'duck',        'name' => 'canard teriyaki',  'price_minor' => 42000],
-                                ['id' => 'salmon',      'name' => 'saumon grillé',    'price_minor' => 38000],
-                                ['id' => 'tofu',        'name' => 'tofu végé',        'price_minor' => 28000],
-                            ],
-                            'toppings' => [
-                                ['id' => 'wakame', 'name' => 'algues wakame',        'price_delta_minor' => 3500],
-                                ['id' => 'nori',   'name' => 'feuilles de nori 4p.','price_delta_minor' => 2500],
-                                ['id' => 'spicy',  'name' => 'spicy',               'price_delta_minor' => 1000],
-                            ],
-                            'rules' => ['style_required' => true, 'merge_identical_lines' => true],
-                        ],
-                    ],
-                ],
-            ],
+            is_array($payload['rules'] ?? null) ? $payload['rules'] : [],
+        );
+
+        $fromMinor = max(0, (int) $item->from_price_minor);
+        foreach ($styles as $styleRow) {
+            if (! is_array($styleRow) || ! array_key_exists('price_minor', $styleRow)) {
+                continue;
+            }
+            $pm = max(0, (int) $styleRow['price_minor']);
+            $fromMinor = min($fromMinor, $pm);
+        }
+
+        $kitchen = $item->kitchen_name;
+        if ($kitchen === null || trim((string) $kitchen) === '') {
+            $kitchen = $item->name;
+        }
+
+        return [
+            'id' => $this->catalogIdForMenuItem($item->getKey()),
+            'name' => $item->name,
+            'kitchen_name' => $kitchen,
+            'description' => (string) ($item->description ?? ''),
+            'image' => $this->heroImageUrl($item),
+            'from_price_minor' => $fromMinor,
+            'styles' => $styles,
+            'toppings' => $toppings,
+            'rules' => $rules,
         ];
+    }
+
+    private function heroImageUrl(MenuItem $item): string
+    {
+        $path = $item->hero_image_path;
+        if ($path === null || $path === '') {
+            return '';
+        }
+
+        $disk = $item->hero_image_disk !== '' ? $item->hero_image_disk : 'public';
+
+        return Storage::disk($disk)->url($path);
     }
 
     /**
@@ -319,9 +320,21 @@ class MenuPage extends Component
             'please_select_style',
             'order_sent',
             'call_server',
+            'styles_badge',
+            'from_price',
             'close',
             'your_order',
             'empty_cart',
+            'continue_shopping',
+            'qty',
+            'remove_line',
+            'cart_modal_title',
+            'clear_cart',
+            'clear_cart_tap_again',
+            'order_submit',
+            'order_flow_notice',
+            'undo',
+            'item_removed',
         ];
 
         $result = [];

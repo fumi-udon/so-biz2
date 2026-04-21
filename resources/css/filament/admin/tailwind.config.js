@@ -9,7 +9,11 @@ export default {
     presets: [preset],
     content: [
         path.join(projectRoot, 'app/Filament/**/*.php'),
+        path.join(projectRoot, 'app/Livewire/**/*.php'),
+        path.join(projectRoot, 'app/ViewModels/**/*.php'),
         path.join(projectRoot, 'resources/views/filament/**/*.blade.php'),
+        path.join(projectRoot, 'resources/views/livewire/**/*.blade.php'),
+        path.join(projectRoot, 'resources/views/components/**/*.blade.php'),
         path.join(projectRoot, 'vendor/filament/**/*.blade.php'),
     ],
 };

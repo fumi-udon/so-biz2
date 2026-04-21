@@ -51,8 +51,13 @@
 
 ## [RULE] TALL Stack Hydration & State Safety (Guest UI)
 
+- REQUIRED (Livewire 3 guest / full-page components): The Blade view’s **first literal HTML tag** must be the Livewire root you expect to carry `wire:id` (e.g. `#guest-order-root`). Livewire injects `wire:id` only into that first tag (`Livewire\Drawer\Utils::insertAttributesIntoHtmlRoot`). If `<script>` or any other tag comes first, `wire:id` attaches there and `Livewire.find` + `guest-order-root` break (e.g. “Service unavailable” on submit). Put `<script type="application/json" id="guest-order-data">` **inside** that root element, not before it.
 - FORBIDDEN: Injecting JSON data (`@json`, `@js`) directly into HTML attributes like `x-data` or `x-init`. It causes double-quote collision and DOM breakage.
 - REQUIRED: Use `<script type="application/json" id="data-xxx">` to pass large PHP arrays/objects to the frontend safely.
 - FORBIDDEN: `import Alpine from 'alpinejs'` in standard JS files when using Livewire 3 (causes double instantiation).
 - REQUIRED: Extend Alpine only via `document.addEventListener('alpine:init', () => { window.Alpine.store(...) })`.
 - REQUIRED: Ensure Tailwind v4 content scanning is configured via `@source` in `resources/css/app.css`, not `tailwind.config.js`.
+
+## [REFERENCE] Order System Ver1 (in-store guest order)
+
+- Canonical requirements and communication boundaries: `docs/order-system-ver1.md`

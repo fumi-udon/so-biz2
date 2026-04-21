@@ -44,7 +44,12 @@ return [
                 'useTLS' => true,
             ],
             'client_options' => [
-                //
+                // Bistro 最適化: Pusher API への HTTP 呼び出しを極小タイムアウトで打ち切る。
+                // ホール iPad の HTTP レスポンスは `dispatch()->afterResponse()` で
+                // 既に返却済みのため、ここで詰まってもユーザーには影響しないが、
+                // FPM プロセスの長期占有を防ぐために必ず切る。
+                'connect_timeout' => 0.7,
+                'timeout' => 1.5,
             ],
         ],
 

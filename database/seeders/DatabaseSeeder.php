@@ -24,5 +24,8 @@ class DatabaseSeeder extends Seeder
 
         $this->call(SettingSeeder::class);
         $this->call(CloseTaskSeeder::class);
+        $this->call(DietaryBadgeSystemSeeder::class);
+        $this->call(RestaurantTableDashboardSeeder::class);
+        // Dev: wipe + menu (tapas/ramen/drink, ~20 items) — ./vendor/bin/sail artisan db:seed --class=MenuCatalogTestDataSeeder
     }
 }

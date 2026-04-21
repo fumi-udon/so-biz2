@@ -48,3 +48,56 @@
         transform: translateY(-10px) rotate(14deg);
     }
 }
+
+/* Guest order cart drawer (Phase 1.5) */
+@keyframes go-cart-row-enter {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.go-cart-row-enter {
+    animation: go-cart-row-enter 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes go-ping-soft {
+    0%,
+    100% {
+        opacity: 0.35;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.1;
+        transform: scale(1.18);
+    }
+}
+
+.animate-go-ping-soft {
+    animation: go-ping-soft 2.4s ease-in-out infinite;
+}
+
+@keyframes go-shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    25% {
+        transform: translateX(-4px);
+    }
+
+    75% {
+        transform: translateX(4px);
+    }
+}
+
+.animate-go-shake {
+    animation: go-shake 0.38s ease-in-out;
+}

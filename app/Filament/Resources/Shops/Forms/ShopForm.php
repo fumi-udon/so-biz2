@@ -15,6 +15,13 @@ class ShopForm
                 TextInput::make('name')
                     ->required()
                     ->maxLength(255),
+                TextInput::make('slug')
+                    ->label('URLスラッグ（ゲストメニュー）')
+                    ->nullable()
+                    ->maxLength(64)
+                    ->unique(table: 'shops', column: 'slug', ignoreRecord: true)
+                    ->rules(['nullable', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/'])
+                    ->helperText('例: soya / bistronippon。空ならゲスト URL と未連携。'),
                 Toggle::make('is_active')
                     ->default(true),
             ]);

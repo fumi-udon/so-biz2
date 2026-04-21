@@ -55,7 +55,7 @@ class SetGuestLocale
             if (preg_match('/^([a-zA-Z\-]+)(?:;q=([0-9.]+))?$/', trim($part), $m)) {
                 $weighted[] = [
                     'tag' => $m[1],
-                    'q'   => isset($m[2]) ? (float) $m[2] : 1.0,
+                    'q' => isset($m[2]) ? (float) $m[2] : 1.0,
                 ];
             }
         }

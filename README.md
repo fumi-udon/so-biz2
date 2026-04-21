@@ -1,5 +1,9 @@
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
+## Testing (Bistro Pivot)
+
+PHPUnit は **本番と同じ MySQL** を使います。テストは **Laravel Sail コンテナ内**で実行してください（`./vendor/bin/sail test` または `./vendor/bin/sail artisan test`）。接続先は [`.env.testing`](.env.testing)（専用 DB `soya_biz2_test`、`DB_TABLE_PREFIX` は本番と同様に `so2_`）。**`DB_USERNAME` / `DB_PASSWORD` はホストの `.env`（Sail の MySQL ユーザー）と一致**させてください。初回のみ MySQL ボリューム作成時に `docker/mysql/11-create-soya-testing-database.sh` でテスト DB が作られます。既存ボリュームでは root で `CREATE DATABASE soya_biz2_test` と `sail` への `GRANT` が未作成のことがあるので、その場合は手動で作成してください。
+
 <p align="center">
 <a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>

@@ -43,7 +43,7 @@
     {{-- Hero image --}}
     <div
         x-show="$store.cart.editingItem?.image"
-        class="w-full aspect-video overflow-hidden shrink-0"
+        class="w-full h-32 sm:h-36 overflow-hidden shrink-0"
     >
         <img
             :src="$store.cart.editingItem?.image ?? ''"
@@ -67,7 +67,7 @@
 
     {{-- Scrollable content --}}
     <div
-        class="flex-1 overflow-y-auto px-5 pt-4 pb-2"
+        class="flex-1 overflow-y-auto px-4 pt-3 pb-1"
         style="overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;"
     >
         {{-- Product title & description --}}
@@ -84,29 +84,29 @@
         {{-- SELECT STYLE --}}
         <div
             x-show="($store.cart.editingItem?.styles?.length ?? 0) > 0"
-            class="mt-5"
+            class="mt-4"
         >
             <p class="mb-2 text-xs font-bold tracking-widest text-slate-700 uppercase">
                 <span x-text="$store.cart.t('select_style')"></span>
                 <span
                     x-show="$store.cart.editingItem?.rules?.style_required"
-                    class="ml-1 text-[var(--go-danger)] font-bold"
+                    class="ml-1 text-(--go-danger) font-bold"
                 >*</span>
             </p>
 
-            <div class="flex flex-col gap-2">
+            <div class="flex flex-col gap-1.5">
                 <template x-for="style in ($store.cart.editingItem?.styles ?? [])" :key="style.id">
                     <label
-                        class="flex items-center justify-between gap-3 border rounded-xl px-4 py-3 cursor-pointer transition"
+                        class="flex items-center justify-between gap-3 border rounded-xl px-3 py-2.5 cursor-pointer transition"
                         :class="$store.cart.selectedStyleId === style.id
-                            ? 'border-[var(--go-primary)] bg-blue-50/60'
+                            ? 'border-(--go-primary) bg-blue-50/60'
                             : 'border-slate-200 hover:border-slate-300 bg-white'"
                     >
                         <span class="flex items-center gap-3 min-w-0">
                             <span
                                 class="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition"
                                 :class="$store.cart.selectedStyleId === style.id
-                                    ? 'border-[var(--go-primary)]'
+                                    ? 'border-(--go-primary)'
                                     : 'border-slate-300'"
                             >
                                 <span
@@ -122,7 +122,7 @@
                             :class="$store.cart.selectedStyleId === style.id
                                 ? 'text-slate-900'
                                 : 'text-slate-500'"
-                            x-text="(style.price_minor / 1000).toFixed(3) + ' DT'"
+                            x-text="$store.cart.formatMinorToDisplay(style.price_minor)"
                         ></span>
                         <input
                             type="radio"
@@ -138,7 +138,7 @@
             {{-- Validation hint --}}
             <p
                 x-show="!$store.cart.canAddToCart() && $store.cart.editingItem?.rules?.style_required"
-                class="mt-2 text-xs font-medium text-[var(--go-danger)]"
+                class="mt-2 text-xs font-medium text-(--go-danger)"
                 x-text="$store.cart.t('please_select_style')"
             ></p>
         </div>
@@ -146,22 +146,22 @@
         {{-- TOPPINGS --}}
         <div
             x-show="($store.cart.editingItem?.toppings?.length ?? 0) > 0"
-            class="mt-5"
+            class="mt-4"
         >
             <p class="mb-2 text-xs font-bold tracking-widest text-slate-700 uppercase"
                x-text="$store.cart.t('toppings')">
             </p>
 
-            <div class="flex flex-col gap-2">
+            <div class="flex flex-col gap-1">
                 <template x-for="topping in ($store.cart.editingItem?.toppings ?? [])" :key="topping.id">
                     <label
-                        class="flex items-center justify-between gap-3 px-1 py-2 cursor-pointer"
+                        class="flex items-center justify-between gap-3 px-1 py-1.5 cursor-pointer"
                     >
                         <span class="flex items-center gap-3 min-w-0">
                             <span
                                 class="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition"
                                 :class="$store.cart.selectedToppingIds.includes(topping.id)
-                                    ? 'border-[var(--go-primary)] bg-[var(--go-primary)]'
+                                    ? 'border-(--go-primary) bg-(--go-primary)'
                                     : 'border-slate-300 bg-white'"
                             >
                                 <svg
@@ -176,7 +176,7 @@
                         </span>
                         <span
                             class="text-sm text-slate-500 tabular-nums shrink-0"
-                            x-text="'+' + (topping.price_delta_minor / 1000).toFixed(3)"
+                            x-text="'+ ' + $store.cart.formatMinorToDisplay(topping.price_delta_minor)"
                         ></span>
                         <input
                             type="checkbox"
@@ -191,21 +191,21 @@
         </div>
 
         {{-- Spacer for CTA --}}
-        <div class="h-6"></div>
+        <div class="h-3"></div>
     </div>
 
     {{-- CTA Bar (sticky bottom, safe-area aware) --}}
     <div
-        class="shrink-0 px-4 pt-3 bg-white border-t border-slate-100"
+        class="shrink-0 px-4 pt-2 bg-white border-t border-slate-100"
         style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
     >
         <button
             type="button"
-            @click="$store.cart.addToCart()"
+            @click="$store.cart.addToCart($event)"
             :disabled="!$store.cart.canAddToCart()"
-            class="w-full py-4 rounded-[length:var(--go-radius-button)] text-sm font-bold tracking-wide transition active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full py-3.5 rounded-(--go-radius-button) text-sm font-bold tracking-wide transition active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             :style="'background-color: var(--go-primary); color: var(--go-on-primary);'"
-            x-text="$store.cart.t('add_to_order', { total: (($store.cart.sheetUnitTotalMinor()) / 1000).toFixed(3) + ' DT' })"
+            x-text="$store.cart.t('add_to_order', { total: $store.cart.formatMinorToDisplay($store.cart.sheetUnitTotalMinor()) })"
         ></button>
     </div>
 </div>

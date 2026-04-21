@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Attendance;
 use App\Models\Staff;
+use App\Services\StaffDirectoryService;
 use App\Services\StaffPinAuthenticationService;
 use App\Services\TimecardPunchOutcome;
 use App\Services\TimecardPunchService;
@@ -82,13 +83,7 @@ class TimecardForm extends Component
 
         request()->session()->forget('mypage_staff_id');
 
-        $this->staffOptions = Staff::query()
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get()
-            ->map(fn (Staff $s): array => ['id' => $s->id, 'name' => $s->name])
-            ->values()
-            ->all();
+        $this->staffOptions = app(StaffDirectoryService::class)->activeOptions();
     }
 
     public function authenticate(): mixed
@@ -104,10 +99,7 @@ class TimecardForm extends Component
             'pinCode' => 'PIN',
         ]);
 
-        $staff = Staff::query()
-            ->where('id', $this->selectedStaffId)
-            ->where('is_active', true)
-            ->first();
+        $staff = app(StaffDirectoryService::class)->findActiveById((int) $this->selectedStaffId);
 
         if (! $staff) {
             $this->addError('selectedStaffId', 'Personnel introuvable.');
