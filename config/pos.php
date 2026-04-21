@@ -4,7 +4,20 @@
  * POS 現場向け設定（プリンター接続タイムアウト等）。
  * プリンターの IP / ポート等の既定値は {@see config/pos_printer.php} を参照。
  */
-$posPrinter = require __DIR__.'/pos_printer.php';
+$posPrinterPath = __DIR__.'/pos_printer.php';
+if (file_exists($posPrinterPath)) {
+    $posPrinter = require $posPrinterPath;
+} else {
+    $posPrinter = [
+        'defaults' => [
+            'printer_ip' => '192.168.1.101',
+            'printer_port' => '8043',
+            'device_id' => 'local_printer',
+            'crypto' => true,
+            'timeout_ms' => 10_000,
+        ],
+    ];
+}
 
 return [
     'printer' => array_merge(
