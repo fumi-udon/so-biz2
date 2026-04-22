@@ -20,14 +20,27 @@ return new class extends Migration
             $table->boolean('was_printed')->default(false);
             $table->timestamp('created_at')->useCurrent();
 
-            $table->index(['shop_id', 'table_session_id']);
-            $table->index(['shop_id', 'created_at']);
-            $table->index(['order_line_id']);
+            $table->index(['shop_id', 'table_session_id'], 'pos_del_audit_idx');
+            $table->index(['shop_id', 'created_at'], 'pos_del_shop_created_idx');
+            $table->index(['order_line_id'], 'pos_del_order_line_idx');
         });
     }
 
     public function down(): void
     {
+        if (Schema::hasTable('pos_line_deletion_audit_logs')) {
+            Schema::table('pos_line_deletion_audit_logs', function (Blueprint $table): void {
+                if (Schema::hasIndex('pos_line_deletion_audit_logs', 'pos_del_audit_idx')) {
+                    $table->dropIndex('pos_del_audit_idx');
+                }
+                if (Schema::hasIndex('pos_line_deletion_audit_logs', 'pos_del_shop_created_idx')) {
+                    $table->dropIndex('pos_del_shop_created_idx');
+                }
+                if (Schema::hasIndex('pos_line_deletion_audit_logs', 'pos_del_order_line_idx')) {
+                    $table->dropIndex('pos_del_order_line_idx');
+                }
+            });
+        }
         Schema::dropIfExists('pos_line_deletion_audit_logs');
     }
 };
