@@ -19,6 +19,9 @@ if (file_exists($posPrinterPath)) {
     ];
 }
 
+/** 既定 TVA 率（%）。TVA_TN を優先し、未設定時は POS_RECEIPT_VAT_DEFAULT。 */
+$defaultTvaRate = (float) env('TVA_TN', env('POS_RECEIPT_VAT_DEFAULT', 19));
+
 return [
     'printer' => array_merge(
         $posPrinter['defaults'] ?? [],
@@ -34,4 +37,20 @@ return [
             'buffer' => false,
         ]
     ),
+    /**
+     * レシート印字（TM-m30 / UTF-8）。住所・MF は単店舗向けデフォルト。
+     */
+    'receipt' => [
+        'default_tva_rate' => $defaultTvaRate,
+        'default_vat_percent' => $defaultTvaRate,
+        'address_lines' => array_values(array_filter(array_map('trim', explode("\n", (string) env('POS_RECEIPT_ADDRESS', 'La Marsa, Tunis'))))),
+        'shop_phone' => env('POS_RECEIPT_PHONE', ''),
+        'mf_number' => env('POS_RECEIPT_MF', ''),
+        'footer_thanks_lines' => ['Merci de votre visite'],
+        /** ePOS レシート上部タイトル（未設定時はペイロードの shop_name） */
+        'brand_name' => env('BRAND_NAME', ''),
+        /** 印字ヘッダー住所・TEL（未設定時は POS_RECEIPT_* / ペイロード） */
+        'epson_address' => env('EPSON_ADRESSE'),
+        'epson_tel' => env('EPSON_TEL'),
+    ],
 ];

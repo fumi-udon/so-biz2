@@ -19,6 +19,8 @@ final readonly class TableTileAggregate
         public string $restaurantTableName,
         /** Active session’s staff_name (賄い 100–104); null if unset or N/A. */
         public ?string $activeSessionStaffName,
+        /** Active session’s customer_name (Takeaway); null if unset or N/A. */
+        public ?string $activeSessionCustomerName,
         public ?int $activeTableSessionId,
         public int $unackedPlacedPosOrderCount,
         public bool $unackedPlacedLineExists,
@@ -39,6 +41,7 @@ final readonly class TableTileAggregate
      *   restaurantTableId: int,
      *   restaurantTableName: string,
      *   activeSessionStaffName: string|null,
+     *   activeSessionCustomerName: string|null,
      *   activeTableSessionId: int|null,
      *   unackedPlacedPosOrderCount: int,
      *   unackedPlacedLineExists: bool,
@@ -58,6 +61,7 @@ final readonly class TableTileAggregate
             'restaurantTableId' => $this->restaurantTableId,
             'restaurantTableName' => $this->restaurantTableName,
             'activeSessionStaffName' => $this->activeSessionStaffName,
+            'activeSessionCustomerName' => $this->activeSessionCustomerName,
             'activeTableSessionId' => $this->activeTableSessionId,
             'unackedPlacedPosOrderCount' => $this->unackedPlacedPosOrderCount,
             'unackedPlacedLineExists' => $this->unackedPlacedLineExists,

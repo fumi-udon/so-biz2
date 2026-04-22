@@ -38,7 +38,7 @@ final class PosPrinterClientConfig
     {
         $defaults = (array) config('pos_printer.defaults', []);
 
-        $ip = (string) ($defaults['printer_ip'] ?? '192.168.1.200');
+        $ip = (string) ($defaults['printer_ip'] ?? '192.168.1.101');
         $port = (string) ($defaults['printer_port'] ?? '8043');
         $deviceId = (string) ($defaults['device_id'] ?? 'local_printer');
         $crypto = (bool) ($defaults['crypto'] ?? true);

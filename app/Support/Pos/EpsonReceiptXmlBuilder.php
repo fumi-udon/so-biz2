@@ -3,145 +3,127 @@
 namespace App\Support\Pos;
 
 use App\Enums\PrintIntent;
-use App\Support\MenuItemMoney;
+use App\Support\Pos\Receipt\EpsonReceiptPrintAssembler;
+use App\Support\Pos\Receipt\ReceiptTaxMath;
+use Illuminate\Support\Carbon;
 
 /**
- * Minimal ePOS-Print XML generator for the TM-m30II (58/80mm).
+ * POS レシート ePOS-Print XML — {@see EpsonReceiptPrintAssembler} へのファサード。
  *
- * Produces the exact XML the browser-side ePOSDevice driver sends over WebSocket.
- * The tags used are the common subset documented in
- * Epson ePOS-Print XML Specification (addText / addFeedLine / addCut).
- *
- * This class is intentionally small, pure, and deterministic: given the same
- * {@see PrintPayload} input it always returns byte-identical XML, which is
- * what the downstream idempotency key hash relies on.
+ * 後方互換: 従来の簡易 payload（明細に unit_price / vat なし）も {@see normalizePayload} で正規化。
  */
 final class EpsonReceiptXmlBuilder
 {
-    /**
-     * @param  array{
-     *   shop_name: string,
-     *   table_label: string,
-     *   intent: PrintIntent,
-     *   lines: list<array{qty:int, name:string, amount_minor:int}>,
-     *   subtotal_minor: int,
-     *   order_discount_minor?: int,
-     *   rounding_adjustment_minor?: int,
-     *   final_total_minor: int,
-     *   tendered_minor?: int,
-     *   change_minor?: int,
-     *   printed_at: string,
-     *   duplicate_original_at?: string
-     * }  $payload
-     */
     public function build(array $payload): string
     {
-        $buf = [];
-        $buf[] = '<?xml version="1.0" encoding="utf-8"?>';
-        $buf[] = '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
+        $normalized = $this->normalizePayload($payload);
 
-        if ($payload['intent'] === PrintIntent::Copy) {
-            $buf[] = $this->textLine('DUPLICATA', align: 'center', bold: true);
-            $buf[] = $this->feed(1);
-        }
-
-        $buf[] = $this->textBlock($payload['shop_name'], bold: true, doubleSize: true, align: 'center');
-        $buf[] = $this->feed(1);
-        $buf[] = $this->textLine($this->intentLabel($payload['intent']).' — '.$payload['table_label'], align: 'center');
-        $buf[] = $this->textLine($payload['printed_at'], align: 'center');
-        if (! empty($payload['duplicate_original_at'])) {
-            $buf[] = $this->textLine((string) $payload['duplicate_original_at'], align: 'center');
-        }
-        $buf[] = $this->feed(1);
-
-        foreach ($payload['lines'] as $line) {
-            $buf[] = $this->textLine($this->formatLine((int) $line['qty'], (string) $line['name'], (int) $line['amount_minor']));
-        }
-        $buf[] = $this->feed(1);
-
-        $buf[] = $this->textLine($this->kvLine('Sous-total', (int) $payload['subtotal_minor']));
-
-        if (! empty($payload['order_discount_minor'])) {
-            $buf[] = $this->textLine($this->kvLine('Remise', -1 * (int) $payload['order_discount_minor']));
-        }
-        if (! empty($payload['rounding_adjustment_minor'])) {
-            $buf[] = $this->textLine($this->kvLine('Arrondi', -1 * (int) $payload['rounding_adjustment_minor']));
-        }
-
-        $buf[] = $this->textLine($this->kvLine('TOTAL', (int) $payload['final_total_minor']), bold: true);
-
-        if (isset($payload['tendered_minor'])) {
-            $buf[] = $this->textLine($this->kvLine('Reçu', (int) $payload['tendered_minor']));
-            $buf[] = $this->textLine($this->kvLine('Rendu', (int) ($payload['change_minor'] ?? 0)));
-        }
-
-        $buf[] = $this->feed(3);
-        $buf[] = '<cut type="feed"/>';
-        $buf[] = '</epos-print>';
-
-        return implode('', $buf);
+        return (new EpsonReceiptPrintAssembler)->assemble($normalized);
     }
 
-    private function intentLabel(PrintIntent $intent): string
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function normalizePayload(array $payload): array
     {
-        return match ($intent) {
-            PrintIntent::Addition => 'ADDITION',
-            PrintIntent::Receipt => 'REÇU',
-            PrintIntent::Copy => 'DUPLICATA',
-            PrintIntent::StaffCopy => 'STAFF',
-        };
-    }
+        $intent = $payload['intent'] instanceof PrintIntent
+            ? $payload['intent']
+            : PrintIntent::tryFrom((string) ($payload['intent'] ?? 'addition')) ?? PrintIntent::Addition;
 
-    private function textBlock(string $text, bool $bold = false, bool $doubleSize = false, string $align = 'left'): string
-    {
-        $open = '<text';
-        $open .= ' align="'.$align.'"';
-        if ($bold) {
-            $open .= ' em="true"';
+        $printedAt = (string) ($payload['printed_at'] ?? now()->format('Y-m-d H:i'));
+        $dt = Carbon::parse($printedAt);
+
+        $defaultVat = ReceiptTaxMath::defaultVatPercent();
+
+        $lines = [];
+        foreach ($payload['lines'] ?? [] as $row) {
+            $qty = max(1, (int) ($row['qty'] ?? 1));
+            $name = (string) ($row['name'] ?? '');
+            $amount = (int) ($row['amount_minor'] ?? 0);
+            $unit = isset($row['unit_price_minor']) ? (int) $row['unit_price_minor'] : intdiv($amount, $qty);
+            $vatP = isset($row['vat_percent']) ? (float) $row['vat_percent'] : $defaultVat;
+            $lines[] = [
+                'kind' => (string) ($row['kind'] ?? 'parent'),
+                'qty' => $qty,
+                'name' => $name,
+                'unit_price_minor' => $unit,
+                'amount_minor' => $amount,
+                'vat_percent' => $vatP,
+            ];
         }
-        if ($doubleSize) {
-            $open .= ' width="2" height="2"';
+
+        $bucketInput = [];
+        foreach ($lines as $ln) {
+            $bucketInput[] = [
+                'ttc_minor' => (int) $ln['amount_minor'],
+                'vat_percent' => (float) $ln['vat_percent'],
+            ];
         }
-        $open .= '>';
+        $vatBuckets = ReceiptTaxMath::aggregateVatBuckets($bucketInput);
+        $sumHv = ReceiptTaxMath::sumBucketsHtVat($vatBuckets);
 
-        return $open.$this->xmlEscape($text).'&#10;</text>';
+        $subtotalHt = (int) ($payload['subtotal_ht_minor'] ?? $sumHv['ht_minor']);
+        $totalVat = (int) ($payload['total_vat_minor'] ?? $sumHv['vat_minor']);
+
+        $finalTotal = (int) ($payload['final_total_minor'] ?? $payload['subtotal_minor'] ?? 0);
+
+        $brand = trim((string) config('pos.receipt.brand_name', ''));
+        $shopName = $brand !== '' ? $brand : (string) ($payload['shop_name'] ?? '');
+
+        $epsonAddrRaw = trim((string) config('pos.receipt.epson_address', ''));
+        if ($epsonAddrRaw !== '') {
+            $addressLines = array_values(array_filter(array_map('trim', explode("\n", $epsonAddrRaw))));
+        } else {
+            $addressLines = $payload['header_address_lines'] ?? config('pos.receipt.address_lines', []);
+        }
+        if (! is_array($addressLines)) {
+            $addressLines = [];
+        }
+        $addressLines = array_values(array_filter(array_map('strval', $addressLines)));
+
+        return [
+            'shop_name' => $shopName,
+            'header_address_lines' => $addressLines,
+            'shop_phone' => $this->resolveReceiptShopPhone($payload),
+            'shop_vat_reg' => $payload['shop_vat_reg'] ?? config('pos.receipt.mf_number'),
+            'table_no' => (string) ($payload['table_no'] ?? $payload['table_label'] ?? ''),
+            'receipt_number' => (string) ($payload['receipt_number'] ?? $payload['receipt_ref'] ?? '—'),
+            'receipt_date_dmY' => (string) ($payload['receipt_date_dmY'] ?? $dt->format('d/m/Y')),
+            'receipt_time_his' => (string) ($payload['receipt_time_his'] ?? $dt->format('H:i:s')),
+            'intent' => $intent,
+            'lines' => $lines,
+            'order_discount_minor' => (int) ($payload['order_discount_minor'] ?? 0),
+            'rounding_adjustment_minor' => (int) ($payload['rounding_adjustment_minor'] ?? 0),
+            'subtotal_ht_minor' => $subtotalHt,
+            'total_vat_minor' => $totalVat,
+            'final_total_minor' => $finalTotal,
+            'vat_buckets' => $vatBuckets,
+            'show_payment_block' => false,
+            'payment_label' => $payload['payment_label'] ?? null,
+            'tendered_minor' => $payload['tendered_minor'] ?? null,
+            'change_minor' => $payload['change_minor'] ?? null,
+            'printed_at' => $printedAt,
+            'duplicate_original_at' => $payload['duplicate_original_at'] ?? null,
+            'footer_thanks_lines' => $payload['footer_thanks_lines'] ?? config('pos.receipt.footer_thanks_lines', ['Merci de votre visite']),
+        ];
     }
 
-    private function textLine(string $text, string $align = 'left', bool $bold = false): string
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveReceiptShopPhone(array $payload): string
     {
-        return $this->textBlock($text, bold: $bold, doubleSize: false, align: $align);
-    }
+        $epson = trim((string) config('pos.receipt.epson_tel', ''));
+        if ($epson !== '') {
+            return $epson;
+        }
 
-    private function feed(int $n): string
-    {
-        return '<feed line="'.max(0, $n).'"/>';
-    }
+        $fromPayload = $payload['shop_phone'] ?? null;
+        if ($fromPayload !== null && trim((string) $fromPayload) !== '') {
+            return trim((string) $fromPayload);
+        }
 
-    private function formatLine(int $qty, string $name, int $amountMinor): string
-    {
-        $left = $qty.' '.$name;
-        $right = MenuItemMoney::formatMinorForDisplay(max(0, $amountMinor));
-
-        return $this->padBetween($left, $right, 32);
-    }
-
-    private function kvLine(string $label, int $amountMinor): string
-    {
-        $value = ($amountMinor < 0 ? '-' : '').MenuItemMoney::formatMinorForDisplay(abs($amountMinor));
-
-        return $this->padBetween($label, $value, 32);
-    }
-
-    private function padBetween(string $left, string $right, int $cols): string
-    {
-        $left = mb_substr($left, 0, $cols - mb_strlen($right) - 1);
-        $spaces = max(1, $cols - mb_strlen($left) - mb_strlen($right));
-
-        return $left.str_repeat(' ', $spaces).$right;
-    }
-
-    private function xmlEscape(string $s): string
-    {
-        return htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        return trim((string) config('pos.receipt.shop_phone', ''));
     }
 }

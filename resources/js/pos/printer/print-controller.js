@@ -48,6 +48,8 @@ class PrintControllerImpl {
                 this._dispatchAck(printJobId, { ...res, staffMessage: null, displayCode: null });
             } else {
                 const mapped = resolvePosPrinterStaffMessage(res.code, res.message);
+                // eslint-disable-next-line no-console
+                console.warn('[POS印刷失敗]', mapped.displayCode ?? res.code ?? '', mapped.staffMessage ?? res.message ?? '');
                 this._dispatchAck(printJobId, {
                     ...res,
                     staffMessage: mapped.staffMessage,
@@ -56,6 +58,12 @@ class PrintControllerImpl {
             }
         } catch (e) {
             const mapped = resolvePosPrinterStaffMessage('JS_THROW', e && e.message ? e.message : String(e));
+            // eslint-disable-next-line no-console
+            console.warn(
+                '[POS印刷失敗]',
+                mapped.displayCode ?? 'JS_THROW',
+                mapped.staffMessage ?? ((e && e.message) ? e.message : String(e)),
+            );
             this._dispatchAck(printJobId, {
                 ok: false,
                 code: 'JS_THROW',

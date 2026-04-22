@@ -17,12 +17,14 @@ use App\Models\TableSession;
 use App\Models\TableSessionSettlement;
 use App\Support\MenuItemMoney;
 use App\Support\Pos\EpsonReceiptXmlBuilder;
-use App\Support\Pos\Print\AsciiPrintNormalizer;
 use App\Support\Pos\Print\ReceiptPreviewData;
+use App\Support\Pos\Receipt\PosOrderReceiptLineEnricher;
+use App\Support\Pos\Receipt\ReceiptTaxMath;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
@@ -31,8 +33,6 @@ use Throwable;
 
 class ReceiptPreview extends Component
 {
-    use AsciiPrintNormalizer;
-
     public int $shopId = 0;
 
     public int $tableSessionId = 0;
@@ -54,6 +54,9 @@ class ReceiptPreview extends Component
     protected int $roundingAdjustmentMinor = 0;
 
     protected PrintIntent $printIntent;
+
+    /** 賄い卓（100–104）のプレビュー用レイアウト切替。 */
+    public bool $previewIsStaffMealTable = false;
 
     public function mount(int $shopId, int $tableSessionId, string $intent, int $expectedSessionRevision): void
     {
@@ -87,23 +90,30 @@ class ReceiptPreview extends Component
         $this->uiState = 'in_flight';
 
         try {
+            $printedAt = Carbon::parse($this->dto->printedAt);
+
             $xmlPayload = [
-                'shop_name' => (string) $this->printData['shop_name'],
-                'table_label' => (string) $this->printData['table_label'],
+                'shop_name' => $this->dto->shopName,
+                'table_label' => $this->dto->tableLabel,
+                'table_no' => $this->dto->tableLabel,
+                'receipt_number' => 'S'.$this->tableSessionId,
+                'receipt_date_dmY' => $printedAt->format('d/m/Y'),
+                'receipt_time_his' => $printedAt->format('H:i:s'),
+                'cashier_name' => Auth::user()?->name,
                 'intent' => $this->printIntent,
-                'lines' => $this->printData['lines'],
-                'subtotal_minor' => (int) $this->printData['subtotal_minor'],
+                'lines' => $this->enrichedLinesForPrint(),
+                'subtotal_minor' => $this->dto->subtotalMinor,
                 'order_discount_minor' => $this->orderDiscountMinor,
                 'rounding_adjustment_minor' => $this->roundingAdjustmentMinor,
-                'final_total_minor' => (int) $this->printData['total_minor'],
-                'printed_at' => (string) $this->printData['printed_at'],
+                'final_total_minor' => $this->dto->totalMinor,
+                'printed_at' => $this->dto->printedAt,
             ];
             if ($this->dto->originalSettledAt !== null && $this->dto->originalSettledAt !== '') {
                 $xmlPayload['duplicate_original_at'] = __('pos.duplicata_original_settled_line', [
                     'at' => $this->dto->originalSettledAt,
                 ]);
             }
-            $xmlPayload = array_merge($xmlPayload, $this->receiptTenderLinesForPrinter());
+            $xmlPayload = array_merge($xmlPayload, $this->receiptPaymentForPrinter());
 
             $xml = app(EpsonReceiptXmlBuilder::class)->build($xmlPayload);
 
@@ -183,6 +193,61 @@ class ReceiptPreview extends Component
     #[Computed]
     public function viewData(): array
     {
+        $enriched = $this->enrichedLinesForPrint();
+        $bucketInput = [];
+        foreach ($enriched as $ln) {
+            $bucketInput[] = [
+                'ttc_minor' => (int) $ln['amount_minor'],
+                'vat_percent' => (float) $ln['vat_percent'],
+            ];
+        }
+        $vatBuckets = ReceiptTaxMath::aggregateVatBuckets($bucketInput);
+        $sumHv = ReceiptTaxMath::sumBucketsHtVat($vatBuckets);
+
+        $lineVatDetails = [];
+        foreach ($enriched as $e) {
+            $isExtra = (($e['kind'] ?? 'parent') === 'extra');
+            $lineVatDetails[] = [
+                'kind' => $isExtra ? 'extra' : 'parent',
+                'qty' => $isExtra ? null : (int) $e['qty'],
+                'name' => $isExtra ? ('- extra: '.(string) $e['name']) : (string) $e['name'],
+                'amount_minor' => (int) $e['amount_minor'],
+                'vat_percent' => (int) round((float) $e['vat_percent']),
+            ];
+        }
+
+        $docBanner = match ($this->printIntent) {
+            PrintIntent::Addition => 'ADDITION / PROFORMA',
+            PrintIntent::Receipt, PrintIntent::Copy => 'REÇU / NOTE',
+            PrintIntent::StaffCopy => 'STAFF COPY',
+        };
+
+        return [
+            'intent' => $this->dto->intent,
+            'title' => $this->intentTitle($this->printIntent),
+            'shop_name' => $this->dto->shopName,
+            'table_label' => $this->dto->tableLabel,
+            'lines' => $this->dto->lines,
+            'line_vat_details' => $lineVatDetails,
+            'subtotal_minor' => $this->dto->subtotalMinor,
+            'total_minor' => $this->dto->totalMinor,
+            'printed_at' => $this->dto->printedAt,
+            'original_settled_at' => $this->dto->originalSettledAt,
+            'order_discount_minor' => $this->orderDiscountMinor,
+            'rounding_adjustment_minor' => $this->roundingAdjustmentMinor,
+            'subtotal_ht_minor' => $sumHv['ht_minor'],
+            'total_vat_minor' => $sumHv['vat_minor'],
+            'vat_buckets' => $vatBuckets,
+            'doc_banner' => $docBanner,
+            'is_staff_meal_table' => $this->previewIsStaffMealTable,
+            'vat_rate_display' => ReceiptTaxMath::formatPercentForUi(ReceiptTaxMath::defaultVatPercent()),
+            'staff_meal_gross_minor' => $this->dto->subtotalMinor,
+        ];
+    }
+
+    #[Computed]
+    public function printData(): array
+    {
         return [
             'intent' => $this->dto->intent,
             'title' => $this->intentTitle($this->printIntent),
@@ -192,28 +257,6 @@ class ReceiptPreview extends Component
             'subtotal_minor' => $this->dto->subtotalMinor,
             'total_minor' => $this->dto->totalMinor,
             'printed_at' => $this->dto->printedAt,
-            'original_settled_at' => $this->dto->originalSettledAt,
-            'order_discount_minor' => $this->orderDiscountMinor,
-            'rounding_adjustment_minor' => $this->roundingAdjustmentMinor,
-        ];
-    }
-
-    #[Computed]
-    public function printData(): array
-    {
-        return [
-            'intent' => $this->dto->intent,
-            'title' => $this->toAsciiUpper($this->intentTitle($this->printIntent)),
-            'shop_name' => $this->toAsciiUpper($this->dto->shopName),
-            'table_label' => $this->toAsciiUpper($this->dto->tableLabel),
-            'lines' => array_map(fn (array $line): array => [
-                'qty' => (int) $line['qty'],
-                'name' => $this->toAsciiUpper((string) $line['name']),
-                'amount_minor' => (int) $line['amount_minor'],
-            ], $this->dto->lines),
-            'subtotal_minor' => $this->dto->subtotalMinor,
-            'total_minor' => $this->dto->totalMinor,
-            'printed_at' => $this->toAsciiUpper($this->dto->printedAt),
         ];
     }
 
@@ -241,10 +284,12 @@ class ReceiptPreview extends Component
             ->where('shop_id', $this->shopId)
             ->where('table_session_id', $this->tableSessionId)
             ->where('status', '!=', OrderStatus::Voided)
-            ->with('lines:id,order_id,qty,line_total_minor,line_discount_minor,snapshot_name')
+            ->with('lines:id,order_id,qty,line_total_minor,line_discount_minor,snapshot_name,snapshot_options_payload,unit_price_minor,vat_rate_percent')
             ->orderBy('created_at')
             ->orderBy('id')
             ->get();
+
+        $this->previewIsStaffMealTable = StaffTableSettlementPricing::isStaffMealTableId((int) $session->restaurant_table_id);
 
         $settlement = TableSessionSettlement::query()
             ->where('table_session_id', $this->tableSessionId)
@@ -360,12 +405,12 @@ class ReceiptPreview extends Component
     }
 
     /**
-     * @return array{tendered_minor?: int, change_minor?: int}
+     * @return array<string, mixed>
      */
-    private function receiptTenderLinesForPrinter(): array
+    private function receiptPaymentForPrinter(): array
     {
         if (! in_array($this->printIntent, [PrintIntent::Receipt, PrintIntent::Copy], true)) {
-            return [];
+            return ['show_payment_block' => false];
         }
 
         $settlement = TableSessionSettlement::query()
@@ -374,17 +419,45 @@ class ReceiptPreview extends Component
             ->first();
 
         if ($settlement === null) {
-            return [];
+            return ['show_payment_block' => false];
         }
 
-        if ($settlement->payment_method === PaymentMethod::Cash) {
-            return [
+        return match ($settlement->payment_method) {
+            PaymentMethod::Cash => [
+                'show_payment_block' => true,
+                'payment_label' => 'ESPECES',
                 'tendered_minor' => (int) $settlement->tendered_minor,
                 'change_minor' => (int) $settlement->change_minor,
-            ];
-        }
+            ],
+            PaymentMethod::Card => [
+                'show_payment_block' => true,
+                'payment_label' => 'CARTE',
+                'tendered_minor' => (int) $settlement->final_total_minor,
+                'change_minor' => 0,
+            ],
+            PaymentMethod::Voucher => [
+                'show_payment_block' => true,
+                'payment_label' => 'BON',
+                'tendered_minor' => (int) $settlement->final_total_minor,
+                'change_minor' => 0,
+            ],
+            default => [
+                'show_payment_block' => true,
+                'payment_label' => 'PAIEMENT',
+                'tendered_minor' => (int) $settlement->final_total_minor,
+                'change_minor' => 0,
+            ],
+        };
+    }
 
-        return [];
+    /**
+     * 印字用: 単価・税率付き明細（税は設定デフォルト）。1 OrderLine を親行 + エクストラ行にフラット展開。
+     *
+     * @return list<array{kind:string,qty:int,name:string,unit_price_minor:int,amount_minor:int,vat_percent:float}>
+     */
+    private function enrichedLinesForPrint(): array
+    {
+        return PosOrderReceiptLineEnricher::enrich($this->orders);
     }
 
     private function latestSettlementIdForMeta(): ?int

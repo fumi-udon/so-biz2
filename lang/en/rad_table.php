@@ -29,6 +29,7 @@ return [
     'cloture_discount' => 'Discount',
     'cloture_rounding' => 'Rounding',
     'cloture_total' => 'Total',
+    'cloture_amount_due' => 'Amount due',
     'cloture_change' => 'Change',
     'cloture_tendered' => 'Tendered',
     'cloture_payment_cash' => 'Cash',

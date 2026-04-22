@@ -265,7 +265,8 @@ final class PrintJobActionTest extends TestCase
 
         $this->assertStringContainsString('<epos-print', $xml);
         $this->assertStringContainsString('BinKitM9', $xml);
-        $this->assertStringContainsString('TOTAL', $xml);
+        $this->assertStringContainsString('TOTAL (TTC)', $xml);
+        $this->assertStringContainsString('TABLE NO:', $xml);
         $this->assertStringContainsString('Couscous', $xml);
         $this->assertStringContainsString('Thé', $xml);
         $this->assertStringContainsString('<cut type="feed"', $xml);

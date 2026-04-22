@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Pos;
 
+use App\Domains\Pos\Tables\TableCategory;
 use App\Domains\Pos\Tables\TableUiStatus;
 use App\Services\Pos\TableDashboardQueryService;
 use Illuminate\Support\Carbon;
@@ -58,6 +59,7 @@ class TableStatusGrid extends Component
         if ($sid !== null && $sid < 1) {
             $sid = null;
         }
+        $this->dispatch('pos-takeaway-bar-clear-ui');
         $this->selectedTableId = $tableId;
         $this->dispatch('pos-tile-interaction-started');
         $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid);
@@ -93,6 +95,15 @@ class TableStatusGrid extends Component
         }
     }
 
+    /**
+     * Takeaway 帯で卓が選ばれたときに、通常卓グリッドの選択リングだけを外す。
+     */
+    #[On('pos-customer-grid-clear-selection')]
+    public function onCustomerGridClearSelection(): void
+    {
+        $this->selectedTableId = null;
+    }
+
     public function render()
     {
         return view('livewire.pos.table-status-grid');
@@ -110,24 +121,24 @@ class TableStatusGrid extends Component
 
         foreach ($this->tiles as $t) {
             $tableId = (int) ($t['restaurantTableId'] ?? 0);
-            // Bucket strictly by pinned ID ranges (contract: 10–29 customer, 100–104 staff meal, 200–219 takeaway).
-            // Do not trust string `category` alone — mis-serialization must not route e.g. id 16 into staff.
-            if ($tableId >= 10 && $tableId <= 29) {
+            // Bucket by canonical slot (legacy 10–39 / 100–104 / 200–219 + multi-shop id blocks). Do not trust string `category` alone.
+            $slot = TableCategory::canonicalSlot($tableId);
+            if ($slot >= 10 && $slot <= 29) {
                 $customer[] = $t;
 
                 continue;
             }
-            if ($tableId >= 30 && $tableId <= 39) {
+            if ($slot >= 30 && $slot <= 39) {
                 $customer[] = $t;
 
                 continue;
             }
-            if ($tableId >= 100 && $tableId <= 104) {
+            if ($slot >= 100 && $slot <= 104) {
                 $staff[] = $t;
 
                 continue;
             }
-            if ($tableId >= 200 && $tableId <= 219) {
+            if ($slot >= 200 && $slot <= 219) {
                 // Takeout floor UI frozen — data may still exist in $this->tiles / DB; do not render.
                 continue;
             }
@@ -153,7 +164,7 @@ class TableStatusGrid extends Component
         return match ($status) {
             TableUiStatus::Alert->value => 'bg-red-600 text-white border-2 border-red-800 animate-pulse dark:bg-red-500 dark:border-red-300',
             TableUiStatus::Pending->value => 'bg-red-600 text-white border-2 border-red-800 dark:bg-red-500 dark:text-white dark:border-red-300',
-            TableUiStatus::Active->value => 'bg-blue-50 text-gray-950 border border-blue-300 dark:bg-blue-900/40 dark:text-blue-50 dark:border-blue-500',
+            TableUiStatus::Active->value => 'bg-sky-400 text-sky-950 border-2 border-sky-600 shadow-sm dark:bg-sky-500 dark:text-sky-950 dark:border-sky-300',
             TableUiStatus::Billed->value => 'bg-yellow-300 text-yellow-950 border-2 border-yellow-700 dark:bg-yellow-400 dark:text-yellow-950 dark:border-yellow-200',
 
             default => 'bg-white text-gray-950 border border-gray-300 dark:bg-gray-800 dark:text-white dark:border-gray-600',

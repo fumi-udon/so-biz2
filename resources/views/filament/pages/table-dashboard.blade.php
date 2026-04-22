@@ -46,6 +46,13 @@
                     @endif
                 </div>
 
+                @if ($shopId > 0)
+                    <livewire:pos.takeaway-bar
+                        :shop-id="$shopId"
+                        :key="'pos-takeaway-bar-'.$shopId"
+                    />
+                @endif
+
                 <div
                     class="fi-pos-footer flex flex-none min-h-0 flex-wrap items-center justify-between gap-1 border-t border-gray-200 bg-white p-1 dark:border-gray-600 dark:bg-gray-900 sm:gap-1.5 sm:p-1.5"
                 >

@@ -24,7 +24,7 @@
         aria-hidden="{{ $this->showStaffMealBar ? 'false' : 'true' }}"
     >
         <div
-            class="flex w-full min-w-0 max-w-full flex-nowrap items-center justify-start gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            class="flex w-full min-w-0 max-w-full flex-nowrap items-center justify-start gap-0.5 overflow-x-auto overflow-y-visible py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
             <span
                 class="inline-flex shrink-0 pl-0.5 text-slate-500 dark:text-slate-400"
@@ -40,17 +40,37 @@
                 @php
                     $tid = (int) $tile['restaurantTableId'];
                     $sid = (int) ($tile['activeTableSessionId'] ?? 0);
+                    $sn = $tile['activeSessionStaffName'] ?? null;
+                    $label = is_string($sn) && trim($sn) !== '' ? trim($sn) : null;
+                    $isStaffSel = $this->floorSelectedStaffTableId !== null && $this->floorSelectedStaffTableId === $tid;
+                    $staffSurface = $this->tileSurfaceClasses($tile);
                 @endphp
                 <button
                     type="button"
-                    wire:click="openTableContext({{ $tid }}, {{ $sid }})"
+                    wire:click="openTableContext({{ $tid }}, {{ $sid > 0 ? $sid : 'null' }})"
                     wire:key="staff-meal-{{ $tid }}"
+                    x-data="{ flash: false, flashTimer: null }"
+                    x-on:click="
+                        flash = true;
+                        if (flashTimer) clearTimeout(flashTimer);
+                        flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);
+                    "
+                    x-bind:class="{ 'pos-tile-select-flash': flash }"
                     data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
                     data-category="staff"
-                    title="#{{ $tid }}{{ (string)($tile['restaurantTableName'] ?? '') !== '' ? ' ' . (string) $tile['restaurantTableName'] : '' }}"
-                    class="inline-flex min-h-6 max-w-full shrink-0 items-center justify-center gap-0.5 whitespace-nowrap rounded border px-1 py-0.5 text-[9px] font-medium leading-tight text-slate-800 shadow-sm transition focus:outline-none focus:ring-1 focus:ring-slate-400 focus:ring-offset-1 focus:ring-offset-slate-100 dark:text-slate-100 dark:focus:ring-slate-500 dark:focus:ring-offset-slate-800 {{ $this->tileSurfaceClasses($tile) }}"
+                    title="@if ($label !== null){{ $label }} — @endif#{{ $tid }}{{ (string)($tile['restaurantTableName'] ?? '') !== '' ? ' ' . (string) $tile['restaurantTableName'] : '' }}"
+                    @class([
+                        'relative z-0 inline-flex min-h-6 max-w-full shrink-0 items-center justify-center gap-0.5 whitespace-nowrap rounded border px-1 py-0.5 text-[9px] leading-tight shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-300 '.$staffSurface,
+                        '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isStaffSel,
+                        'font-medium text-slate-800 dark:text-slate-100' => ! $isStaffSel,
+                        'font-black' => $isStaffSel,
+                    ])
                 >
-                    <span class="tabular-nums">#{{ $tid }}</span>
+                    @if ($label !== null)
+                        <span @class(['max-w-[6.5rem] truncate', 'font-semibold' => ! $isStaffSel, 'font-black' => $isStaffSel])>{{ $label }}</span>
+                    @else
+                        <span @class(['tabular-nums', 'font-semibold' => ! $isStaffSel, 'font-black' => $isStaffSel])>#{{ $tid }}</span>
+                    @endif
                 </button>
             @endforeach
             @endif

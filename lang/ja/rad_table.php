@@ -29,6 +29,7 @@ return [
     'cloture_discount' => '割引',
     'cloture_rounding' => '端数調整',
     'cloture_total' => '合計',
+    'cloture_amount_due' => '請求金額',
     'cloture_change' => 'お釣り',
     'cloture_tendered' => '受領額',
     'cloture_payment_cash' => '現金',

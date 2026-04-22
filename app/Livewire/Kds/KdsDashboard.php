@@ -3,6 +3,7 @@
 namespace App\Livewire\Kds;
 
 use App\Actions\Kds\UpdateOrderLineStatusAction;
+use App\Domains\Pos\Tables\TableCategory;
 use App\Enums\OrderLineStatus;
 use App\Enums\TableSessionStatus;
 use App\Exceptions\RevisionConflictException;
@@ -101,6 +102,10 @@ class KdsDashboard extends Component
                     && is_string($staffName)
                     && trim($staffName) !== '') {
                     $tableName = trim($staffName);
+                } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
+                    && is_string($session->customer_name)
+                    && trim($session->customer_name) !== '') {
+                    $tableName = trim($session->customer_name);
                 }
                 $byBatch[$batchKey] = [
                     'batchKey' => $batchKey,
@@ -214,6 +219,10 @@ class KdsDashboard extends Component
                     && is_string($s->staff_name)
                     && trim($s->staff_name) !== '') {
                     $tn = trim($s->staff_name);
+                } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
+                    && is_string($s->customer_name)
+                    && trim($s->customer_name) !== '') {
+                    $tn = trim($s->customer_name);
                 }
 
                 return [

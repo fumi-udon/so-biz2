@@ -4,7 +4,6 @@ namespace Tests\Feature\Livewire\Pos;
 
 use App\Enums\TableSessionStatus;
 use App\Livewire\Pos\ClotureModal;
-use App\Models\TableSessionSettlement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\Support\BuildsPosDashboardFixtures;
@@ -36,21 +35,6 @@ final class ClotureModalTest extends TestCase
             ->assertSet('justeMinor', 10_000);
     }
 
-    public function test_picking_card_sets_tendered_to_final_total(): void
-    {
-        $shop = $this->makeShop('cloture-card');
-        $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
-        $this->placeLinedOrder($shop, $session, 7_000);
-
-        Livewire::actingAs($this->makeOperator())
-            ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
-            ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
-            ->call('pickPayment', 'card')
-            ->assertSet('paymentMethod', 'card')
-            ->assertSet('tenderedMinor', 7_000)
-            ->assertSet('changeMinor', 0);
-    }
-
     public function test_set_tendered_computes_change(): void
     {
         $shop = $this->makeShop('cloture-change');
@@ -61,7 +45,22 @@ final class ClotureModalTest extends TestCase
             ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
             ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
             ->call('setTendered', 50_000)
-            ->assertSet('changeMinor', 15_500);
+            ->assertSet('changeMinor', 15_500)
+            ->assertSet('tenderedDtInput', '50');
+    }
+
+    public function test_tendered_dt_input_updates_minor_and_change(): void
+    {
+        $shop = $this->makeShop('cloture-dt-input');
+        $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
+        $this->placeLinedOrder($shop, $session, 10_000);
+
+        Livewire::actingAs($this->makeOperator())
+            ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
+            ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
+            ->set('tenderedDtInput', '12.5')
+            ->assertSet('tenderedMinor', 12_500)
+            ->assertSet('changeMinor', 2_500);
     }
 
     public function test_confirm_cash_creates_settlement_without_immediate_print(): void
@@ -75,7 +74,6 @@ final class ClotureModalTest extends TestCase
         Livewire::actingAs($operator)
             ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
             ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
-            ->call('pickPayment', 'cash')
             ->call('setTendered', 30_000)
             ->call('confirm')
             ->assertDispatched('pos-settlement-completed')
@@ -100,50 +98,8 @@ final class ClotureModalTest extends TestCase
         Livewire::actingAs($this->makeOperator())
             ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
             ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
-            ->call('pickPayment', 'cash')
             ->call('setTendered', 5_000)
             ->call('confirm');
-
-        $this->assertDatabaseCount('table_session_settlements', 0);
-    }
-
-    public function test_bypass_requires_manager_and_creates_bypass_settlement(): void
-    {
-        $shop = $this->makeShop('cloture-bypass');
-        $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
-        $this->placeLinedOrder($shop, $session, 12_000);
-        $operator = $this->makeOperator();
-        $manager = $this->makeApprover($shop, level: 4, pin: '9999');
-
-        Livewire::actingAs($operator)
-            ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
-            ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
-            ->set('bypassApproverStaffId', (int) $manager->id)
-            ->set('bypassApproverPin', '9999')
-            ->set('bypassReason', 'printer offline')
-            ->call('confirmBypass')
-            ->assertDispatched('pos-settlement-completed');
-
-        $settlement = TableSessionSettlement::query()->where('table_session_id', $session->id)->firstOrFail();
-        $this->assertTrue((bool) $settlement->print_bypassed);
-        $this->assertSame('printer offline', $settlement->bypass_reason);
-    }
-
-    public function test_bypass_with_non_manager_pin_is_rejected(): void
-    {
-        $shop = $this->makeShop('cloture-bypass-lv3');
-        $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
-        $this->placeLinedOrder($shop, $session, 12_000);
-        $operator = $this->makeOperator();
-        $lv3 = $this->makeApprover($shop, level: 3, pin: '1234');
-
-        Livewire::actingAs($operator)
-            ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
-            ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
-            ->set('bypassApproverStaffId', (int) $lv3->id)
-            ->set('bypassApproverPin', '1234')
-            ->set('bypassReason', 'nope')
-            ->call('confirmBypass');
 
         $this->assertDatabaseCount('table_session_settlements', 0);
     }
@@ -184,7 +140,6 @@ final class ClotureModalTest extends TestCase
         Livewire::actingAs($this->makeOperator())
             ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
             ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
-            ->call('pickPayment', 'cash')
             ->call('setTendered', 2_000)
             ->call('confirm');
 

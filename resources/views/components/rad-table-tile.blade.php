@@ -73,7 +73,6 @@
                 outlined
                 class="min-h-[48px] w-full justify-center"
                 wire:click="checkout({{ (int) $sessionId }})"
-                wire:confirm="{{ __('rad_table.checkout_confirm') }}"
                 wire:loading.attr="disabled"
                 wire:target="checkout"
                 :disabled="! ($tile['can_checkout'] ?? false)"

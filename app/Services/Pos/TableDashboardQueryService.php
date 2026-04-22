@@ -65,12 +65,20 @@ final class TableDashboardQueryService
             LIMIT 1
         )";
 
+        $innerActiveSessionCustomerName = "(
+            SELECT ts_cn.customer_name
+            FROM {$ts} AS ts_cn
+            WHERE ts_cn.id = ({$innerActiveSessionId})
+            LIMIT 1
+        )";
+
         $sql = <<<SQL
         SELECT
             rt.id,
             rt.name AS restaurant_table_name,
             ({$innerActiveSessionId}) AS agg_active_table_session_id,
             ({$innerActiveSessionStaffName}) AS agg_active_session_staff_name,
+            ({$innerActiveSessionCustomerName}) AS agg_active_session_customer_name,
             (SELECT COALESCE((
                 SELECT COUNT(o1.id)
                 FROM {$orders} AS o1
@@ -177,11 +185,19 @@ final class TableDashboardQueryService
         $category = TableCategory::tryResolveFromId((int) $r->id);
         $snRaw = $r->agg_active_session_staff_name ?? null;
         $sessionStaffName = is_string($snRaw) && trim($snRaw) !== '' ? trim($snRaw) : null;
+        $cnRaw = $r->agg_active_session_customer_name ?? null;
+        $sessionCustomerName = is_string($cnRaw) && trim($cnRaw) !== '' ? trim($cnRaw) : null;
+
+        $displayTableName = (string) $r->restaurant_table_name;
+        if ($category === TableCategory::Takeaway && $sessionCustomerName !== null) {
+            $displayTableName = $sessionCustomerName;
+        }
 
         return new TableTileAggregate(
             restaurantTableId: (int) $r->id,
-            restaurantTableName: (string) $r->restaurant_table_name,
+            restaurantTableName: $displayTableName,
             activeSessionStaffName: $sessionStaffName,
+            activeSessionCustomerName: $sessionCustomerName,
             activeTableSessionId: $r->agg_active_table_session_id === null
                 ? null
                 : (int) $r->agg_active_table_session_id,

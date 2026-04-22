@@ -22,7 +22,7 @@
         @else
             <p class="mb-1 text-[10px] font-extrabold uppercase leading-none tracking-wider text-blue-700 dark:text-blue-300 sm:text-xs">SHOP LOG NAME</p>
             <div
-                class="grid w-full min-w-0 grid-cols-5 content-start justify-items-stretch gap-1 sm:gap-1.5"
+                class="grid w-full min-w-0 grid-cols-5 content-start justify-items-stretch gap-1 overflow-visible py-0.5 sm:gap-1.5"
             >
                 @foreach ($customerTiles as $tile)
                     @php
@@ -39,6 +39,9 @@
                         $metaTone = in_array($status, ['alert', 'pending'], true)
                             ? 'text-white/90'
                             : 'text-slate-700 dark:text-slate-200';
+                        $lineTitle = $isSelected ? 'font-black '.$titleTone : 'font-extrabold '.$titleTone;
+                        $lineMeta = $isSelected ? 'font-black '.$metaTone : 'font-semibold '.$metaTone;
+                        $lineTotal = $isSelected ? 'font-black tabular-nums '.$titleTone : 'font-extrabold tabular-nums '.$titleTone;
                     @endphp
                     <div
                         class="w-full min-w-0"
@@ -47,27 +50,38 @@
                         <button
                             type="button"
                             wire:click="openTableContext({{ $tid }}, {{ $sid }})"
+                            x-data="{ flash: false, flashTimer: null }"
+                            x-on:click="
+                                flash = true;
+                                if (flashTimer) clearTimeout(flashTimer);
+                                flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);
+                            "
+                            x-bind:class="{ 'pos-tile-select-flash': flash }"
                             @class([
-                                'flex w-full touch-manipulation flex-col rounded-md border-2 p-0 py-[2px] text-left text-[10px] font-bold leading-none transition active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-sky-500 sm:text-xs',
-                                'ring-2 ring-sky-500 ring-offset-1 ring-offset-white dark:ring-offset-gray-900' => $isSelected,
+                                'relative z-0 flex w-full touch-manipulation flex-col rounded-md border-2 border-transparent p-0 py-[2px] text-left text-[10px] font-bold leading-none transition duration-150 ease-out active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 sm:text-xs',
+                                '!z-10 !scale-110' => $isSelected,
                             ])
                             data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
                             data-category="{{ $tile['category'] ?? '' }}"
                         >
                             <div
-                                class="box-border flex min-h-0 min-w-0 flex-col justify-center gap-0 overflow-hidden rounded-sm px-1 py-[2px] sm:px-1.5 {{ $this->tileSurfaceClasses($tile) }}"
+                                @class([
+                                    'box-border flex min-h-0 min-w-0 flex-col justify-center gap-0 overflow-hidden rounded-sm px-1 py-[2px] sm:px-1.5',
+                                    $this->tileSurfaceClasses($tile),
+                                    'ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isSelected,
+                                ])
                             >
-                                <div class="line-clamp-1 text-[10px] font-extrabold leading-tight sm:text-xs {{ $titleTone }}">
+                                <div class="line-clamp-1 text-[10px] leading-tight sm:text-xs {{ $lineTitle }}">
                                     @if ($tile['restaurantTableName'] !== '')
                                         {{ $tile['restaurantTableName'] }}
                                     @else
                                         {{ __('pos.table_name_fallback', ['id' => $tid]) }}
                                     @endif
                                 </div>
-                                <div class="line-clamp-1 text-[9px] font-semibold leading-tight sm:text-[10px] {{ $metaTone }}">
+                                <div class="line-clamp-1 text-[9px] leading-tight sm:text-[10px] {{ $lineMeta }}">
                                     {{ trans_choice('pos.tile_order_count', $orderCount, ['count' => $orderCount]) }}
                                 </div>
-                                <div class="line-clamp-1 text-[10px] font-extrabold tabular-nums leading-tight sm:text-xs {{ $titleTone }}">
+                                <div class="line-clamp-1 text-[10px] leading-tight sm:text-xs {{ $lineTotal }}">
                                     {{ $totalLabel }}
                                 </div>
                             </div>

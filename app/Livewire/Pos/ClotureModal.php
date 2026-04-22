@@ -6,17 +6,15 @@ use App\Actions\Pos\FinalizeTableSettlementAction;
 use App\Actions\Pos\FinalizeTableSettlementRequest;
 use App\Domains\Pos\Pricing\PricingEngine;
 use App\Domains\Pos\Settlement\SettlementSuggestionService;
+use App\Domains\Pos\Tables\TableCategory;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
-use App\Exceptions\Pos\DiscountPinRejectedException;
 use App\Exceptions\Pos\InsufficientTenderException;
 use App\Exceptions\Pos\PendingOrdersRemainException;
 use App\Exceptions\Pos\SessionAlreadySettledException;
 use App\Exceptions\RevisionConflictException;
 use App\Models\PosOrder;
-use App\Models\Staff;
 use App\Models\TableSession;
-use App\Services\StaffPinAuthenticationService;
 use App\Support\MenuItemMoney;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Filament\Notifications\Notification;
@@ -31,15 +29,10 @@ use Throwable;
  * Orchestrates the cashier-facing checkout flow:
  *   1. (re)prices the open session via PricingEngine (int-minor only).
  *   2. suggests Juste / Proche tender amounts via SettlementSuggestionService.
- *   3. delegates the transactional settlement to FinalizeTableSettlementAction.
+ *   3. delegates the transactional settlement to FinalizeTableSettlementAction (cash only in UI).
  *   4. dispatches `pos-settlement-completed` with `open_receipt_preview: true` so
  *      {@see TableActionHost} opens {@see ReceiptPreview} (intent=receipt); the
  *      cashier prints once from the preview (single `pos-trigger-print` path).
- *   5. offers a Manager-PIN bypass path; bypass dispatches with
- *      `open_receipt_preview: false` so the host closes without a receipt preview.
- *
- * The component itself is dumb: no business rules, only state and I/O
- * glue. Every hard invariant lives in the Action layer where tests prove it.
  */
 class ClotureModal extends Component
 {
@@ -72,19 +65,12 @@ class ClotureModal extends Component
     /** @var list<int> */
     public array $procheMinor = [];
 
-    public string $paymentMethod = 'cash';
-
     public ?int $tenderedMinor = null;
 
+    /** Human-editable tender string (DT); synced to {@see $tenderedMinor}. */
+    public string $tenderedDtInput = '';
+
     public int $changeMinor = 0;
-
-    public bool $bypassMode = false;
-
-    public string $bypassReason = '';
-
-    public ?int $bypassApproverStaffId = null;
-
-    public string $bypassApproverPin = '';
 
     public function mount(int $shopId): void
     {
@@ -102,13 +88,9 @@ class ClotureModal extends Component
             return;
         }
         $this->reset([
-            'paymentMethod',
             'tenderedMinor',
+            'tenderedDtInput',
             'changeMinor',
-            'bypassMode',
-            'bypassReason',
-            'bypassApproverStaffId',
-            'bypassApproverPin',
         ]);
         $this->uiState = 'idle';
         $this->tableSessionId = $sid;
@@ -128,37 +110,19 @@ class ClotureModal extends Component
         $this->uiState = 'idle';
     }
 
-    public function pickPayment(string $method): void
-    {
-        if (! in_array($method, ['cash', 'card', 'voucher'], true)) {
-            return;
-        }
-        $this->paymentMethod = $method;
-        if ($method === 'card') {
-            $this->tenderedMinor = $this->finalTotalMinor;
-        }
-        $this->recomputeChange();
-    }
-
     public function setTendered(int $minor): void
     {
         $this->tenderedMinor = max(0, $minor);
+        $this->tenderedDtInput = $this->tenderedMinor > 0
+            ? MenuItemMoney::minorToDtInputString($this->tenderedMinor)
+            : '';
         $this->recomputeChange();
     }
 
-    public function updatedTenderedMinor(): void
+    public function updatedTenderedDtInput(): void
     {
+        $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
         $this->recomputeChange();
-    }
-
-    public function toggleBypass(): void
-    {
-        $this->bypassMode = ! $this->bypassMode;
-        if (! $this->bypassMode) {
-            $this->bypassReason = '';
-            $this->bypassApproverStaffId = null;
-            $this->bypassApproverPin = '';
-        }
     }
 
     public function confirm(): void
@@ -169,10 +133,7 @@ class ClotureModal extends Component
         $this->uiState = 'in_flight';
 
         try {
-            $method = PaymentMethod::from($this->paymentMethod);
-            $tendered = $method === PaymentMethod::Card
-                ? $this->finalTotalMinor
-                : (int) ($this->tenderedMinor ?? 0);
+            $tendered = (int) ($this->tenderedMinor ?? 0);
 
             app(FinalizeTableSettlementAction::class)->execute(
                 new FinalizeTableSettlementRequest(
@@ -180,7 +141,7 @@ class ClotureModal extends Component
                     tableSessionId: (int) $this->tableSessionId,
                     expectedSessionRevision: $this->expectedSessionRevision,
                     tenderedMinor: $tendered,
-                    paymentMethod: $method,
+                    paymentMethod: PaymentMethod::Cash,
                     actorUserId: (int) (auth()->id() ?? 0),
                 )
             );
@@ -214,79 +175,35 @@ class ClotureModal extends Component
         }
     }
 
-    public function confirmBypass(): void
-    {
-        if ($this->uiState === 'in_flight' || $this->tableSessionId === null) {
-            return;
-        }
-        if ($this->bypassApproverStaffId === null || trim($this->bypassApproverPin) === '' || trim($this->bypassReason) === '') {
-            Notification::make()->title(__('pos.action_failed'))->body(__('rad_table.bypass_reason_required'))->warning()->send();
-
-            return;
-        }
-
-        $this->uiState = 'in_flight';
-
-        try {
-            $staff = Staff::query()
-                ->with('jobLevel')
-                ->where('shop_id', $this->shopId)
-                ->whereKey((int) $this->bypassApproverStaffId)
-                ->first();
-
-            if ($staff === null) {
-                throw new DiscountPinRejectedException(__('pos.discount_approver_not_found'));
-            }
-
-            $err = app(StaffPinAuthenticationService::class)->verify(
-                staff: $staff,
-                pin: $this->bypassApproverPin,
-                context: 'pos-cloture-bypass',
-                maxAttempts: 5,
-                decaySeconds: 60,
-            );
-            if ($err !== null) {
-                throw new DiscountPinRejectedException($err);
-            }
-            if ((int) ($staff->jobLevel?->level ?? 0) < 4) {
-                throw new \RuntimeException(__('rad_table.manager_pin_required'));
-            }
-
-            $operatorUserId = (int) (auth()->id() ?? 0);
-            app(FinalizeTableSettlementAction::class)->execute(
-                new FinalizeTableSettlementRequest(
-                    shopId: $this->shopId,
-                    tableSessionId: (int) $this->tableSessionId,
-                    expectedSessionRevision: $this->expectedSessionRevision,
-                    tenderedMinor: $this->finalTotalMinor,
-                    paymentMethod: PaymentMethod::BypassForced,
-                    actorUserId: $operatorUserId,
-                    printBypassed: true,
-                    bypassReason: $this->bypassReason,
-                    bypassedByUserId: $operatorUserId,
-                )
-            );
-
-            $this->dispatch(
-                'pos-settlement-completed',
-                table_session_id: (int) $this->tableSessionId,
-                open_receipt_preview: false,
-            );
-            $this->dispatch('pos-refresh-tiles');
-            $this->uiState = 'success';
-            $this->closeModal();
-        } catch (DiscountPinRejectedException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
-        } catch (Throwable $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
-        }
-    }
-
     public function formatMinor(int $minor): string
     {
         return MenuItemMoney::formatMinorForDisplay($minor);
+    }
+
+    public function getTenderedDisplayMinorProperty(): int
+    {
+        return max(0, (int) ($this->tenderedMinor ?? 0));
+    }
+
+    public function getChangeToneProperty(): string
+    {
+        if ($this->changeMinor < 0) {
+            return 'short';
+        }
+        if ($this->changeMinor > 0) {
+            return 'positive';
+        }
+
+        return 'neutral';
+    }
+
+    public function formatSignedMinor(int $minor): string
+    {
+        if ($minor < 0) {
+            return '− '.$this->formatMinor(abs($minor));
+        }
+
+        return $this->formatMinor($minor);
     }
 
     public function render()
@@ -314,6 +231,10 @@ class ClotureModal extends Component
             && is_string($session->staff_name)
             && trim($session->staff_name) !== '') {
             $this->tableLabel = trim($session->staff_name);
+        } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
+            && is_string($session->customer_name)
+            && trim($session->customer_name) !== '') {
+            $this->tableLabel = trim($session->customer_name);
         } else {
             $this->tableLabel = (string) ($session->restaurantTable->name ?? '');
         }
@@ -343,6 +264,7 @@ class ClotureModal extends Component
         $this->procheMinor = $sugg->procheMinor;
 
         $this->tenderedMinor = null;
+        $this->tenderedDtInput = '';
         $this->changeMinor = 0;
 
         return true;
@@ -351,18 +273,6 @@ class ClotureModal extends Component
     private function recomputeChange(): void
     {
         $tendered = (int) ($this->tenderedMinor ?? 0);
-        $this->changeMinor = max(0, $tendered - $this->finalTotalMinor);
-    }
-
-    public function getApproverOptionsProperty(): array
-    {
-        return Staff::query()
-            ->where('shop_id', $this->shopId)
-            ->where('is_active', true)
-            ->where('is_manager', true)
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->map(fn (Staff $s): array => ['id' => (int) $s->id, 'name' => (string) $s->name])
-            ->all();
+        $this->changeMinor = $tendered - $this->finalTotalMinor;
     }
 }

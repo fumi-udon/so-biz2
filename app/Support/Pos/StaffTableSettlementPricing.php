@@ -5,6 +5,7 @@ namespace App\Support\Pos;
 use App\Domains\Pos\Pricing\PricingEngine;
 use App\Domains\Pos\Pricing\PricingInput;
 use App\Domains\Pos\Pricing\PricingResult;
+use App\Domains\Pos\Tables\TableCategory;
 use App\Models\OrderLine;
 use App\Models\PosOrder;
 use Illuminate\Support\Collection;
@@ -25,8 +26,10 @@ final class StaffTableSettlementPricing
 
     public static function isStaffMealTableId(int $restaurantTableId): bool
     {
-        return $restaurantTableId >= self::STAFF_MEAL_TABLE_MIN_ID
-            && $restaurantTableId <= self::STAFF_MEAL_TABLE_MAX_ID;
+        $slot = TableCategory::canonicalSlot($restaurantTableId);
+
+        return $slot >= self::STAFF_MEAL_TABLE_MIN_ID
+            && $slot <= self::STAFF_MEAL_TABLE_MAX_ID;
     }
 
     /**

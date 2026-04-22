@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Pos;
 
+use App\Domains\Pos\Tables\TableCategory;
 use App\Domains\Pos\Tables\TableUiStatus;
 use App\Services\Pos\TableDashboardQueryService;
 use Livewire\Attributes\Computed;
@@ -28,6 +29,9 @@ class StaffMealBar extends Component
 
     public bool $isPollingPaused = false;
 
+    /** 右ペインで開いている賄い卓（ビューで amber 反転 + scale に使用） */
+    public ?int $floorSelectedStaffTableId = null;
+
     /**
      * @var list<array<string, mixed>>
      */
@@ -52,6 +56,19 @@ class StaffMealBar extends Component
     public function onTileInteractionEnded(): void
     {
         $this->isPollingPaused = false;
+        $this->floorSelectedStaffTableId = null;
+    }
+
+    #[On('pos-action-host-opened')]
+    public function onPosActionHostOpened(mixed $tableId = null, mixed $sessionId = null): void
+    {
+        $tid = is_numeric($tableId) ? (int) $tableId : 0;
+        if ($tid >= 1 && TableCategory::tryResolveFromId($tid) === TableCategory::Staff) {
+            $this->floorSelectedStaffTableId = $tid;
+
+            return;
+        }
+        $this->floorSelectedStaffTableId = null;
     }
 
     #[On('pos-refresh-tiles')]
@@ -109,6 +126,8 @@ class StaffMealBar extends Component
         if ($sid !== null && $sid < 1) {
             $sid = null;
         }
+        $this->floorSelectedStaffTableId = $tableId;
+        $this->dispatch('pos-takeaway-bar-clear-ui');
         $this->dispatch('pos-tile-interaction-started');
         $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid);
         $this->dispatch('pos-table-selection-sync', tableId: $tableId);
@@ -124,8 +143,8 @@ class StaffMealBar extends Component
         return match ($status) {
             TableUiStatus::Alert->value => 'bg-red-600 text-white border-red-800 dark:bg-red-500 dark:border-red-300',
             TableUiStatus::Pending->value => 'bg-red-600 text-white border-red-800 dark:bg-red-500 dark:border-red-300',
-            TableUiStatus::Active->value => 'bg-blue-50 text-gray-950 border-blue-300 dark:bg-blue-900/40 dark:text-blue-50 dark:border-blue-500',
-            TableUiStatus::Billed->value => 'bg-yellow-300 text-yellow-950 border-yellow-700 dark:bg-yellow-400 dark:text-yellow-950 dark:border-yellow-200',
+            TableUiStatus::Active->value => 'bg-sky-400 text-sky-950 border-sky-600 shadow-sm dark:bg-sky-500 dark:text-sky-950 dark:border-sky-300',
+            TableUiStatus::Billed->value => 'bg-sky-200 text-sky-950 border-sky-600 dark:bg-sky-700 dark:text-sky-50 dark:border-sky-400',
 
             default => 'bg-white text-gray-950 border-gray-300 dark:bg-gray-800 dark:text-white dark:border-gray-600',
         };

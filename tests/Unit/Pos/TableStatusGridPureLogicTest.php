@@ -119,7 +119,7 @@ class TableStatusGridPureLogicTest extends TestCase
         $this->assertStringContainsString('bg-red-600', $pending);
 
         $active = $grid->tileSurfaceClasses($this->tile(12, TableCategory::Customer, TableUiStatus::Active));
-        $this->assertStringContainsString('bg-blue-50', $active);
+        $this->assertStringContainsString('bg-sky-400', $active);
 
         $billed = $grid->tileSurfaceClasses($this->tile(13, TableCategory::Customer, TableUiStatus::Billed));
         $this->assertStringContainsString('bg-yellow-300', $billed);

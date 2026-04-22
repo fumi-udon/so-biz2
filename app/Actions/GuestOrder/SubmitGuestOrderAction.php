@@ -16,6 +16,7 @@ use App\Models\Shop;
 use App\Models\TableSession;
 use App\Services\Pos\PosLineComputationService;
 use App\Services\Pos\TableSessionLifecycleService;
+use App\Support\Pos\Receipt\ReceiptTaxMath;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
@@ -71,6 +72,7 @@ final class SubmitGuestOrderAction
             $linesIn = $payload['lines'];
             $computedLines = [];
             $orderTotalMinor = 0;
+            $snapshotVat = ReceiptTaxMath::defaultVatPercent();
 
             foreach ($linesIn as $row) {
                 if (! is_array($row)) {
@@ -96,6 +98,7 @@ final class SubmitGuestOrderAction
                     'qty' => $qty,
                     'unit_price_minor' => $unitPriceMinor,
                     'line_total_minor' => $lineTotalMinor,
+                    'vat_rate_percent' => $snapshotVat,
                     'snapshot_name' => $snapshotName,
                     'snapshot_kitchen_name' => $snapshotKitchen,
                     'snapshot_options_payload' => $lineComputation->buildSnapshotOptionsPayload($item, $row),
@@ -118,6 +121,7 @@ final class SubmitGuestOrderAction
                     'qty' => $line['qty'],
                     'unit_price_minor' => $line['unit_price_minor'],
                     'line_total_minor' => $line['line_total_minor'],
+                    'vat_rate_percent' => $line['vat_rate_percent'] ?? $snapshotVat,
                     'snapshot_name' => $line['snapshot_name'],
                     'snapshot_kitchen_name' => $line['snapshot_kitchen_name'],
                     'snapshot_options_payload' => $line['snapshot_options_payload'],

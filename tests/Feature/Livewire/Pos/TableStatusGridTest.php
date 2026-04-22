@@ -119,7 +119,7 @@ class TableStatusGridTest extends TestCase
 
         $component->assertOk();
         $component->assertSeeHtml('data-ui-status="billed"');
-        $component->assertSeeHtml('bg-yellow-300');
+        $component->assertSeeHtml('bg-sky-200');
         $component->assertDontSeeHtml('animate-pulse');
     }
 
@@ -194,7 +194,7 @@ class TableStatusGridTest extends TestCase
         $component->dispatch('pos-refresh-tiles');
         $this->assertSame(TableUiStatus::Active->value, $component->instance()->tiles[0]['uiStatus']);
         $component->assertSeeHtml('data-ui-status="active"');
-        $component->assertSeeHtml('bg-blue-50');
+        $component->assertSeeHtml('bg-sky-400');
     }
 
     public function test_grid_omits_tiles_for_tables_outside_of_bucket_ranges(): void

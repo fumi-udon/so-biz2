@@ -19,6 +19,7 @@ class OrderLine extends Model
         'unit_price_minor',
         'line_total_minor',
         'line_discount_minor',
+        'vat_rate_percent',
         'snapshot_name',
         'snapshot_kitchen_name',
         'snapshot_options_payload',
@@ -39,6 +40,7 @@ class OrderLine extends Model
             'unit_price_minor' => 'integer',
             'line_total_minor' => 'integer',
             'line_discount_minor' => 'integer',
+            'vat_rate_percent' => 'decimal:2',
         ];
     }
 

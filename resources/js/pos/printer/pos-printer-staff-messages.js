@@ -10,6 +10,22 @@ export function resolvePosPrinterStaffMessage(code, rawMessage) {
     const upper = c.toUpperCase();
     const raw = String(rawMessage ?? '');
 
+    if (upper === 'DEVICE_OPEN_FAIL' || upper === 'CONNECT_FAIL') {
+        return {
+            displayCode: upper,
+            staffMessage:
+                '【プリンター接続失敗】電源・LANケーブル・IP(192.168.1.101)を確認し、他の端末の印刷画面を閉じてから再試行してください。',
+        };
+    }
+
+    if (upper === 'POS_CONFIG_MISSING') {
+        return {
+            displayCode: 'POS_CONFIG_MISSING',
+            staffMessage:
+                '【設定エラー】プリンター設定が読み込めません。画面を再読み込みするか、管理者に連絡してください。',
+        };
+    }
+
     if (upper === 'EX_TIMEOUT' || upper.includes('EX_ENPC_TIMEOUT')) {
         return {
             displayCode: 'EX_TIMEOUT',

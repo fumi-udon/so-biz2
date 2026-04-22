@@ -49,6 +49,27 @@
     }
 }
 
+/* POS checkout modal: table name emphasis */
+@keyframes pos-cloture-table-name-blink {
+    0%,
+    45% {
+        opacity: 1;
+    }
+
+    50%,
+    95% {
+        opacity: 0.22;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+.animate-pos-cloture-table-blink {
+    animation: pos-cloture-table-name-blink 1s step-end infinite;
+}
+
 /* Guest order cart drawer (Phase 1.5) */
 @keyframes go-cart-row-enter {
     from {
@@ -100,4 +121,31 @@
 
 .animate-go-shake {
     animation: go-shake 0.38s ease-in-out;
+}
+
+/* POS floor tiles: one-shot click flash (TableStatusGrid / TakeawayBar / StaffMealBar) */
+@keyframes pos-tile-select-flash-kf {
+    0% {
+        filter: brightness(1.55);
+        box-shadow:
+            0 0 0 4px rgb(255 255 255 / 0.9),
+            0 0 32px 12px rgb(255 255 255 / 0.45);
+    }
+
+    100% {
+        filter: brightness(1);
+        box-shadow: 0 0 0 0 rgb(255 255 255 / 0);
+    }
+}
+
+.pos-tile-select-flash {
+    animation: pos-tile-select-flash-kf 0.42s ease-out 1 both;
+}
+
+/*
+ * Takeaway guest modal uses <x-filament::modal>; Filament defaults to z-40 on the overlay,
+ * which sits below POS TableActionHost / add modal (z~260+). Scope lift to body-teleported shell.
+ */
+[data-pos-takeaway-guest-modal='true'] .fi-modal [class~='z-40'] {
+    z-index: 400 !important;
 }

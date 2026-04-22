@@ -15,6 +15,7 @@ use App\Models\RestaurantTable;
 use App\Models\TableSession;
 use App\Services\Pos\PosLineComputationService;
 use App\Services\Pos\TableSessionLifecycleService;
+use App\Support\Pos\Receipt\ReceiptTaxMath;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -121,6 +122,7 @@ final class AddPosOrderFromStaffAction
                     'qty' => $qty,
                     'unit_price_minor' => $unit,
                     'line_total_minor' => $lineTotal,
+                    'vat_rate_percent' => ReceiptTaxMath::defaultVatPercent(),
                     'snapshot_name' => $name,
                     'snapshot_kitchen_name' => $kSnap,
                     'snapshot_options_payload' => $snap,

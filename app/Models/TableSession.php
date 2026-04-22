@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domains\Pos\Tables\TableCategory;
 use App\Enums\TableSessionStatus;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Illuminate\Database\Eloquent\Model;
@@ -15,6 +16,11 @@ class TableSession extends Model
         static::saving(function (TableSession $s): void {
             if (! StaffTableSettlementPricing::isStaffMealTableId((int) $s->restaurant_table_id)) {
                 $s->staff_name = null;
+            }
+            $cat = TableCategory::tryResolveFromId((int) $s->restaurant_table_id);
+            if ($cat !== TableCategory::Takeaway) {
+                $s->customer_name = null;
+                $s->customer_phone = null;
             }
         });
     }
@@ -30,6 +36,8 @@ class TableSession extends Model
         'opened_at',
         'closed_at',
         'staff_name',
+        'customer_name',
+        'customer_phone',
         'last_addition_printed_at',
         'session_revision',
     ];

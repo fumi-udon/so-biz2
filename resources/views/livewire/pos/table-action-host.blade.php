@@ -86,6 +86,7 @@
                 <button
                     type="button"
                     wire:click="ajouter"
+                    data-pos-ajouter-primary
                     @disabled($footerLocked)
                     wire:loading.attr="disabled"
                     wire:target="ajouter"
@@ -228,13 +229,13 @@
         @endif
     </div>
 
-    @if ($open && $this->requiresStaffMealAuth)
+    @if ($open && $this->requiresStaffMealAuth && ! $this->staffMealAuthModalDismissed)
         <div
             class="fixed inset-0 {{ $zStaffMealBackdrop }} flex items-center justify-center bg-black/75 p-4"
             style="isolation: isolate"
             role="dialog"
             aria-modal="true"
-            wire:key="pos-staff-meal-auth-modal"
+            wire:key="pos-staff-meal-auth-{{ (int) ($this->activeRestaurantTableId ?? 0) }}-{{ (int) ($this->activeTableSessionId ?? 0) }}"
         >
             <div class="absolute inset-0" wire:click="cancelStaffMealAuth"></div>
             <div class="relative {{ $zStaffMealPanel }} w-full max-w-md">
@@ -248,7 +249,7 @@
                         <div class="relative">
                             <select
                                 id="staff-meal-auth-staff"
-                                wire:model="staffMealAuthStaffId"
+                                wire:model.live="staffMealAuthStaffId"
                                 wire:loading.attr="disabled"
                                 wire:target="confirmStaffMealAuth"
                                 class="block w-full appearance-none rounded-lg border-2 border-black bg-white px-3 py-2.5 pr-10 text-sm font-semibold text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:bg-gray-900 dark:text-gray-100"
@@ -262,13 +263,17 @@
                         </div>
                     </div>
                     <div>
-                        <label class="mb-1 block text-sm font-black tracking-wide text-gray-800 dark:text-gray-200" for="staff-meal-auth-pin">{{ __('pos.discount_pin') }} (4)</label>
+                        <label class="mb-1 block text-sm font-black tracking-wide text-gray-800 dark:text-gray-200" for="staff-meal-auth-pin">{{ __('pos.staff_meal_auth_pin_label') }}</label>
                         <input
                             id="staff-meal-auth-pin"
-                            type="password"
+                            type="text"
+                            name="pos_staff_meal_pin"
                             inputmode="numeric"
                             maxlength="4"
-                            autocomplete="one-time-code"
+                            autocomplete="off"
+                            autocorrect="off"
+                            spellcheck="false"
+                            style="-webkit-text-security: disc"
                             wire:model="staffMealAuthPin"
                             wire:loading.attr="disabled"
                             wire:target="confirmStaffMealAuth"
@@ -371,22 +376,45 @@
     <div
         class="shrink-0 space-y-1 border-t-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900"
     >
-        @if ($this->staffMealShowPricingBreakdown)
-            <div class="flex items-center justify-between gap-2 text-xs text-gray-600 line-through dark:text-gray-300">
-                <span class="font-medium">{{ __('pos.staff_meal_subtotal_gross') }}</span>
-                <span class="tabular-nums">{{ $this->formatMinor($this->staffMealGrossMinor) }}</span>
+        @if ($this->isStaffMealTable && $this->posOrders->isNotEmpty())
+            <div class="space-y-1.5 text-[12px] leading-snug landscape:text-[13px] text-gray-800 dark:text-slate-200">
+                <div class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                    <span class="shrink-0 font-black uppercase tracking-wide text-gray-900 dark:text-white">{{ __('pos.staff_meal_sous_total_ht_screen') }}:</span>
+                    <span class="tabular-nums font-bold text-gray-950 dark:text-white">{{ $this->formatMinor($this->staffMealPreDiscountHtMinor) }}</span>
+                </div>
+                <div class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                    <span class="shrink-0 font-black uppercase tracking-wide text-gray-900 dark:text-white">{{ __('pos.staff_meal_tva_label', ['rate' => $this->staffMealReceiptVatRateLabel]) }}:</span>
+                    <span class="tabular-nums font-bold text-gray-950 dark:text-white">{{ $this->formatMinor($this->staffMealPreDiscountVatMinor) }}</span>
+                </div>
+                @if ($this->staffMealShowPricingBreakdown)
+                    <div class="flex flex-wrap items-center justify-end gap-2 pt-0.5">
+                        <span class="text-base font-bold tabular-nums text-slate-500 line-through decoration-slate-400 landscape:text-lg dark:text-slate-500 dark:decoration-slate-500">{{ $this->formatMinor($this->staffMealGrossMinor) }}</span>
+                        <span class="rounded bg-red-600 px-2 py-0.5 text-xs font-black uppercase tracking-widest text-white shadow-[0_0_10px_rgba(220,38,38,0.5)]">{{ __('pos.staff_meal_off_badge') }}</span>
+                    </div>
+                @endif
+                <div class="flex items-center justify-between gap-2 border-t border-dashed border-gray-300 pt-1.5 dark:border-slate-600">
+                    <span class="text-sm font-black uppercase tracking-wide text-gray-900 dark:text-white">{{ __('pos.receipt_grand_total') }}</span>
+                    <span class="text-2xl font-black uppercase tracking-widest tabular-nums text-amber-500 dark:text-amber-400">{{ $this->formatMinor($this->subtotalMinor) }}</span>
+                </div>
             </div>
-            <div class="flex items-center justify-between gap-2 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
-                <span>{{ __('pos.staff_meal_discount_line') }}</span>
-                <span class="tabular-nums">−{{ $this->formatMinor($this->staffMealDiscountMinor) }}</span>
+        @else
+            @if ($this->staffMealShowPricingBreakdown)
+                <div class="flex items-center justify-between gap-2 text-xs text-gray-600 line-through dark:text-gray-300">
+                    <span class="font-medium">{{ __('pos.staff_meal_subtotal_gross') }}</span>
+                    <span class="tabular-nums">{{ $this->formatMinor($this->staffMealGrossMinor) }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-2 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                    <span>{{ __('pos.staff_meal_discount_line') }}</span>
+                    <span class="tabular-nums">−{{ $this->formatMinor($this->staffMealDiscountMinor) }}</span>
+                </div>
+            @endif
+            <div class="flex items-center justify-between gap-1.5 text-xs text-gray-900 dark:text-gray-100 sm:text-sm">
+                <span class="font-medium">{{ __('pos.subtotal') }}</span>
+                <span class="text-sm font-bold tabular-nums text-gray-950 sm:text-base dark:text-white">
+                    {{ $this->formatMinor($this->subtotalMinor) }}
+                </span>
             </div>
         @endif
-        <div class="flex items-center justify-between gap-1.5 text-xs text-gray-900 dark:text-gray-100 sm:text-sm">
-            <span class="font-medium">{{ __('pos.subtotal') }}</span>
-            <span class="text-sm font-bold tabular-nums text-gray-950 sm:text-base dark:text-white">
-                {{ $this->formatMinor($this->subtotalMinor) }}
-            </span>
-        </div>
         <div class="grid grid-cols-2 items-center gap-1.5 sm:gap-2">
             <button
                 type="button"
@@ -408,7 +436,6 @@
             <button
                 type="button"
                 wire:click="checkoutSession"
-                wire:confirm="{{ __('rad_table.checkout_confirm') }}"
                 @disabled(! $this->canCloture || $footerLocked)
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"

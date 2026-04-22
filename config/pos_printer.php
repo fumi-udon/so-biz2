@@ -11,7 +11,7 @@ return [
     |
     */
     'defaults' => [
-        'printer_ip' => env('POS_PRINTER_IP', '192.168.1.200'),
+        'printer_ip' => env('POS_PRINTER_IP', '192.168.1.101'),
         'printer_port' => env('POS_PRINTER_PORT', '8043'),
         'device_id' => env('POS_PRINTER_DEVICE_ID', 'local_printer'),
         'crypto' => filter_var(env('POS_PRINTER_CRYPTO', true), FILTER_VALIDATE_BOOL),

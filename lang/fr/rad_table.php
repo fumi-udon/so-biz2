@@ -29,6 +29,7 @@ return [
     'cloture_discount' => 'Remise',
     'cloture_rounding' => 'Arrondi',
     'cloture_total' => 'Total',
+    'cloture_amount_due' => 'Montant dû',
     'cloture_change' => 'Rendu',
     'cloture_tendered' => 'Reçu',
     'cloture_payment_cash' => 'Espèces',

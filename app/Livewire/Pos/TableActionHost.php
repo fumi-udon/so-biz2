@@ -24,6 +24,8 @@ use App\Services\Pos\TableSessionLifecycleService;
 use App\Services\StaffDirectoryService;
 use App\Services\StaffPinAuthenticationService;
 use App\Support\MenuItemMoney;
+use App\Support\Pos\Receipt\PosOrderReceiptLineEnricher;
+use App\Support\Pos\Receipt\ReceiptTaxMath;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
@@ -37,6 +39,9 @@ use Throwable;
 class TableActionHost extends Component
 {
     private ?PricingResult $memoSessionPricing = null;
+
+    /** @var array{ht_minor: int, vat_minor: int}|null */
+    private ?array $memoStaffMealPreDiscountTaxSum = null;
 
     #[Locked]
     public int $shopId = 0;
@@ -104,6 +109,11 @@ class TableActionHost extends Component
 
     public string $staffMealAuthPin = '';
 
+    /**
+     * Confirm 成功直後に true。オーバーレイを確実に外し POS 本体を見せる（Livewire の再計算タイミング差の吸収）。
+     */
+    public bool $staffMealAuthModalDismissed = false;
+
     public bool $showReceiptPreview = false;
 
     public string $previewIntent = 'addition';
@@ -128,17 +138,25 @@ class TableActionHost extends Component
         if ($tid === null || $tid < 1) {
             return;
         }
+
+        $this->staffMealAuthModalDismissed = false;
+        $this->staffMealAuthStaffId = null;
+        $this->staffMealAuthPin = '';
+
         $this->activeRestaurantTableId = $tid;
         $this->activeRestaurantTableName = (string) (RestaurantTable::query()
             ->where('shop_id', $this->shopId)
             ->whereKey($tid)
             ->value('name') ?? '');
         $this->loadSessionData($sid);
+
+        // 賄い卓: セッションは PIN 成功時（confirmStaffMealAuth）まで作らない。ここで ensure しないと Leave 後に空セッションが残りタイルが Active になる。
     }
 
     public function loadSessionData(?int $sessionId): void
     {
         $this->memoSessionPricing = null;
+        $this->memoStaffMealPreDiscountTaxSum = null;
         $this->activeTableSessionId = $sessionId;
         $this->session = null;
         $this->posOrders = collect();
@@ -168,11 +186,23 @@ class TableActionHost extends Component
         $this->syncExpectedRevisionFromSession();
     }
 
+    /**
+     * 賄い卓: セッション未作成、または staff_name 未設定のとき PIN が必要。セッション作成は confirmStaffMealAuth まで遅延する。
+     */
     public function getRequiresStaffMealAuthProperty(): bool
     {
         $tid = (int) ($this->session?->restaurant_table_id ?? $this->activeRestaurantTableId ?? 0);
-        if (! StaffTableSettlementPricing::isStaffMealTableId($tid) || $this->session === null || $this->activeTableSessionId === null) {
+        if (! StaffTableSettlementPricing::isStaffMealTableId($tid) || $this->shopId === 0) {
             return false;
+        }
+        if ($this->activeRestaurantTableId === null || $this->activeRestaurantTableId < 1) {
+            return false;
+        }
+        if ($this->activeTableSessionId === null) {
+            return true;
+        }
+        if ($this->session === null) {
+            return true;
         }
 
         $sn = $this->session->staff_name;
@@ -190,9 +220,39 @@ class TableActionHost extends Component
 
     public function confirmStaffMealAuth(): void
     {
-        if (! $this->requiresStaffMealAuth || $this->activeTableSessionId === null || $this->shopId === 0) {
+        if ($this->shopId === 0) {
             return;
         }
+
+        $tidEarly = (int) ($this->session?->restaurant_table_id ?? $this->activeRestaurantTableId ?? 0);
+        if (StaffTableSettlementPricing::isStaffMealTableId($tidEarly)
+            && $this->activeTableSessionId === null
+            && $this->activeRestaurantTableId !== null
+            && $this->activeRestaurantTableId > 0) {
+            $this->ensureTableSession();
+        }
+
+        if ($this->activeTableSessionId === null) {
+            return;
+        }
+
+        // Livewire の往復で Eloquent が未復元のときがあり、先に requires を読むと誤って no-op になる
+        if ($this->session === null) {
+            $this->loadSessionData((int) $this->activeTableSessionId);
+        }
+        if ($this->session === null) {
+            return;
+        }
+
+        $tid = (int) ($this->session->restaurant_table_id ?? $this->activeRestaurantTableId ?? 0);
+        if (! StaffTableSettlementPricing::isStaffMealTableId($tid)) {
+            return;
+        }
+
+        if (! $this->requiresStaffMealAuth) {
+            return;
+        }
+
         if ($this->staffMealAuthStaffId === null || $this->staffMealAuthStaffId < 1) {
             Notification::make()
                 ->title(__('pos.action_failed'))
@@ -268,25 +328,35 @@ class TableActionHost extends Component
             return;
         }
 
+        $this->staffMealAuthModalDismissed = true;
         $this->staffMealAuthPin = '';
         $this->staffMealAuthStaffId = null;
         $this->loadSessionData((int) $this->activeTableSessionId);
+        if ($this->session !== null && trim((string) ($this->session->staff_name ?? '')) === '') {
+            $this->session = $this->session->fresh();
+            if ($this->session !== null && trim((string) ($this->session->staff_name ?? '')) === '') {
+                $this->session->staff_name = (string) $staff->name;
+                $this->session->save();
+            }
+        }
         $this->dispatch('pos-refresh-tiles');
     }
 
     /**
-     * Abandon staff table until PIN completed (closes POS host).
+     * 賄い PIN をキャンセルして卓ホストを閉じる（テーブル選択に戻る）。
      */
     public function cancelStaffMealAuth(): void
     {
         $this->staffMealAuthPin = '';
         $this->staffMealAuthStaffId = null;
+        $this->staffMealAuthModalDismissed = false;
         $this->closeHost();
     }
 
     public function closeHost(): void
     {
         $this->memoSessionPricing = null;
+        $this->memoStaffMealPreDiscountTaxSum = null;
         $this->activeRestaurantTableId = null;
         $this->activeTableSessionId = null;
         $this->activeRestaurantTableName = '';
@@ -302,6 +372,7 @@ class TableActionHost extends Component
         $this->removeDecisionMode = 'open';
         $this->staffMealAuthStaffId = null;
         $this->staffMealAuthPin = '';
+        $this->staffMealAuthModalDismissed = false;
         $this->showReceiptPreview = false;
         $this->previewIntent = PrintIntent::Addition->value;
         $this->previewSessionId = 0;
@@ -395,6 +466,21 @@ class TableActionHost extends Component
         $this->resetAddLineForm();
     }
 
+    private function refocusAjouterButtonIfTakeaway(): void
+    {
+        if (! $this->isTakeawayTable) {
+            return;
+        }
+        $this->js(<<<'JS'
+            queueMicrotask(() => {
+                const el = document.querySelector('[data-pos-ajouter-primary]');
+                if (el && typeof el.focus === 'function') {
+                    el.focus({ preventScroll: true });
+                }
+            });
+        JS);
+    }
+
     public function backToAddList(): void
     {
         $this->addModalStep = 'list';
@@ -477,9 +563,11 @@ class TableActionHost extends Component
                 $this->addToppings,
                 (string) $this->addNote
             );
+            // 明示: 商品追加後も卓コンテキストを維持するため closeHost / pos-tile-interaction-ended を呼ばない。
             $this->loadSessionData((int) $this->activeTableSessionId);
             $this->dispatch('pos-refresh-tiles');
             $this->closeAddModal();
+            $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
             Notification::make()
                 ->title(__('pos.action_failed'))
@@ -722,8 +810,10 @@ class TableActionHost extends Component
                 $this->expectedSessionRevision
             );
             $this->uiState = 'success';
+            // 明示: KDS 送信後も卓コンテキストを維持するため closeHost / pos-tile-interaction-ended を呼ばない。
             $this->loadSessionData((int) $this->activeTableSessionId);
             $this->dispatch('pos-refresh-tiles');
+            $this->refocusAjouterButtonIfTakeaway();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
             Notification::make()
@@ -733,6 +823,7 @@ class TableActionHost extends Component
                 ->send();
             $this->loadSessionData((int) $this->activeTableSessionId);
             $this->dispatch('pos-refresh-tiles');
+            $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
             $this->uiState = 'failed';
             Notification::make()
@@ -766,6 +857,14 @@ class TableActionHost extends Component
         if ($this->hasUnackedPlaced) {
             Notification::make()
                 ->title(__('rad_table.cannot_close_with_unacked'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+        if ($this->posOrders->isEmpty()) {
+            Notification::make()
+                ->title(__('pos.checkout_no_orders_to_settle'))
                 ->warning()
                 ->send();
 
@@ -1034,6 +1133,61 @@ class TableActionHost extends Component
         return $this->resolveSessionPricing()->orderDiscountAppliedMinor;
     }
 
+    /**
+     * 賄い卓フッター: スタッフ割引適用前（明細ベース）の HT 合計（ミリウム）。
+     */
+    public function getStaffMealPreDiscountHtMinorProperty(): int
+    {
+        if (! $this->isStaffMealTable || $this->posOrders->isEmpty()) {
+            return 0;
+        }
+
+        return $this->staffMealPreDiscountTaxSum()['ht_minor'];
+    }
+
+    /**
+     * 賄い卓フッター: スタッフ割引適用前（明細ベース）の TVA 合計（ミリウム）。
+     */
+    public function getStaffMealPreDiscountVatMinorProperty(): int
+    {
+        if (! $this->isStaffMealTable || $this->posOrders->isEmpty()) {
+            return 0;
+        }
+
+        return $this->staffMealPreDiscountTaxSum()['vat_minor'];
+    }
+
+    /**
+     * レシート既定税率に基づく表示用（例: 13, 19）。明細の税分割と一致。
+     */
+    public function getStaffMealReceiptVatRateLabelProperty(): string
+    {
+        return ReceiptTaxMath::formatPercentForUi(ReceiptTaxMath::defaultVatPercent());
+    }
+
+    /**
+     * @return array{ht_minor: int, vat_minor: int}
+     */
+    private function staffMealPreDiscountTaxSum(): array
+    {
+        if ($this->memoStaffMealPreDiscountTaxSum !== null) {
+            return $this->memoStaffMealPreDiscountTaxSum;
+        }
+
+        $enriched = PosOrderReceiptLineEnricher::enrich($this->posOrders);
+        $bucketInput = [];
+        foreach ($enriched as $ln) {
+            $bucketInput[] = [
+                'ttc_minor' => (int) $ln['amount_minor'],
+                'vat_percent' => (float) $ln['vat_percent'],
+            ];
+        }
+        $buckets = ReceiptTaxMath::aggregateVatBuckets($bucketInput);
+        $this->memoStaffMealPreDiscountTaxSum = ReceiptTaxMath::sumBucketsHtVat($buckets);
+
+        return $this->memoStaffMealPreDiscountTaxSum;
+    }
+
     public function getHasUnackedPlacedProperty(): bool
     {
         foreach ($this->posOrders as $o) {
@@ -1064,7 +1218,8 @@ class TableActionHost extends Component
     {
         return $this->activeTableSessionId !== null
             && $this->session !== null
-            && ! $this->hasUnackedPlaced;
+            && ! $this->hasUnackedPlaced
+            && $this->posOrders->isNotEmpty();
     }
 
     public function getFooterActionsLockedProperty(): bool
@@ -1141,6 +1296,14 @@ class TableActionHost extends Component
             && StaffTableSettlementPricing::isStaffMealTableId((int) $this->session->restaurant_table_id)
         ) {
             return trim($this->session->staff_name);
+        }
+
+        if ($this->session !== null
+            && is_string($this->session->customer_name)
+            && trim($this->session->customer_name) !== ''
+            && TableCategory::tryResolveFromId((int) $this->session->restaurant_table_id) === TableCategory::Takeaway
+        ) {
+            return trim($this->session->customer_name);
         }
 
         $n = $this->activeRestaurantTableName !== '' ? $this->activeRestaurantTableName : (string) ($this->activeRestaurantTableId ?? '');

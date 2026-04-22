@@ -2,6 +2,7 @@
 
 namespace Tests\Support;
 
+use App\Domains\Pos\Tables\TableCategory;
 use App\Enums\OrderLineStatus;
 use App\Enums\OrderStatus;
 use App\Enums\TableSessionStatus;
@@ -22,7 +23,7 @@ use Illuminate\Support\Str;
 /**
  * Phase 2 ダッシュボードに関するテスト fixture 群。
  *
- * - 固定バケツ ID（Customer 10-29 / Staff 100-109 / Takeaway 200-219）を明示的に
+ * - 固定バケツ（canonical slot: Customer 10-39 / Staff 100-109 / Takeaway 200-219；多店舗は主キーに店舗ブロックを足す）を明示的に
  *   埋め込むため restaurant_tables は `DB::table()->insert()` で primary key を pin する。
  *   その他の model は Eloquent で生成することで冗長な insert() 乱用を避ける。
  * - 時系列の判定テストが DB の秒精度で壊れないよう、
@@ -59,9 +60,10 @@ trait BuildsPosDashboardFixtures
 
     protected function makeTakeawayTable(Shop $shop, int $id = 200, ?string $name = null): RestaurantTable
     {
-        $this->assertRange($id, 200, 219, 'Takeaway');
+        $slot = TableCategory::canonicalSlot($id);
+        $this->assertRange($slot, 200, 219, 'Takeaway');
 
-        return $this->pinTable($shop, $id, $name ?? ('TO'.str_pad((string) ($id - 199), 2, '0', STR_PAD_LEFT)));
+        return $this->pinTable($shop, $id, $name ?? ('TO'.str_pad((string) ($slot - 199), 2, '0', STR_PAD_LEFT)));
     }
 
     protected function openActiveSession(Shop $shop, RestaurantTable $table): TableSession
