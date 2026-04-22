@@ -61,14 +61,9 @@ class TableStatusGrid extends Component
         }
         $this->dispatch('pos-takeaway-bar-clear-ui');
         $this->selectedTableId = $tableId;
+        $this->isPollingPaused = true;
         $this->dispatch('pos-tile-interaction-started');
         $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid);
-    }
-
-    #[On('pos-tile-interaction-started')]
-    public function onTileInteractionStarted(): void
-    {
-        $this->isPollingPaused = true;
     }
 
     #[On('pos-tile-interaction-ended')]

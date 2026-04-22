@@ -107,6 +107,25 @@
                         <span class="text-sm font-black uppercase tracking-wide text-gray-900 dark:text-white">{{ __('pos.receipt_grand_total') }}</span>
                         <span class="text-2xl font-black uppercase tracking-widest tabular-nums text-amber-500 dark:text-amber-400">{{ $this->formatMinor((int) $this->viewData['total_minor']) }}</span>
                     </div>
+                    @if (! empty($this->viewData['show_payment_block']))
+                        <div class="mt-1 space-y-0.5 border-t border-gray-200 pt-1 text-[10px] text-gray-600 dark:border-slate-600 dark:text-slate-400">
+                            @if (($this->viewData['payment_label'] ?? '') !== '')
+                                <p class="text-center text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-500">
+                                    {{ $this->viewData['payment_label'] }}
+                                </p>
+                            @endif
+                            <div class="flex justify-between gap-2 tabular-nums">
+                                <span class="text-gray-500 dark:text-slate-500">{{ __('rad_table.cloture_tendered') }}</span>
+                                <span>{{ $this->formatMinor((int) ($this->viewData['tendered_minor'] ?? 0)) }}</span>
+                            </div>
+                            @if ((int) ($this->viewData['change_minor'] ?? 0) !== 0)
+                                <div class="flex justify-between gap-2 tabular-nums">
+                                    <span class="text-gray-500 dark:text-slate-500">{{ __('rad_table.cloture_change') }}</span>
+                                    <span>{{ $this->formatMinor((int) ($this->viewData['change_minor'] ?? 0)) }}</span>
+                                </div>
+                            @endif
+                        </div>
+                    @endif
                 </div>
             @else
                 <div class="mt-1.5 space-y-0.5 text-[11px]">
@@ -140,6 +159,25 @@
                         <span>{{ __('pos.receipt_grand_total') }}</span>
                         <span class="tabular-nums">{{ $this->formatMinor((int) $this->viewData['total_minor']) }}</span>
                     </div>
+                    @if (! empty($this->viewData['show_payment_block']))
+                        <div class="mt-1 space-y-0.5 border-t border-gray-200 pt-1 text-[10px] text-gray-600 dark:border-slate-600 dark:text-slate-400">
+                            @if (($this->viewData['payment_label'] ?? '') !== '')
+                                <p class="text-center text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-500">
+                                    {{ $this->viewData['payment_label'] }}
+                                </p>
+                            @endif
+                            <div class="flex justify-between gap-2 tabular-nums">
+                                <span class="text-gray-500 dark:text-slate-500">{{ __('rad_table.cloture_tendered') }}</span>
+                                <span>{{ $this->formatMinor((int) ($this->viewData['tendered_minor'] ?? 0)) }}</span>
+                            </div>
+                            @if ((int) ($this->viewData['change_minor'] ?? 0) !== 0)
+                                <div class="flex justify-between gap-2 tabular-nums">
+                                    <span class="text-gray-500 dark:text-slate-500">{{ __('rad_table.cloture_change') }}</span>
+                                    <span>{{ $this->formatMinor((int) ($this->viewData['change_minor'] ?? 0)) }}</span>
+                                </div>
+                            @endif
+                        </div>
+                    @endif
                 </div>
             @endif
 

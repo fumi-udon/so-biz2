@@ -49,7 +49,7 @@ final class ClotureModalTest extends TestCase
             ->assertSet('tenderedDtInput', '50');
     }
 
-    public function test_tendered_dt_input_updates_minor_and_change(): void
+    public function test_confirm_parses_tendered_dt_input(): void
     {
         $shop = $this->makeShop('cloture-dt-input');
         $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
@@ -59,8 +59,15 @@ final class ClotureModalTest extends TestCase
             ->test(ClotureModal::class, ['shopId' => (int) $shop->id])
             ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
             ->set('tenderedDtInput', '12.5')
-            ->assertSet('tenderedMinor', 12_500)
-            ->assertSet('changeMinor', 2_500);
+            ->call('confirm')
+            ->assertDispatched('pos-settlement-completed');
+
+        $this->assertDatabaseHas('table_session_settlements', [
+            'table_session_id' => $session->id,
+            'final_total_minor' => 10_000,
+            'tendered_minor' => 12_500,
+            'change_minor' => 2_500,
+        ]);
     }
 
     public function test_confirm_cash_creates_settlement_without_immediate_print(): void

@@ -1,6 +1,10 @@
 @php
     $locked = $this->uiState === 'in_flight';
-    $canConfirm = ! $locked && ((int) ($this->tenderedMinor ?? 0) >= $this->finalTotalMinor);
+    $clotureModalWindowAttrs = (new \Illuminate\View\ComponentAttributeBag)->class([
+        'max-h-[min(92dvh,720px)] overflow-hidden',
+    ]);
+    /** 近似値ボタンは最大3個（ぴったり1 + proche 最大2） */
+    $procheMinorForButtons = array_slice($this->procheMinor, 0, 2);
 @endphp
 
 <div class="fi-no-print">
@@ -29,193 +33,182 @@
                 <x-filament::modal
                     id="pos-cloture-checkout-modal"
                     aria-labelledby="pos-cloture-checkout-modal-title"
-                    width="md"
+                    width="sm"
+                    alignment="center"
                     display-classes="block"
                     :close-button="true"
                     :close-by-clicking-away="true"
                     :close-by-escaping="true"
+                    :sticky-footer="true"
+                    :extra-modal-window-attribute-bag="$clotureModalWindowAttrs"
                 >
-                    <x-slot name="header">
+                    <div
+                        class="pos-cloture-checkout -mx-6 -mt-2 max-h-[min(58dvh,420px)] min-h-0 overflow-y-auto overscroll-contain px-4 pb-2 pt-1 text-center text-[12px] font-medium leading-snug text-slate-800 antialiased dark:text-slate-200 sm:px-5"
+                    >
                         <h2
                             id="pos-cloture-checkout-modal-title"
                             class="sr-only"
                         >
                             {{ __('rad_table.cloture_title') }}
                         </h2>
-                    </x-slot>
 
-                    <div class="space-y-4">
-                        <div
-                            class="w-full rounded-lg border-2 border-red-600 bg-red-50/60 px-2 py-4 shadow-sm dark:border-red-500 dark:bg-red-950/35 sm:px-4 sm:py-5"
-                            title="{{ $this->tableLabel }}"
-                        >
-                            <div class="flex w-full items-center justify-center gap-2 sm:gap-4">
-                                <x-filament::icon
-                                    icon="heroicon-o-table-cells"
-                                    class="h-9 w-9 shrink-0 text-red-600 sm:h-11 sm:w-11 dark:text-red-400"
-                                    aria-hidden="true"
-                                />
+                        <div class="space-y-2">
+                            <div
+                                class="rounded-md border border-red-600/80 bg-red-50/70 px-2 py-1.5 dark:border-red-500/80 dark:bg-red-950/40"
+                                title="{{ $this->tableLabel }}"
+                            >
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <x-filament::icon
+                                        icon="heroicon-o-table-cells"
+                                        class="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
+                                        aria-hidden="true"
+                                    />
+                                    <p
+                                        class="min-w-0 flex-1 break-words text-[12px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300"
+                                        aria-label="{{ $this->tableLabel }}"
+                                    >
+                                        {{ $this->tableLabel }}
+                                    </p>
+                                    <x-filament::icon
+                                        icon="heroicon-o-table-cells"
+                                        class="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
+                                        aria-hidden="true"
+                                    />
+                                </div>
+                            </div>
+
+                            <div
+                                class="rounded-md border border-sky-600/70 bg-sky-50/60 px-2 py-1.5 dark:border-sky-500/70 dark:bg-sky-950/30"
+                                aria-label="{{ __('rad_table.cloture_total') }}"
+                            >
+                                <p class="text-[12px] font-semibold uppercase tracking-wider text-sky-800 dark:text-sky-200">
+                                    {{ __('rad_table.cloture_total') }}
+                                </p>
                                 <p
-                                    class="animate-pos-cloture-table-blink min-w-0 flex-1 break-words text-center text-2xl font-black leading-tight tracking-tight text-red-600 sm:text-3xl md:text-4xl dark:text-red-400"
-                                    aria-label="{{ $this->tableLabel }}"
+                                    class="mt-0.5 text-[12px] font-bold tabular-nums tracking-wide text-slate-900 underline decoration-slate-400 dark:text-white dark:decoration-slate-500"
+                                    aria-live="polite"
                                 >
-                                    {{ $this->tableLabel }}
-                                </p>
-                                <x-filament::icon
-                                    icon="heroicon-o-table-cells"
-                                    class="h-9 w-9 shrink-0 text-red-600 sm:h-11 sm:w-11 dark:text-red-400"
-                                    aria-hidden="true"
-                                />
-                            </div>
-                        </div>
-                        <x-filament::section
-                            :compact="true"
-                            aria-label="{{ __('rad_table.cloture_total') }}"
-                            class="!ring-2 !ring-sky-500 dark:!ring-sky-400"
-                        >
-                            <p
-                                class="text-xl font-semibold tabular-nums text-gray-950 underline dark:text-white sm:text-2xl"
-                                aria-live="polite"
-                            >
-                                {{ $this->formatMinor($this->finalTotalMinor) }}
-                            </p>
-                        </x-filament::section>
-                        <div class="grid grid-cols-1 gap-2 rounded-lg border-2 border-slate-300 bg-slate-50/70 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40 sm:grid-cols-2 sm:gap-3 sm:px-4">
-                            <div class="text-center">
-                                <p class="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300">
-                                    TENDERED / RECU
-                                </p>
-                                <p class="mt-0.5 text-xl font-black uppercase tracking-widest tabular-nums text-blue-700 dark:text-blue-300 sm:text-2xl">
-                                    {{ $this->formatMinor($this->tenderedDisplayMinor) }}
+                                    {{ $this->formatMinor($this->finalTotalMinor) }}
                                 </p>
                             </div>
-                            <div class="text-center">
-                                <p class="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300">
-                                    CHANGE / RESTANT
-                                </p>
-                                <p @class([
-                                    'mt-0.5 text-xl font-black uppercase tracking-widest tabular-nums sm:text-2xl',
-                                    'text-amber-500 dark:text-amber-400' => $this->changeTone === 'positive',
-                                    'text-red-600 dark:text-red-400' => $this->changeTone === 'short',
-                                    'text-slate-800 dark:text-slate-200' => $this->changeTone === 'neutral',
-                                ])>
-                                    {{ $this->formatSignedMinor($this->changeMinor) }}
-                                </p>
-                            </div>
-                        </div>
 
-                        @if ($this->discountAppliedMinor > 0 || $this->roundingAdjustmentMinor > 0)
-                            <div class="space-y-1 border-y-2 border-amber-500 py-2.5 dark:border-amber-400">
-                                @if ($this->discountAppliedMinor > 0)
-                                    <div class="flex justify-between text-sm text-gray-700 dark:text-gray-300">
-                                        <span>{{ __('rad_table.cloture_discount') }}</span>
-                                        <span class="tabular-nums">− {{ $this->formatMinor($this->discountAppliedMinor) }}</span>
-                                    </div>
-                                @endif
-                                @if ($this->roundingAdjustmentMinor > 0)
-                                    <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                                        <span>{{ __('rad_table.cloture_rounding') }}</span>
-                                        <span class="tabular-nums">− {{ $this->formatMinor($this->roundingAdjustmentMinor) }}</span>
-                                    </div>
-                                @endif
-                            </div>
-                        @endif
+                            @if ($this->discountAppliedMinor > 0 || $this->roundingAdjustmentMinor > 0)
+                                <div class="space-y-1 border-y border-amber-500/80 py-1.5 dark:border-amber-400/80">
+                                    @if ($this->discountAppliedMinor > 0)
+                                        <div class="flex justify-between gap-2 text-[12px] text-slate-700 dark:text-slate-300">
+                                            <span>{{ __('rad_table.cloture_discount') }}</span>
+                                            <span class="tabular-nums">− {{ $this->formatMinor($this->discountAppliedMinor) }}</span>
+                                        </div>
+                                    @endif
+                                    @if ($this->roundingAdjustmentMinor > 0)
+                                        <div class="flex justify-between gap-2 text-[12px] text-slate-600 dark:text-slate-400">
+                                            <span>{{ __('rad_table.cloture_rounding') }}</span>
+                                            <span class="tabular-nums">− {{ $this->formatMinor($this->roundingAdjustmentMinor) }}</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
 
-                        <div class="flex flex-wrap gap-2">
-                            <x-filament::button
-                                type="button"
-                                size="sm"
-                                outlined
-                                wire:click="setTendered({{ $this->justeMinor }})"
-                                :disabled="$locked"
-                                wire:loading.attr="disabled"
-                                wire:target="setTendered,confirm"
-                            >
-                                <span class="block text-center">
-                                    <span class="block text-xs font-semibold uppercase tracking-wide">
-                                        {{ __('rad_table.cloture_juste') }}
-                                    </span>
-                                    <span class="mt-0.5 block tabular-nums">
-                                        {{ $this->formatMinor($this->justeMinor) }}
-                                    </span>
-                                </span>
-                            </x-filament::button>
-                            @foreach ($this->procheMinor as $p)
+                            <div class="flex w-full gap-1.5">
                                 <x-filament::button
                                     type="button"
-                                    size="sm"
+                                    size="xs"
                                     outlined
-                                    wire:click="setTendered({{ (int) $p }})"
+                                    wire:click="setTendered({{ (int) $this->justeMinor }})"
+                                    wire:key="cloture-sugg-juste-{{ $this->tableSessionId }}"
                                     :disabled="$locked"
                                     wire:loading.attr="disabled"
-                                    wire:target="setTendered,confirm"
+                                    wire:target="confirm,setTendered"
+                                    class="min-w-0 flex-1 !h-auto !px-1.5 !py-1.5 !text-[12px] !font-semibold !leading-tight"
                                 >
-                                    {{ $this->formatMinor((int) $p) }}
+                                    <span class="block text-center leading-tight">
+                                        <span class="block text-[12px] font-semibold uppercase tracking-wide">
+                                            {{ __('rad_table.cloture_juste') }}
+                                        </span>
+                                        <span class="mt-0.5 block tabular-nums">
+                                            {{ $this->formatMinor($this->justeMinor) }}
+                                        </span>
+                                    </span>
                                 </x-filament::button>
-                            @endforeach
-                        </div>
+                                @foreach ($procheMinorForButtons as $p)
+                                    <x-filament::button
+                                        type="button"
+                                        size="xs"
+                                        outlined
+                                        wire:click="setTendered({{ (int) $p }})"
+                                        wire:key="cloture-sugg-{{ $this->tableSessionId }}-{{ (int) $p }}"
+                                        :disabled="$locked"
+                                        wire:loading.attr="disabled"
+                                        wire:target="confirm,setTendered"
+                                        class="min-w-0 flex-1 !h-auto !px-1.5 !py-1.5 !text-[12px] !font-semibold tabular-nums !leading-tight"
+                                    >
+                                        {{ $this->formatMinor((int) $p) }}
+                                    </x-filament::button>
+                                @endforeach
+                            </div>
 
-                        <div class="border-t-2 border-sky-500 pt-3 dark:border-sky-400">
-                            <x-filament::input.wrapper
-                                :disabled="$locked"
-                                suffix="DT"
-                                prefix-icon="heroicon-o-banknotes"
-                                prefix-icon-color="success"
-                                class="!ring-2 !ring-emerald-500 !shadow-md dark:!ring-emerald-400"
-                            >
-                                <x-filament::input
-                                    id="cloture-tendered-dt-{{ $this->tableSessionId }}"
-                                    type="text"
-                                    inputmode="decimal"
-                                    autocomplete="off"
-                                    wire:model.live.debounce.500ms="tenderedDtInput"
+                            <div class="border-t border-sky-500/70 pt-1.5 dark:border-sky-400/70">
+                                <x-filament::input.wrapper
                                     :disabled="$locked"
-                                    wire:loading.attr="disabled"
-                                    wire:target="confirm"
-                                    aria-label="{{ __('rad_table.cloture_tendered') }}"
-                                    class="!py-3 !text-[33px] !font-semibold !leading-none tabular-nums text-center !text-blue-700 !placeholder:text-blue-400/70 disabled:!text-blue-500/60 disabled:[-webkit-text-fill-color:theme(colors.blue.500)] dark:!text-blue-300 dark:!placeholder:text-blue-400/50 dark:disabled:!text-blue-400/50 dark:disabled:[-webkit-text-fill-color:theme(colors.blue.400)] sm:!text-[35px]"
-                                />
-                            </x-filament::input.wrapper>
-                        </div>
+                                    suffix="DT"
+                                    prefix-icon="heroicon-o-banknotes"
+                                    prefix-icon-color="success"
+                                    class="!ring-1 !ring-emerald-600/80 dark:!ring-emerald-400/80"
+                                >
+                                    <x-filament::input
+                                        id="cloture-tendered-dt-{{ $this->tableSessionId }}"
+                                        type="text"
+                                        inputmode="decimal"
+                                        autocomplete="off"
+                                        wire:model.live.debounce.150ms="tenderedDtInput"
+                                        :disabled="$locked"
+                                        wire:loading.attr="disabled"
+                                        wire:target="confirm,setTendered"
+                                        aria-label="{{ __('rad_table.cloture_tendered') }}"
+                                        class="!py-2 !text-[12px] !font-semibold !leading-snug tabular-nums text-center !text-blue-950 !placeholder:text-blue-600/40 disabled:!text-blue-950/50 disabled:[-webkit-text-fill-color:theme(colors.blue.950)] dark:!text-blue-100 dark:!placeholder:text-blue-300/40 dark:disabled:!text-blue-100/50 dark:disabled:[-webkit-text-fill-color:theme(colors.blue.100)]"
+                                    />
+                                </x-filament::input.wrapper>
+                            </div>
 
-                        <div class="flex items-center justify-between gap-3 border-t-2 border-emerald-500 pt-3 dark:border-emerald-400">
-                            <span class="text-sm font-medium text-gray-950 dark:text-white">
-                                {{ __('rad_table.cloture_change') }}
-                            </span>
-                            <span class="text-base font-semibold tabular-nums text-gray-950 dark:text-white sm:text-lg">
-                                {{ $this->formatMinor($this->changeMinor) }}
-                            </span>
+                            <div
+                                class="rounded-md border border-slate-300/90 bg-slate-50/80 px-2 py-1.5 text-center dark:border-slate-600 dark:bg-slate-900/50"
+                                aria-live="polite"
+                            >
+                                <p class="text-[12px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                                    {{ __('rad_table.cloture_change') }}
+                                </p>
+                                <p class="mt-0.5 text-[12px] font-semibold tabular-nums text-neutral-950 dark:text-neutral-100">
+                                    {{ $this->signedChangeDisplay() }}
+                                </p>
+                            </div>
                         </div>
                     </div>
 
                     <x-slot name="footer">
-                        <div class="fi-modal-footer-actions flex flex-wrap items-center gap-3">
+                        <div class="fi-modal-footer-actions flex flex-wrap items-center justify-center gap-2 text-[12px]">
                             <x-filament::button
                                 type="button"
                                 color="gray"
+                                size="sm"
                                 outlined
                                 wire:click="closeModal"
                                 :disabled="$locked"
                                 wire:loading.attr="disabled"
-                                wire:target="closeModal,confirm"
+                                wire:target="closeModal,confirm,setTendered"
+                                class="!min-h-9 !px-4 !text-[12px] !font-semibold"
                             >
                                 {{ __('rad_table.cloture_cancel') }}
                             </x-filament::button>
                             <x-filament::button
                                 type="button"
                                 color="danger"
+                                size="sm"
                                 wire:click="confirm"
-                                x-data="{ flash: false, t: null }"
-                                x-on:click="
-                                    flash = true;
-                                    if (t) clearTimeout(t);
-                                    t = setTimeout(() => { flash = false; t = null }, 450);
-                                "
-                                x-bind:class="{ 'pos-tile-select-flash': flash }"
-                                :disabled="! $canConfirm"
+                                :disabled="$locked || \App\Support\MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput) < $this->finalTotalMinor"
                                 wire:loading.attr="disabled"
                                 wire:target="confirm"
                                 :loading-indicator="false"
+                                class="!min-h-9 !px-4 !text-[12px] !font-semibold"
                             >
                                 <span wire:loading.remove wire:target="confirm">{{ __('rad_table.cloture_confirm') }}</span>
                                 <span wire:loading wire:target="confirm">{{ __('pos.ui_working') }}</span>

@@ -42,6 +42,10 @@ return [
             'device_in_use_retry_delay_ms' => 3_000,
             /** ePOS createDevice の buffer フラグ（ReceiptDesigner 既定と同様 false） */
             'buffer' => false,
+            /**
+             * false のとき物理プリンタ／pos-trigger-print をスキップ（開発用）。会計・プレビュー完了イベントは維持。
+             */
+            'physical_enabled' => filter_var(env('EPONS_GOGO_PRINTER', true), FILTER_VALIDATE_BOOL),
         ]
     ),
     /**

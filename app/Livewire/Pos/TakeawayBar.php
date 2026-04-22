@@ -45,12 +45,6 @@ class TakeawayBar extends Component
         }
     }
 
-    #[On('pos-tile-interaction-started')]
-    public function onTileInteractionStarted(): void
-    {
-        $this->isPollingPaused = true;
-    }
-
     #[On('pos-tile-interaction-ended')]
     public function onTileInteractionEnded(): void
     {
@@ -151,6 +145,7 @@ class TakeawayBar extends Component
         $hasActiveSession = $sessionId !== null;
 
         if (! $hasActiveSession && $isFree) {
+            $this->isPollingPaused = true;
             $this->dispatch('pos-tile-interaction-started');
             $this->floorSelectedTakeawayTableId = $tableId;
             $this->selectedTableId = $tableId;
@@ -162,6 +157,7 @@ class TakeawayBar extends Component
         }
 
         $this->floorSelectedTakeawayTableId = $tableId;
+        $this->isPollingPaused = true;
         $this->dispatch('pos-tile-interaction-started');
         $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sessionId);
     }

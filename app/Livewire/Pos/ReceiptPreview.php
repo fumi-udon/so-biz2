@@ -90,6 +90,26 @@ class ReceiptPreview extends Component
         $this->uiState = 'in_flight';
 
         try {
+            $physicalEnabled = (bool) config('pos.printer.physical_enabled', true);
+            if (! $physicalEnabled) {
+                if ($this->printIntent === PrintIntent::Addition) {
+                    app(RecordAdditionPrintForSessionAction::class)->execute(
+                        $this->shopId,
+                        $this->tableSessionId,
+                        $this->expectedSessionRevision,
+                    );
+                    $this->expectedSessionRevision++;
+                }
+                $this->uiState = 'success';
+                $this->dispatch(
+                    'receipt-preview-printed',
+                    table_session_id: $this->tableSessionId,
+                    intent: $this->intent,
+                );
+
+                return;
+            }
+
             $printedAt = Carbon::parse($this->dto->printedAt);
 
             $xmlPayload = [
@@ -222,6 +242,8 @@ class ReceiptPreview extends Component
             PrintIntent::StaffCopy => 'STAFF COPY',
         };
 
+        $payment = $this->receiptPaymentForPrinter();
+
         return [
             'intent' => $this->dto->intent,
             'title' => $this->intentTitle($this->printIntent),
@@ -242,6 +264,10 @@ class ReceiptPreview extends Component
             'is_staff_meal_table' => $this->previewIsStaffMealTable,
             'vat_rate_display' => ReceiptTaxMath::formatPercentForUi(ReceiptTaxMath::defaultVatPercent()),
             'staff_meal_gross_minor' => $this->dto->subtotalMinor,
+            'show_payment_block' => (bool) ($payment['show_payment_block'] ?? false),
+            'payment_label' => (string) ($payment['payment_label'] ?? ''),
+            'tendered_minor' => (int) ($payment['tendered_minor'] ?? 0),
+            'change_minor' => (int) ($payment['change_minor'] ?? 0),
         ];
     }
 

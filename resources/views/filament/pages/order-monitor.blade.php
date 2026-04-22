@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    <div class="space-y-4" wire:poll.10s="loadOrders">
+    <div class="space-y-4">
         <p class="text-sm text-gray-600 dark:text-gray-400">
             {{ __('Les nouvelles commandes sont synchronisees en temps reel via Pusher (tables 1 a 4).') }}
         </p>

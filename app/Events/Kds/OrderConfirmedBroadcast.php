@@ -5,7 +5,7 @@ namespace App\Events\Kds;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -18,7 +18,7 @@ use Illuminate\Queue\SerializesModels;
  *   （送信は `KdsBroadcastService` 内の `dispatch()->afterResponse()` で
  *   FPM 応答後に行う前提）。
  */
-class OrderConfirmedBroadcast implements ShouldBroadcastNow
+class OrderConfirmedBroadcast implements ShouldBroadcast
 {
     use Dispatchable;
     use InteractsWithSockets;

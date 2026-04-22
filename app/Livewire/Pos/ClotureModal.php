@@ -110,6 +110,7 @@ class ClotureModal extends Component
         $this->uiState = 'idle';
     }
 
+    /** 近似値ボタンから受領額をセット（Livewire 再描画で入力・お釣り表示を更新）。 */
     public function setTendered(int $minor): void
     {
         $this->tenderedMinor = max(0, $minor);
@@ -125,6 +126,17 @@ class ClotureModal extends Component
         $this->recomputeChange();
     }
 
+    /** お釣り・不足の表示用（UI）。不足時は先頭にマイナス表記。 */
+    public function signedChangeDisplay(): string
+    {
+        $c = $this->changeMinor;
+        if ($c < 0) {
+            return '− '.$this->formatMinor(abs($c));
+        }
+
+        return $this->formatMinor(max(0, $c));
+    }
+
     public function confirm(): void
     {
         if ($this->uiState === 'in_flight' || $this->tableSessionId === null) {
@@ -133,6 +145,8 @@ class ClotureModal extends Component
         $this->uiState = 'in_flight';
 
         try {
+            $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
+            $this->recomputeChange();
             $tendered = (int) ($this->tenderedMinor ?? 0);
 
             app(FinalizeTableSettlementAction::class)->execute(
@@ -178,32 +192,6 @@ class ClotureModal extends Component
     public function formatMinor(int $minor): string
     {
         return MenuItemMoney::formatMinorForDisplay($minor);
-    }
-
-    public function getTenderedDisplayMinorProperty(): int
-    {
-        return max(0, (int) ($this->tenderedMinor ?? 0));
-    }
-
-    public function getChangeToneProperty(): string
-    {
-        if ($this->changeMinor < 0) {
-            return 'short';
-        }
-        if ($this->changeMinor > 0) {
-            return 'positive';
-        }
-
-        return 'neutral';
-    }
-
-    public function formatSignedMinor(int $minor): string
-    {
-        if ($minor < 0) {
-            return '− '.$this->formatMinor(abs($minor));
-        }
-
-        return $this->formatMinor($minor);
     }
 
     public function render()

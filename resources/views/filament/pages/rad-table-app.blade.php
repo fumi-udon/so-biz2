@@ -16,10 +16,7 @@
             </x-filament::section>
         @endif
 
-        <div
-            wire:poll.10s
-            class="grid grid-cols-2 gap-3 md:grid-cols-4"
-        >
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
             @foreach ($tiles as $tile)
                 <div wire:key="rad-tile-{{ $tile['table_id'] }}">
                     <x-rad-table-tile :tile="$tile" />

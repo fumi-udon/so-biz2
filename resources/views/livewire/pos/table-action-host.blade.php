@@ -41,6 +41,8 @@
                 if (! window.Echo || ! window.Livewire) {
                     return;
                 }
+                // F5手動更新運用への移行・および通信量削減のためPusherリスナーを無効化
+                /*
                 window.__posOrderPlacedEcho = window.__posOrderPlacedEcho || {};
                 if (window.__posOrderPlacedEcho[shopId]) {
                     return;
@@ -58,6 +60,7 @@
                         table_session_id: payload.table_session_id,
                     });
                 });
+                */
             };
             bind();
             window.addEventListener('EchoLoaded', bind);
@@ -234,8 +237,8 @@
                         </ul>
                     </section>
                 </div>
-        @endif
-    </div>
+            @endif
+        </div>
 
     @if ($open && $this->requiresStaffMealAuth && ! $this->staffMealAuthModalDismissed)
         <div
@@ -257,7 +260,7 @@
                         <div class="relative">
                             <select
                                 id="staff-meal-auth-staff"
-                                wire:model.live="staffMealAuthStaffId"
+                                wire:model.blur="staffMealAuthStaffId"
                                 wire:loading.attr="disabled"
                                 wire:target="confirmStaffMealAuth"
                                 class="block w-full appearance-none rounded-lg border-2 border-black bg-white px-3 py-2.5 pr-10 text-sm font-semibold text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:bg-gray-900 dark:text-gray-100"
@@ -632,7 +635,7 @@
                                     min="1"
                                     max="200"
                                     step="1"
-                                    wire:model.live.debounce.500ms="addQty"
+                                    wire:model.blur="addQty"
                                 />
                             </div>
                             <div>

@@ -46,12 +46,6 @@ class StaffMealBar extends Component
         }
     }
 
-    #[On('pos-tile-interaction-started')]
-    public function onTileInteractionStarted(): void
-    {
-        $this->isPollingPaused = true;
-    }
-
     #[On('pos-tile-interaction-ended')]
     public function onTileInteractionEnded(): void
     {
@@ -128,6 +122,7 @@ class StaffMealBar extends Component
         }
         $this->floorSelectedStaffTableId = $tableId;
         $this->dispatch('pos-takeaway-bar-clear-ui');
+        $this->isPollingPaused = true;
         $this->dispatch('pos-tile-interaction-started');
         $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid);
         $this->dispatch('pos-table-selection-sync', tableId: $tableId);

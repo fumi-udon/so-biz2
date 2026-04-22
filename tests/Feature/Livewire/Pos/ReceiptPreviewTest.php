@@ -11,6 +11,7 @@ use App\Enums\PrintJobStatus;
 use App\Livewire\Pos\ReceiptPreview;
 use App\Models\PrintJob;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Livewire\Livewire;
 use Tests\Support\BuildsPosDashboardFixtures;
 use Tests\TestCase;
@@ -133,5 +134,31 @@ final class ReceiptPreviewTest extends TestCase
         $job = PrintJob::query()->firstOrFail();
         $this->assertSame(PrintIntent::Receipt, $job->intent);
         $this->assertArrayHasKey('settlement_id', (array) $job->payload_meta);
+    }
+
+    public function test_print_skips_physical_job_and_trigger_when_printer_disabled(): void
+    {
+        Config::set('pos.printer.physical_enabled', false);
+
+        $shop = $this->makeShop('receipt-preview-no-print');
+        $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
+        $this->placeLinedOrder($shop, $session, 5_500, OrderStatus::Confirmed);
+        $operator = $this->makeOperator('receipt-no-print');
+
+        Livewire::actingAs($operator)
+            ->test(ReceiptPreview::class, [
+                'shopId' => (int) $shop->id,
+                'tableSessionId' => (int) $session->id,
+                'intent' => PrintIntent::Addition->value,
+                'expectedSessionRevision' => (int) $session->session_revision,
+            ])
+            ->call('printFromPreview')
+            ->assertNotDispatched('pos-trigger-print')
+            ->assertDispatched('receipt-preview-printed')
+            ->assertSet('uiState', 'success');
+
+        $this->assertDatabaseCount('print_jobs', 0);
+        $session->refresh();
+        $this->assertNotNull($session->last_addition_printed_at);
     }
 }

@@ -6,14 +6,6 @@
     role="region"
     aria-label="{{ __('pos.takeaway_region_label') }}"
 >
-    @if ($shopId > 0 && ! $isPollingPaused)
-        <div
-            wire:poll.10s="loadTakeawayTiles"
-            class="hidden"
-            aria-hidden="true"
-        ></div>
-    @endif
-
     <div class="px-4 py-4 sm:px-6 sm:py-5">
         <p class="mb-0.5 text-[12px] font-extrabold uppercase tracking-wider text-yellow-900 dark:text-yellow-100 sm:text-[10px]">
             {{ __('pos.takeaway_heading') }}
