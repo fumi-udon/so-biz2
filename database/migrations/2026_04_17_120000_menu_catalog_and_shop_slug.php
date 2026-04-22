@@ -66,8 +66,8 @@ return new class extends Migration
             $table->foreignId('dietary_badge_id')->constrained()->cascadeOnDelete();
             $table->unsignedInteger('sort_order')->default(0);
             $table->timestamps();
-
-            $table->unique(['menu_item_id', 'dietary_badge_id']);
+// 修正後（第2引数に 'mi_db_unique' のような短い名前を付ける）
+$table->unique(['menu_item_id', 'dietary_badge_id'], 'mi_db_unique');
         });
     }
 
