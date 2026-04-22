@@ -2,7 +2,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -14,7 +13,7 @@ return new class extends Migration
                 $table->string('slug')->nullable()->after('name');
             });
         }
-        if (Schema::hasTable('shops') && ! $this->shopsHasIndex('shops_slug_unique')) {
+        if (Schema::hasTable('shops') && ! Schema::hasIndex('shops', 'shops_slug_unique')) {
             Schema::table('shops', function (Blueprint $table): void {
                 $table->unique('slug', 'shops_slug_unique');
             });
@@ -94,7 +93,7 @@ return new class extends Migration
         Schema::dropIfExists('menu_categories');
 
         if (Schema::hasTable('shops') && Schema::hasColumn('shops', 'slug')) {
-            if ($this->shopsHasIndex('shops_slug_unique')) {
+            if (Schema::hasIndex('shops', 'shops_slug_unique')) {
                 Schema::table('shops', function (Blueprint $table): void {
                     $table->dropUnique('shops_slug_unique');
                 });
@@ -103,19 +102,5 @@ return new class extends Migration
                 $table->dropColumn('slug');
             });
         }
-    }
-
-    private function shopsHasIndex(string $indexName): bool
-    {
-        $dbName = (string) Schema::getConnection()->getDatabaseName();
-        $tableName = (string) Schema::getConnection()->getTablePrefix().'shops';
-
-        $count = DB::table('information_schema.statistics')
-            ->where('table_schema', $dbName)
-            ->where('table_name', $tableName)
-            ->where('index_name', $indexName)
-            ->count();
-
-        return $count > 0;
     }
 };
