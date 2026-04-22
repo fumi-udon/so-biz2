@@ -140,8 +140,14 @@ function registerGuestOrderLivewireListeners() {
         try {
             const cart = Alpine.store('cart');
             cart.lines = [];
-            cart.cartPanelOpen = false;
-            cart.dismissToast();
+            // Must use closeCartPanel (not only cartPanelOpen=false): openCartPanel()
+            // acquires a body scroll lock; releasing it restores scrolling after success.
+            if (typeof cart.closeCartPanel === 'function') {
+                cart.closeCartPanel({ restoreScroll: true });
+            } else {
+                cart.cartPanelOpen = false;
+                cart.dismissToast();
+            }
             if (typeof cart.clearSubmitIdempotencyKey === 'function') {
                 cart.clearSubmitIdempotencyKey();
             }

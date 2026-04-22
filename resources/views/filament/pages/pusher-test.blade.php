@@ -19,6 +19,12 @@
                             this.lastPayload = payload;
                             this.status = 'success';
                         });
+                    window.Echo.private('rt.shop.' + this.shopId + '.orders')
+                        .listen('.kds.orders.confirmed', (payload) => {
+                            this.lastReceivedAt = new Date().toLocaleTimeString('en-GB', { hour12: false });
+                            this.lastPayload = payload;
+                            this.status = 'success';
+                        });
                     this.status = 'subscribed';
                 } catch (e) {
                     this.status = 'subscribe-error';
@@ -30,7 +36,10 @@
         <div class="rounded-lg border border-gray-200 bg-white p-4 text-gray-950 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white">
             <h2 class="text-sm font-bold">Pusher debug endpoint</h2>
             <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                Channel: <span class="font-mono">pos.shop.{{ (int) $this->shopId }}</span>
+                Channels:
+                <span class="font-mono">pos.shop.{{ (int) $this->shopId }}</span>
+                /
+                <span class="font-mono">private-rt.shop.{{ (int) $this->shopId }}.orders</span>
                 @if ($this->shopName !== '')
                     · Shop: {{ $this->shopName }}
                 @endif

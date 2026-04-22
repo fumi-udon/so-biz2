@@ -8,6 +8,8 @@
     $zStaffMealPanel = 'z-[325]';
     $zAddModal = 'z-[260]';
     $zAddModalPanel = 'z-[270]';
+    $legacyOrderPlacedChannel = 'pos.shop.'.$echoShopId;
+    $rtOrderChannel = 'rt.shop.'.$echoShopId.'.orders';
 @endphp
 
 <div
@@ -44,7 +46,13 @@
                     return;
                 }
                 window.__posOrderPlacedEcho[shopId] = true;
-                window.Echo.private('pos.shop.' + shopId).listen('.pos.order.placed', function (payload) {
+                window.Echo.private(@js($legacyOrderPlacedChannel)).listen('.pos.order.placed', function (payload) {
+                    window.Livewire.dispatch('pos-echo-order-placed', {
+                        shop_id: payload.shop_id,
+                        table_session_id: payload.table_session_id,
+                    });
+                });
+                window.Echo.private(@js($rtOrderChannel)).listen('.pos.order.placed', function (payload) {
                     window.Livewire.dispatch('pos-echo-order-placed', {
                         shop_id: payload.shop_id,
                         table_session_id: payload.table_session_id,

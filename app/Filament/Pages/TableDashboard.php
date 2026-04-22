@@ -47,7 +47,17 @@ class TableDashboard extends Page
 
     public function mount(): void
     {
-        $shop = Shop::query()->where('is_active', true)->orderBy('id')->first();
+        $preferredShopId = (int) config('pos.default_shop_id', 3);
+        $shop = null;
+        if ($preferredShopId > 0) {
+            $shop = Shop::query()
+                ->whereKey($preferredShopId)
+                ->where('is_active', true)
+                ->first();
+        }
+        if ($shop === null) {
+            $shop = Shop::query()->where('is_active', true)->orderBy('id')->first();
+        }
         $this->shopId = $shop?->id ?? 0;
         if ($this->shopId > 0) {
             $this->shopName = (string) (Shop::query()->whereKey($this->shopId)->value('name') ?? '');

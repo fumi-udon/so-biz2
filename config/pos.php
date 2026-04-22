@@ -23,6 +23,13 @@ if (file_exists($posPrinterPath)) {
 $defaultTvaRate = (float) env('TVA_TN', env('POS_RECEIPT_VAT_DEFAULT', 19));
 
 return [
+    /** POS ダッシュボード既定店舗（未設定時は 3: Bistronippon）。 */
+    'default_shop_id' => (int) env('POS_DEFAULT_SHOP_ID', 3),
+    /**
+     * true の場合、リアルタイム購読は `default_shop_id` のみ許可。
+     * prefix 分離運用（bnops_ など）で他店舗混信を防ぐ安全弁。
+     */
+    'enforce_realtime_shop_scope' => (bool) env('POS_ENFORCE_REALTIME_SHOP_SCOPE', true),
     'printer' => array_merge(
         $posPrinter['defaults'] ?? [],
         [

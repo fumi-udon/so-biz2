@@ -50,6 +50,7 @@
                 shopId: Number(shopId) || 0,
                 pendingEchoReload: null,
                 channel: null,
+                privateChannel: null,
                 status: 'connecting',
                 pusherBound: false,
 
@@ -69,9 +70,7 @@
                     }
 
                     try {
-                        this.channel = window.Echo
-                            .channel('pos.shop.' + this.shopId)
-                            .listen('.kds.orders.confirmed', () => {
+                        const onConfirmed = () => {
                                 this.pushStatus('connected');
                                 try {
                                     this.$wire.markRealtimeEventReceived();
@@ -79,7 +78,13 @@
                                     // noop
                                 }
                                 this.scheduleRefresh();
-                            });
+                            };
+                        this.channel = window.Echo
+                            .channel('pos.shop.' + this.shopId)
+                            .listen('.kds.orders.confirmed', onConfirmed);
+                        this.privateChannel = window.Echo
+                            .private('rt.shop.' + this.shopId + '.orders')
+                            .listen('.kds.orders.confirmed', onConfirmed);
                         this.bindPusherState();
                     } catch (e) {
                         // Echo 不在/接続失敗は無視（wire:poll.10s が真実の源泉）。
@@ -129,6 +134,7 @@
                     try {
                         if (this.shopId && window.Echo) {
                             window.Echo.leave('pos.shop.' + this.shopId);
+                            window.Echo.leave('private-rt.shop.' + this.shopId + '.orders');
                         }
                     } catch (e) { /* noop */ }
                     this.pushStatus('disconnected');

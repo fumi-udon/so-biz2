@@ -35,7 +35,10 @@ class PosOrderPlaced implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('pos.shop.'.$this->shopId)];
+        return [
+            new PrivateChannel('pos.shop.'.$this->shopId),
+            new PrivateChannel('rt.shop.'.$this->shopId.'.orders'),
+        ];
     }
 
     /**

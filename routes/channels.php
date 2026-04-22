@@ -18,6 +18,42 @@ Broadcast::channel('pos.shop.{shopId}', function (?User $user, int|string $shopI
         return false;
     }
     $id = (int) $shopId;
+    if ($id < 1) {
+        return false;
+    }
+
+    if ((bool) config('pos.enforce_realtime_shop_scope', true)) {
+        $scopeShopId = (int) config('pos.default_shop_id', 3);
+        if ($scopeShopId > 0 && $id !== $scopeShopId) {
+            return false;
+        }
+    }
+
+    $shop = Shop::query()->find($id);
+    if ($shop === null) {
+        return false;
+    }
+
+    return $user->can('view', $shop);
+});
+
+Broadcast::channel('rt.shop.{shopId}.orders', function (?User $user, int|string $shopId) {
+    if (! $user instanceof User) {
+        return false;
+    }
+
+    $id = (int) $shopId;
+    if ($id < 1) {
+        return false;
+    }
+
+    if ((bool) config('pos.enforce_realtime_shop_scope', true)) {
+        $scopeShopId = (int) config('pos.default_shop_id', 3);
+        if ($scopeShopId > 0 && $id !== $scopeShopId) {
+            return false;
+        }
+    }
+
     $shop = Shop::query()->find($id);
     if ($shop === null) {
         return false;
