@@ -58,6 +58,17 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * 経営オーナーおよび Filament Shield の super_admin。
+     * AdminOnly 系リソースの閲覧と Gate 上の全 ability をフル利用する。
+     */
+    public function hasFullFilamentAccess(): bool
+    {
+        $superAdminName = config('filament-shield.super_admin.name', 'super_admin');
+
+        return $this->hasRole($superAdminName) || $this->hasRole('Owner');
+    }
+
+    /**
      * @deprecated Cashier ロールは廃止済み。常に false を返す。
      */
     public function isCashier(): bool

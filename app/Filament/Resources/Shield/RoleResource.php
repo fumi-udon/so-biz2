@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Shield;
 
+use App\Models\User;
 use BezhanSalleh\FilamentShield\Resources\RoleResource as ShieldRoleResource;
 
 /**
@@ -11,7 +12,11 @@ class RoleResource extends ShieldRoleResource
 {
     public static function canAccess(): bool
     {
-        if (auth()->user()?->isPiloteOnly()) {
+        $user = auth()->user();
+        if ($user instanceof User && $user->hasFullFilamentAccess()) {
+            return parent::canAccess();
+        }
+        if ($user?->isPiloteOnly()) {
             return false;
         }
 

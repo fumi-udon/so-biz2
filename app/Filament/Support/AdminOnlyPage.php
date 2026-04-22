@@ -2,6 +2,7 @@
 
 namespace App\Filament\Support;
 
+use App\Models\User;
 use Filament\Pages\Page;
 
 abstract class AdminOnlyPage extends Page
@@ -9,6 +10,9 @@ abstract class AdminOnlyPage extends Page
     public static function canAccess(): bool
     {
         $user = auth()->user();
+        if ($user instanceof User && $user->hasFullFilamentAccess()) {
+            return true;
+        }
         if ($user?->isPiloteOnly()) {
             return static::piloteCanAccessThisPage();
         }
