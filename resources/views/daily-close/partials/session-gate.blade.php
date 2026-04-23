@@ -63,9 +63,10 @@
                     maxlength="4"
                     inputmode="numeric"
                     autocomplete="one-time-code"
-                    placeholder="••••"
                     class="block w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-center font-mono text-xl font-semibold tracking-[0.35em] text-gray-950 tabular-nums placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
                 >
+           
+          
                 @error('gatePinInput')
                     <p class="mt-1 text-xs font-medium text-rose-600 dark:text-rose-400">{{ $message }}</p>
                 @enderror
