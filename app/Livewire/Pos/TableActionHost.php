@@ -728,45 +728,54 @@ class TableActionHost extends Component
 
     private function loadAddCatalog(): void
     {
-        if ($this->shopId === 0) {
+        $shopId = $this->shopId;
+        if ($shopId === 0) {
             $this->addCatalog = [];
 
             return;
         }
 
-        $blocks = [];
-        $categories = MenuCategory::query()
-            ->where('shop_id', $this->shopId)
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->get();
+        $this->addCatalog = cache()->remember(
+            "pos.catalog.shop.{$shopId}",
+            now()->addMinutes(10),
+            function () use ($shopId): array {
+                $blocks = [];
+                $categories = MenuCategory::query()
+                    ->where('shop_id', $shopId)
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->orderBy('id')
+                    ->with([
+                        'menuItems' => static fn ($q) => $q
+                            ->where('shop_id', $shopId)
+                            ->where('is_active', true)
+                            ->orderBy('sort_order')
+                            ->orderBy('id')
+                            ->select(['id', 'name', 'from_price_minor', 'options_payload', 'menu_category_id']),
+                    ])
+                    ->get();
 
-        foreach ($categories as $cat) {
-            $rows = [];
-            $items = MenuItem::query()
-                ->where('shop_id', $this->shopId)
-                ->where('menu_category_id', $cat->id)
-                ->where('is_active', true)
-                ->orderBy('sort_order')
-                ->orderBy('id')
-                ->get(['id', 'name', 'from_price_minor', 'options_payload']);
-            foreach ($items as $m) {
-                $rows[] = [
-                    'id' => (int) $m->id,
-                    'name' => (string) $m->name,
-                    'from_label' => MenuItemMoney::formatMinorForDisplay((int) $m->from_price_minor),
-                ];
+                foreach ($categories as $cat) {
+                    $rows = [];
+                    foreach ($cat->menuItems as $m) {
+                        $rows[] = [
+                            'id' => (int) $m->id,
+                            'name' => (string) $m->name,
+                            'from_label' => MenuItemMoney::formatMinorForDisplay((int) $m->from_price_minor),
+                        ];
+                    }
+                    if (count($rows) > 0) {
+                        $blocks[] = [
+                            'id' => (int) $cat->id,
+                            'name' => (string) $cat->name,
+                            'items' => $rows,
+                        ];
+                    }
+                }
+
+                return $blocks;
             }
-            if (count($rows) > 0) {
-                $blocks[] = [
-                    'id' => (int) $cat->id,
-                    'name' => (string) $cat->name,
-                    'items' => $rows,
-                ];
-            }
-        }
-        $this->addCatalog = $blocks;
+        );
     }
 
     /**
