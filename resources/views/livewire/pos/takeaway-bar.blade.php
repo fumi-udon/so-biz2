@@ -2,6 +2,9 @@
     @class([
         'w-full shrink-0 border-t border-yellow-200 bg-yellow-50/90 dark:border-yellow-800 dark:bg-yellow-900/30',
     ])
+    x-data="{ peerTakeawayTid: null }"
+    x-on:pos-floor-peer-sync.window="peerTakeawayTid = ($event.detail && $event.detail.takeawayFloorTid != null) ? Number($event.detail.takeawayFloorTid) : null"
+    x-on:pos-tile-interaction-ended.window="peerTakeawayTid = null"
     data-takeaway-bar="true"
     role="region"
     aria-label="{{ __('pos.takeaway_region_label') }}"
@@ -42,6 +45,7 @@
                             'font-semibold' => ! $isFloorSel,
                             'font-black' => $isFloorSel,
                         ])
+                        x-bind:class="(peerTakeawayTid === {{ $tid }} && ! @js($isFloorSel)) ? '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400 font-black' : ''"
                     >
                         <span @class(['truncate', 'font-black' => $isFloorSel])>{{ $this->tileLabel($tile) }}</span>
                     </button>

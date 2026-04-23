@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AppendServerTiming;
 use App\Http\Middleware\KdsAuthenticate;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -15,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // OVH 等のリバースプロキシ配下で HTTPS / セッション / リダイレクトが正しく効くようにする
         $middleware->trustProxies(at: '*');
+
+        $middleware->web(append: [
+            AppendServerTiming::class,
+        ]);
 
         $middleware->alias([
             'kds.auth' => KdsAuthenticate::class,

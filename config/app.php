@@ -147,4 +147,16 @@ return [
 
     'speed_test' => (bool) env('SPEED_TEST', false),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Server-Timing header (HTTP profiling)
+    |--------------------------------------------------------------------------
+    |
+    | When true, web responses include Server-Timing: app, db, non-db (Chrome
+    | Network → click request → Timing). Enable with SERVER_TIMING=true.
+    |
+    */
+
+    'server_timing' => (bool) env('SERVER_TIMING', false),
+
 ];

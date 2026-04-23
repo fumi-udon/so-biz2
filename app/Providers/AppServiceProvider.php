@@ -11,9 +11,11 @@ use App\Models\User;
 use App\Observers\DailyTipDistributionObserver;
 use App\Observers\DailyTipObserver;
 use App\Observers\OrderLineObserver;
+use App\Support\Http\ServerTimingCollector;
 use Filament\Notifications\Livewire\Notifications;
 use Filament\Support\Enums\Alignment;
 use Filament\Support\Enums\VerticalAlignment;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -25,7 +27,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(ServerTimingCollector::class, static fn (): ServerTimingCollector => new ServerTimingCollector);
     }
 
     /**
@@ -33,6 +35,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        DB::listen(function ($query): void {
+            if (! config('app.server_timing')) {
+                return;
+            }
+            try {
+                app(ServerTimingCollector::class)->recordQueryMilliseconds((float) $query->time);
+            } catch (\Throwable) {
+                // never break requests
+            }
+        });
+
         // Owner / super_admin: Filament Shield の個別 permission や define_via_gate 設定に依存せず
         // 全 Gate チェックを通す（Role ナビ、メニュー商品 Create 等）。
         Gate::before(function ($user, string $ability) {

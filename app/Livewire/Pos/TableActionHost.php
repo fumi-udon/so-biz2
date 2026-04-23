@@ -31,6 +31,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Js;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
@@ -140,6 +141,9 @@ class TableActionHost extends Component
         return TableSession::query()
             ->where('shop_id', $this->shopId)
             ->whereKey($this->activeTableSessionId)
+            ->with([
+                'restaurantTable' => static fn ($q) => $q->select(['id', 'shop_id', 'name']),
+            ])
             ->first();
     }
 
@@ -206,16 +210,42 @@ class TableActionHost extends Component
         // so mark load complete here to avoid sticky "working" state.
         if ($sid === null) {
             $this->isOrdersLoaded = true;
+            $this->dispatchBrowserPeerSyncForOpenedTable($tid);
 
             return;
         }
 
         // 卓にセッションがある場合: リビジョン同期と注文明細を同一 Livewire 往復で完結（ブラウザ発の details 往復を廃止）。
         if ($this->shopId > 0 && $sid !== null && $sid > 0) {
-            $this->syncExpectedRevisionFromSession();
             $this->loadOrderDetails($sid);
         }
+        $this->dispatchBrowserPeerSyncForOpenedTable($tid);
         // 賄い卓: セッションは PIN 成功時（confirmStaffMealAuth）まで作らない。ここで ensure しないと Leave 後に空セッションが残りタイルが Active になる。
+    }
+
+    /**
+     * Sync takeaway/staff floor rings without bundling extra Livewire components:
+     * fires browser CustomEvents consumed by Alpine on the POS bars.
+     */
+    private function dispatchBrowserPeerSyncForOpenedTable(int $tableId): void
+    {
+        $takeawayTid = TableCategory::tryResolveFromId($tableId) === TableCategory::Takeaway ? $tableId : null;
+        $staffTid = TableCategory::tryResolveFromId($tableId) === TableCategory::Staff ? $tableId : null;
+        $detail = Js::from([
+            'takeawayFloorTid' => $takeawayTid,
+            'staffFloorTid' => $staffTid,
+        ])->toHtml();
+        $this->js(
+            'window.dispatchEvent(new CustomEvent("pos-floor-peer-sync", { bubbles: true, detail: '.$detail.' }));'
+            ."window.dispatchEvent(new CustomEvent('pos-action-host-opened', { bubbles: true }));"
+        );
+    }
+
+    private function dispatchBrowserFloorClear(): void
+    {
+        $this->js(
+            'window.dispatchEvent(new CustomEvent("pos-floor-peer-sync", { bubbles: true, detail: { takeawayFloorTid: null, staffFloorTid: null } }));'
+        );
     }
 
     public function loadSessionData(?int $sessionId): void
@@ -448,6 +478,7 @@ class TableActionHost extends Component
         $this->previewIntent = PrintIntent::Addition->value;
         $this->previewSessionId = 0;
         $this->dispatch('pos-tile-interaction-ended');
+        $this->dispatchBrowserFloorClear();
     }
 
     #[On('pos-echo-order-placed')]
@@ -471,16 +502,6 @@ class TableActionHost extends Component
         }
         $this->loadSessionData($sid);
         $this->dispatch('pos-refresh-tiles');
-    }
-
-    private function syncExpectedRevisionFromSession(): void
-    {
-        if ($this->session !== null) {
-            $this->expectedSessionRevision = (int) $this->session->session_revision;
-
-            return;
-        }
-        $this->expectedSessionRevision = 0;
     }
 
     private function applyPendingEchoReloadIfAny(): void

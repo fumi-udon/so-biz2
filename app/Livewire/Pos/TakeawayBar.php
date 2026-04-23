@@ -52,21 +52,6 @@ class TakeawayBar extends Component
         $this->floorSelectedTakeawayTableId = null;
     }
 
-    /**
-     * 他コンポーネントから卓ホストが開いたときも、Takeaway なら床の選択を同期する。
-     */
-    #[On('pos-action-host-opened')]
-    public function onPosActionHostOpened(mixed $tableId = null, mixed $sessionId = null): void
-    {
-        $tid = is_numeric($tableId) ? (int) $tableId : 0;
-        if ($tid < 1 || TableCategory::tryResolveFromId($tid) !== TableCategory::Takeaway) {
-            $this->floorSelectedTakeawayTableId = null;
-
-            return;
-        }
-        $this->floorSelectedTakeawayTableId = $tid;
-    }
-
     #[On('pos-refresh-tiles')]
     public function onRefreshTiles(): void
     {
@@ -81,13 +66,13 @@ class TakeawayBar extends Component
     #[On('pos-takeaway-bar-clear-ui')]
     public function onTakeawayBarClearUi(): void
     {
-        if (! $this->modalOpen) {
-            return;
+        if ($this->modalOpen) {
+            $this->modalOpen = false;
+            $this->selectedTableId = null;
+            $this->customerName = '';
+            $this->customerPhone = '';
         }
-        $this->modalOpen = false;
-        $this->selectedTableId = null;
-        $this->customerName = '';
-        $this->customerPhone = '';
+        // Always clear floor ring: grid / 賄いから別卓へ移るとき、モーダル無しの Takeaway 選択も外す。
         $this->floorSelectedTakeawayTableId = null;
     }
 
@@ -159,7 +144,8 @@ class TakeawayBar extends Component
         $this->floorSelectedTakeawayTableId = $tableId;
         $this->isPollingPaused = true;
         $this->dispatch('pos-tile-interaction-started');
-        $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sessionId);
+        $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sessionId)
+            ->to(TableActionHost::class);
     }
 
     /**

@@ -139,7 +139,7 @@
                                 @php
                                     $isServed = $ticket->status?->value === 'served';
                                     $isCooking = $ticket->status?->value === 'cooking';
-                                    $base = 'group relative flex min-h-14 items-start justify-between gap-3 rounded-lg border px-4 py-4 text-left text-base font-semibold transition select-none';
+                                    $base = 'group relative flex min-h-14 items-start justify-between gap-3 rounded-lg border px-2 py-2 text-left text-base font-semibold transition select-none';
                                     $palette = $isServed
                                         ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80'
                                         : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70';
@@ -165,7 +165,7 @@
                                         }
                                     }
                                     $qtyPrefix = ($ticket->qty ?? 1) > 1 ? '×'.$ticket->qty.' ' : '';
-                                    $titleColor = $isServed ? 'text-slate-300 line-through decoration-2' : 'text-rose-50';
+                                    $titleColor = $isServed ? 'text-slate-200' : 'text-rose-50';
                                     $modColor = $isServed ? 'text-slate-400 line-through decoration-2' : 'text-rose-200/90';
                                 @endphp
                                 <li

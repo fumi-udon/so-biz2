@@ -19,6 +19,7 @@
             class="flex w-full min-w-0 max-w-full flex-nowrap items-center justify-start gap-0.5 overflow-x-auto overflow-y-visible py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             x-data="{
                 optimisticStaffTableId: null,
+                peerStaffTid: null,
                 clickStaffTile(tid) {
                     const token = Date.now()
                     this.optimisticStaffTableId = tid;
@@ -33,7 +34,8 @@
                     )
                 },
             }"
-            x-on:pos-tile-interaction-ended.window="optimisticStaffTableId = null"
+            x-on:pos-floor-peer-sync.window="peerStaffTid = ($event.detail && $event.detail.staffFloorTid != null) ? Number($event.detail.staffFloorTid) : null"
+            x-on:pos-tile-interaction-ended.window="optimisticStaffTableId = null; peerStaffTid = null"
         >
             <span
                 class="inline-flex shrink-0 pl-0.5 text-slate-500 dark:text-slate-400"
@@ -61,7 +63,7 @@
                     @pointerdown="clickStaffTile({{ $tid }})"
                     @click="clickStaffTile({{ $tid }})"
                     x-bind:class="{
-                        '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear will-change-transform dark:ring-amber-400': @js($isStaffSel) || optimisticStaffTableId === {{ $tid }},
+                        '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear will-change-transform dark:ring-amber-400': @js($isStaffSel) || optimisticStaffTableId === {{ $tid }} || peerStaffTid === {{ $tid }},
                     }"
                     data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
                     data-category="staff"

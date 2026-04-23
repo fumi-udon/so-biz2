@@ -2,7 +2,6 @@
 
 namespace App\Livewire\Pos;
 
-use App\Domains\Pos\Tables\TableCategory;
 use App\Domains\Pos\Tables\TableUiStatus;
 use App\Services\Pos\TableDashboardQueryService;
 use Livewire\Attributes\Computed;
@@ -53,15 +52,12 @@ class StaffMealBar extends Component
         $this->floorSelectedStaffTableId = null;
     }
 
-    #[On('pos-action-host-opened')]
-    public function onPosActionHostOpened(mixed $tableId = null, mixed $sessionId = null): void
+    /**
+     * 通常卓グリッドから卓が開かれたとき、賄い帯のサーバ側リング状態を外す（Livewire 相乗りは TableStatusGrid のみ）。
+     */
+    #[On('pos-staff-meal-floor-reset')]
+    public function onStaffMealFloorReset(): void
     {
-        $tid = is_numeric($tableId) ? (int) $tableId : 0;
-        if ($tid >= 1 && TableCategory::tryResolveFromId($tid) === TableCategory::Staff) {
-            $this->floorSelectedStaffTableId = $tid;
-
-            return;
-        }
         $this->floorSelectedStaffTableId = null;
     }
 
@@ -124,7 +120,8 @@ class StaffMealBar extends Component
         $this->dispatch('pos-takeaway-bar-clear-ui');
         $this->isPollingPaused = true;
         $this->dispatch('pos-tile-interaction-started');
-        $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid);
+        $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid)
+            ->to(TableActionHost::class);
         $this->dispatch('pos-table-selection-sync', tableId: $tableId);
     }
 

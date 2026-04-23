@@ -63,12 +63,16 @@ class TableStatusGrid extends Component
         // Guard against rapid double taps on the same table while context is already opening.
         // Still emit the opened event so the right pane can clear local skeleton UI.
         if ($this->isPollingPaused && $this->selectedTableId === $tableId) {
-            $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid);
+            $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid)
+                ->to(TableActionHost::class);
 
             return;
         }
 
         $this->dispatch('pos-takeaway-bar-clear-ui');
+        if (TableCategory::tryResolveFromId($tableId) !== TableCategory::Staff) {
+            $this->dispatch('pos-staff-meal-floor-reset')->to(StaffMealBar::class);
+        }
         $this->selectedTableId = $tableId;
         $this->isPollingPaused = true;
         $this->dispatch('pos-tile-interaction-started');
@@ -77,7 +81,7 @@ class TableStatusGrid extends Component
             tableId: $tableId,
             sessionId: $sid,
             tableName: is_string($tableName) ? trim($tableName) : null,
-        );
+        )->to(TableActionHost::class);
     }
 
     #[On('pos-tile-interaction-ended')]
