@@ -91,7 +91,7 @@
             isLocalSkeletonVisible = true
         }
     "
-    x-on:pos-action-host-opened.window="
+    x-on:pos-action-host-ui-sync.window="
         clearPaneSkeletonAfterMorph()
     "
     x-on:pos-tile-interaction-ended.window="

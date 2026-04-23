@@ -237,7 +237,7 @@ class TableActionHost extends Component
         ])->toHtml();
         $this->js(
             'window.dispatchEvent(new CustomEvent("pos-floor-peer-sync", { bubbles: true, detail: '.$detail.' }));'
-            ."window.dispatchEvent(new CustomEvent('pos-action-host-opened', { bubbles: true }));"
+            ."window.dispatchEvent(new CustomEvent('pos-action-host-ui-sync', { bubbles: true }));"
         );
     }
 
