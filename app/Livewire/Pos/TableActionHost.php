@@ -159,6 +159,14 @@ class TableActionHost extends Component
         $this->expectedSessionRevision = 0;
         $this->isOrdersLoaded = false;
 
+        // Empty table (no active session): details request is intentionally skipped,
+        // so mark load complete here to avoid sticky "working" state.
+        if ($sid === null) {
+            $this->isOrdersLoaded = true;
+
+            return;
+        }
+
         // Stage-1 shell load: session basic only.
         if ($this->shopId > 0 && $sid !== null && $sid > 0) {
             $this->session = TableSession::query()
