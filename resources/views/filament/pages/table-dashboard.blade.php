@@ -167,6 +167,8 @@
                 </div>
             @endif
         </div>
+
+        @include('livewire.pos.table-dashboard')
     </div>
 
     @if ($shopId > 0)
@@ -284,5 +286,4 @@
 
     <x-filament-actions::modals />
     <x-filament-panels::unsaved-action-changes-alert />
-    @include('livewire.pos.table-dashboard')
 </div>

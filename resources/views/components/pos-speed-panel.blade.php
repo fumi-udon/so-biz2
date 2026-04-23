@@ -1,19 +1,22 @@
-{{-- POS Livewire timing panel: only rendered when SPEED_TEST / app.speed_test is on --}}
+{{-- POS Livewire timing panel: in-flow footer strip (opaque) when SPEED_TEST / app.speed_test is on --}}
 <div
     id="pos-speed-panel-root"
     wire:ignore
-    class="pointer-events-none fixed bottom-2 right-2 z-[9999] max-w-[min(100vw-1rem,22rem)] select-none rounded-md border border-gray-600 bg-black/95 px-2 py-1.5 font-mono text-[10px] leading-snug text-gray-100 shadow-lg"
-    style="opacity: 1"
-    aria-hidden="true"
+    class="fi-pos-speed-panel flex w-full flex-none flex-col border-t border-zinc-600 bg-zinc-900 px-2 py-1.5 font-mono text-[10px] leading-snug text-zinc-100 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] dark:border-zinc-500 dark:bg-zinc-950"
+    role="status"
+    aria-label="POS Livewire timing"
 >
     <div class="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-300">POS speed</div>
-    <div id="pos-speed-panel-rows" class="space-y-0.5 text-gray-200">
-        <div>wire: <span id="pos-sp-total">—</span></div>
-        <div>srvΔ: <span id="pos-sp-back">—</span></div>
-        <div>net~: <span id="pos-sp-net">—</span></div>
-        <div>morph: <span id="pos-sp-morph">—</span></div>
+    <div
+        id="pos-speed-panel-rows"
+        class="grid w-full max-w-full grid-cols-2 gap-x-3 gap-y-0.5 sm:grid-cols-4"
+    >
+        <div class="truncate">wire: <span id="pos-sp-total">—</span></div>
+        <div class="truncate">srvΔ: <span id="pos-sp-back">—</span></div>
+        <div class="truncate">net~: <span id="pos-sp-net">—</span></div>
+        <div class="truncate">morph: <span id="pos-sp-morph">—</span></div>
     </div>
-    <div id="pos-speed-panel-hint" class="mt-1 border-t border-gray-700 pt-0.5 text-[8px] text-gray-500">
+    <div id="pos-speed-panel-hint" class="mt-1 border-t border-zinc-700 pt-0.5 text-[8px] text-zinc-400">
         srvΔ = responseStart−requestStart (TTFB wait). net~ = wire − srvΔ. morph = first morph → 2×rAF.
     </div>
 </div>
