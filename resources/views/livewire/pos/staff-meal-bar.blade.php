@@ -20,7 +20,17 @@
             x-data="{
                 optimisticStaffTableId: null,
                 clickStaffTile(tid) {
+                    const token = Date.now()
                     this.optimisticStaffTableId = tid;
+                    window.dispatchEvent(
+                        new CustomEvent('show-local-skeleton', {
+                            detail: {
+                                tid: tid,
+                                token: token,
+                            },
+                            bubbles: true,
+                        }),
+                    )
                 },
             }"
             x-on:pos-tile-interaction-ended.window="optimisticStaffTableId = null"

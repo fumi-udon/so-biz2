@@ -15,11 +15,15 @@
 <div
     class="fi-no-print flex h-full min-h-0 w-full min-w-0 flex-col border-s-4 border-blue-600 bg-linear-to-b from-white via-blue-50 to-blue-100 text-slate-900 dark:border-blue-500 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950"
     x-data="{
+        isLocalSkeletonVisible: false,
+        localSkeletonToken: null,
         seenUnsentLineKeys: {},
         closeDrawer() {
             if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
                 window.Livewire.dispatch('pos-tile-interaction-ended');
             }
+            this.isLocalSkeletonVisible = false;
+            this.localSkeletonToken = null;
             $wire.closeHost();
         },
         shouldAnimateUnsent(key, isFresh) {
@@ -66,14 +70,67 @@
             window.addEventListener('EchoLoaded', bind);
         })();
     "
+    x-on:show-local-skeleton.window="
+        const detail = $event.detail || {}
+        localSkeletonToken = detail.token ?? Date.now()
+        isLocalSkeletonVisible = true
+    "
+    x-on:pos-action-host-opened.window="
+        const currentToken = localSkeletonToken
+        requestAnimationFrame(() => {
+            if (localSkeletonToken === currentToken) {
+                isLocalSkeletonVisible = false
+            }
+        })
+        const detail = $event.detail || {}
+        const tableId = detail.tableId ?? null
+        const sessionId = detail.sessionId ?? null
+        setTimeout(() => {
+            if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
+                window.Livewire.dispatch('pos-action-host-opened-details', {
+                    tableId: tableId,
+                    sessionId: sessionId,
+                })
+            }
+        }, 50)
+    "
+    x-on:pos-tile-interaction-ended.window="
+        isLocalSkeletonVisible = false
+        localSkeletonToken = null
+    "
 >
     @if (! $open)
-        <div class="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+        <div
+            x-cloak
+            x-show="!isLocalSkeletonVisible && !@js($open)"
+            class="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
+        >
             <p class="text-sm font-medium text-gray-800 dark:text-gray-100">
                 {{ __('pos.detail_pick_table') }}
             </p>
         </div>
     @else
+        <div
+            x-cloak
+            x-show="isLocalSkeletonVisible"
+            class="flex min-h-0 flex-1 flex-col"
+        >
+            <div class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900">
+                <div class="min-w-0 w-full">
+                    <div class="h-4 w-40 animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/70"></div>
+                    <div class="mt-1 h-3 w-28 animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/70"></div>
+                </div>
+            </div>
+            <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]">
+                <div class="space-y-1 py-1">
+                    <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                    <div class="h-6 w-11/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                    <div class="h-6 w-10/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                </div>
+            </div>
+        </div>
+
+        <div x-cloak x-show="!isLocalSkeletonVisible" class="min-h-0 flex flex-1 flex-col">
         {{-- Header: table name + primary actions --}}
         <div
             class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900"
@@ -121,7 +178,16 @@
         <div
             class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]"
         >
-            @if ($this->activeTableSessionId === null)
+            @if (! $this->isOrdersLoaded)
+                <div class="space-y-1 py-1">
+                    <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                    <div class="h-6 w-11/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                    <div class="h-6 w-10/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                    <p class="pt-1 text-[11px] text-slate-600 dark:text-slate-300">
+                        {{ __('pos.ui_working') }}
+                    </p>
+                </div>
+            @elseif ($this->activeTableSessionId === null)
                 <p class="text-sm text-gray-800 dark:text-gray-100">
                     {{ __('pos.drawer_no_session') }}
                 </p>
@@ -238,6 +304,7 @@
                     </section>
                 </div>
             @endif
+        </div>
         </div>
 
     @if ($open && $this->requiresStaffMealAuth && ! $this->staffMealAuthModalDismissed)

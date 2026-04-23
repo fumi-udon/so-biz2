@@ -18,7 +18,17 @@
                 x-data="{
                     optimisticTableId: null,
                     clickTile(tid) {
+                        const token = Date.now()
                         this.optimisticTableId = tid;
+                        window.dispatchEvent(
+                            new CustomEvent('show-local-skeleton', {
+                                detail: {
+                                    tid: tid,
+                                    token: token,
+                                },
+                                bubbles: true,
+                            }),
+                        )
                     },
                 }"
                 x-on:pos-tile-interaction-ended.window="optimisticTableId = null"
