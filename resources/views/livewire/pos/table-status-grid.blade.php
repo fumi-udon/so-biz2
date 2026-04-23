@@ -17,18 +17,8 @@
                 class="grid w-full min-w-0 grid-cols-5 content-start justify-items-stretch gap-1 overflow-visible py-0.5 sm:gap-1.5"
                 x-data="{
                     optimisticTableId: null,
-                    flashTableId: null,
-                    flashTimer: null,
                     clickTile(tid) {
                         this.optimisticTableId = tid;
-                        this.flashTableId = tid;
-                        if (this.flashTimer) {
-                            clearTimeout(this.flashTimer);
-                        }
-                        this.flashTimer = setTimeout(() => {
-                            this.flashTableId = null;
-                            this.flashTimer = null;
-                        }, 450);
                     },
                 }"
                 x-on:pos-tile-interaction-ended.window="optimisticTableId = null"
@@ -59,13 +49,13 @@
                         <button
                             type="button"
                             wire:click="openTableContext({{ $tid }}, {{ $sid }})"
+                            @pointerdown="clickTile({{ $tid }})"
                             @click="clickTile({{ $tid }})"
                             x-bind:class="{
-                                '!z-10 !scale-110': @js($isSelected) || optimisticTableId === {{ $tid }},
-                                'pos-tile-select-flash': flashTableId === {{ $tid }},
+                                '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': @js($isSelected) || optimisticTableId === {{ $tid }},
                             }"
                             @class([
-                                'relative z-0 flex w-full touch-manipulation flex-col rounded-md border-2 border-transparent p-0 py-[2px] text-left text-[10px] font-bold leading-none transition duration-150 ease-out active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 sm:text-xs',
+                                'relative z-0 flex w-full touch-manipulation flex-col rounded-md border-2 border-transparent p-0 py-[2px] text-left text-[10px] font-bold leading-none active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 sm:text-xs',
                             ])
                             data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
                             data-category="{{ $tile['category'] ?? '' }}"
@@ -76,7 +66,7 @@
                                     $this->tileSurfaceClasses($tile),
                                 ])
                                 :class="{
-                                    'ring-4 ring-inset ring-amber-600 dark:ring-amber-400': @js($isSelected) || optimisticTableId === {{ $tid }},
+                                    'ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear dark:ring-amber-400': @js($isSelected) || optimisticTableId === {{ $tid }},
                                 }"
                             >
                                 <div class="line-clamp-1 text-[10px] leading-tight sm:text-xs {{ $lineTitle }}">
