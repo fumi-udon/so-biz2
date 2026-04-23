@@ -135,4 +135,16 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | POS speed test panel (Livewire timing)
+    |--------------------------------------------------------------------------
+    |
+    | When true, the POS table dashboard includes a small debug panel. Use
+    | SPEED_TEST in .env; defaults to false if unset.
+    |
+    */
+
+    'speed_test' => (bool) env('SPEED_TEST', false),
+
 ];

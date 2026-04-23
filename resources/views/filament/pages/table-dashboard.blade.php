@@ -284,4 +284,5 @@
 
     <x-filament-actions::modals />
     <x-filament-panels::unsaved-action-changes-alert />
+    @include('livewire.pos.table-dashboard')
 </div>
