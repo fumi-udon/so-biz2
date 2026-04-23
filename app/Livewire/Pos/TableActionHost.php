@@ -210,9 +210,10 @@ class TableActionHost extends Component
             return;
         }
 
-        // Stage-1 shell load: session basic only (#[Computed] session() on demand).
+        // 卓にセッションがある場合: リビジョン同期と注文明細を同一 Livewire 往復で完結（ブラウザ発の details 往復を廃止）。
         if ($this->shopId > 0 && $sid !== null && $sid > 0) {
             $this->syncExpectedRevisionFromSession();
+            $this->loadOrderDetails($sid);
         }
         // 賄い卓: セッションは PIN 成功時（confirmStaffMealAuth）まで作らない。ここで ensure しないと Leave 後に空セッションが残りタイルが Active になる。
     }
@@ -220,22 +221,6 @@ class TableActionHost extends Component
     public function loadSessionData(?int $sessionId): void
     {
         $this->loadOrderDetails($sessionId);
-    }
-
-    #[On('pos-action-host-opened-details')]
-    public function onActionHostOpenedDetails(mixed $tableId = null, mixed $sessionId = null): void
-    {
-        $tid = is_numeric($tableId) ? (int) $tableId : 0;
-        if ($tid < 1 || $this->activeRestaurantTableId === null || $tid !== (int) $this->activeRestaurantTableId) {
-            return;
-        }
-
-        $sid = is_numeric($sessionId) ? (int) $sessionId : null;
-        if (($sid ?? null) !== ($this->activeTableSessionId ?? null)) {
-            return;
-        }
-
-        $this->loadOrderDetails($sid);
     }
 
     public function loadOrderDetails(?int $sessionId): void

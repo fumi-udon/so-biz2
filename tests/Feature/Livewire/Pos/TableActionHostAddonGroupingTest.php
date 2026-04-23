@@ -37,13 +37,11 @@ class TableActionHostAddonGroupingTest extends TestCase
 
         Livewire::test(TableActionHost::class, ['shopId' => $shop->id])
             ->call('onActionHostOpened', $table->id, $session->id)
-            ->call('onActionHostOpenedDetails', $table->id, $session->id)
             ->assertSee('UNSENT ITEM')
             ->assertSee('SENT ITEM');
 
         $html = Livewire::test(TableActionHost::class, ['shopId' => $shop->id])
             ->call('onActionHostOpened', $table->id, $session->id)
-            ->call('onActionHostOpenedDetails', $table->id, $session->id)
             ->html();
 
         $unsentPos = strpos($html, 'UNSENT ITEM');

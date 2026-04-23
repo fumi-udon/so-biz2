@@ -26,6 +26,16 @@
             this.localSkeletonToken = null;
             $wire.closeHost();
         },
+        clearPaneSkeletonAfterMorph() {
+            const token = this.localSkeletonToken;
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (this.localSkeletonToken === token) {
+                        this.isLocalSkeletonVisible = false;
+                    }
+                });
+            });
+        },
         shouldAnimateUnsent(key, isFresh) {
             if (!isFresh) {
                 this.seenUnsentLineKeys[key] = true;
@@ -75,27 +85,14 @@
         localSkeletonToken = detail.token ?? Date.now()
         isLocalSkeletonVisible = true
     "
-    x-on:pos-action-host-opened.window="
-        const currentToken = localSkeletonToken
-        requestAnimationFrame(() => {
-            if (localSkeletonToken === currentToken) {
-                isLocalSkeletonVisible = false
-            }
-        })
-        const detail = $event.detail || {}
-        const tableId = detail.tableId ?? null
-        const sessionId = detail.sessionId ?? null
-        const sid = sessionId !== null ? Number(sessionId) : null
-        if (sid !== null && Number.isFinite(sid) && sid > 0) {
-            setTimeout(() => {
-                if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
-                    window.Livewire.dispatch('pos-action-host-opened-details', {
-                        tableId: tableId,
-                        sessionId: sessionId,
-                    })
-                }
-            }, 0)
+    x-on:pos-tile-interaction-started.window="
+        if (!isLocalSkeletonVisible) {
+            localSkeletonToken = Date.now()
+            isLocalSkeletonVisible = true
         }
+    "
+    x-on:pos-action-host-opened.window="
+        clearPaneSkeletonAfterMorph()
     "
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
