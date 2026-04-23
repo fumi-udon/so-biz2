@@ -21,31 +21,31 @@
         <div class="grid grid-cols-1 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             <div>
                 <label class="{{ $labelClass }}">Ventes POS (Midi)*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.lunch_recettes" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.lunch_recettes" class="{{ $inputClass }}">
                 @error('data.lunch_recettes')
                     <p class="{{ $errClass }}">{{ $message }}</p>
                 @enderror
             </div>
             <div>
                 <label class="{{ $labelClass }}">Pourboire déclaré*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.lunch_chips" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.lunch_chips" class="{{ $inputClass }}">
                 @error('data.lunch_chips')
                     <p class="{{ $errClass }}">{{ $message }}</p>
                 @enderror
             </div>
             <div>
                 <label class="{{ $labelClass }}">Espèces*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.lunch_cash" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.lunch_cash" class="{{ $inputClass }}">
                 @error('data.lunch_cash')<p class="{{ $errClass }}">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="{{ $labelClass }}">Chèque*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.lunch_cheque" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.lunch_cheque" class="{{ $inputClass }}">
                 @error('data.lunch_cheque')<p class="{{ $errClass }}">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="{{ $labelClass }}">Carte*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.lunch_carte" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.lunch_carte" class="{{ $inputClass }}">
                 @error('data.lunch_carte')<p class="{{ $errClass }}">{{ $message }}</p>@enderror
             </div>
         </div>
@@ -65,27 +65,27 @@
         <div class="grid grid-cols-1 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             <div>
                 <label class="{{ $labelClass }}">Ventes POS (Soir)*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.dinner_recettes" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.dinner_recettes" class="{{ $inputClass }}">
                 @error('data.dinner_recettes')<p class="{{ $errClass }}">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="{{ $labelClass }}">Pourboire déclaré*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.dinner_chips" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.dinner_chips" class="{{ $inputClass }}">
                 @error('data.dinner_chips')<p class="{{ $errClass }}">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="{{ $labelClass }}">Espèces*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.dinner_cash" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.dinner_cash" class="{{ $inputClass }}">
                 @error('data.dinner_cash')<p class="{{ $errClass }}">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="{{ $labelClass }}">Chèque*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.dinner_cheque" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.dinner_cheque" class="{{ $inputClass }}">
                 @error('data.dinner_cheque')<p class="{{ $errClass }}">{{ $message }}</p>@enderror
             </div>
             <div>
                 <label class="{{ $labelClass }}">Carte*</label>
-                <input type="text" inputmode="decimal" wire:model.live.debounce.500ms="data.dinner_carte" class="{{ $inputClass }}">
+                <input type="text" inputmode="decimal" wire:model.blur="data.dinner_carte" class="{{ $inputClass }}">
                 @error('data.dinner_carte')<p class="{{ $errClass }}">{{ $message }}</p>@enderror
             </div>
         </div>

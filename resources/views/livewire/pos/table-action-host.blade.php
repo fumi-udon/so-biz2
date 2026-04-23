@@ -101,6 +101,7 @@
 >
     @if (! $open)
         <div
+            wire:key="pane-welcome"
             x-cloak
             x-show="!isLocalSkeletonVisible && !@js($open)"
             class="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
@@ -111,6 +112,7 @@
         </div>
     @else
         <div
+            wire:key="pane-local-skeleton"
             x-cloak
             x-show="isLocalSkeletonVisible"
             class="flex min-h-0 flex-1 flex-col"
@@ -130,7 +132,7 @@
             </div>
         </div>
 
-        <div x-cloak x-show="!isLocalSkeletonVisible" class="min-h-0 flex flex-1 flex-col">
+        <div wire:key="pane-real-content" x-cloak x-show="!isLocalSkeletonVisible" class="min-h-0 flex flex-1 flex-col">
         {{-- Header: table name + primary actions --}}
         <div
             class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900"
