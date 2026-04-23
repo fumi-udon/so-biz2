@@ -74,6 +74,7 @@ class TakeawayBar extends Component
         }
         // Always clear floor ring: grid / 賄いから別卓へ移るとき、モーダル無しの Takeaway 選択も外す。
         $this->floorSelectedTakeawayTableId = null;
+        $this->skipRender();
     }
 
     public function loadTakeawayTiles(): void

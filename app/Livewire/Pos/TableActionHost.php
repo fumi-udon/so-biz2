@@ -40,6 +40,9 @@ use Throwable;
 
 class TableActionHost extends Component
 {
+    /** Populated by {@see loadOrderDetails()} so {@see session()} avoids a duplicate SELECT in the same request. */
+    private ?TableSession $sessionRowCache = null;
+
     private ?PricingResult $memoSessionPricing = null;
 
     /** @var array{ht_minor: int, vat_minor: int}|null */
@@ -125,10 +128,15 @@ class TableActionHost extends Component
 
     /**
      * Drop memoized #[Computed] session / posOrders so the next render hits the DB again.
+     *
+     * @param  bool  $preserveSessionRowCache  When true, keeps {@see $sessionRowCache} (used after loadOrderDetails stores one row).
      */
-    private function forgetSessionOrderComputed(): void
+    private function forgetSessionOrderComputed(bool $preserveSessionRowCache = false): void
     {
         unset($this->session, $this->posOrders);
+        if (! $preserveSessionRowCache) {
+            $this->sessionRowCache = null;
+        }
     }
 
     #[Computed]
@@ -136,6 +144,11 @@ class TableActionHost extends Component
     {
         if ($this->shopId < 1 || $this->activeTableSessionId === null || $this->activeTableSessionId < 1) {
             return null;
+        }
+
+        if ($this->sessionRowCache !== null
+            && (int) $this->sessionRowCache->getKey() === (int) $this->activeTableSessionId) {
+            return $this->sessionRowCache;
         }
 
         return TableSession::query()
@@ -274,6 +287,9 @@ class TableActionHost extends Component
         $existing = TableSession::query()
             ->where('shop_id', $this->shopId)
             ->whereKey($sessionId)
+            ->with([
+                'restaurantTable' => static fn ($q) => $q->select(['id', 'shop_id', 'name']),
+            ])
             ->first();
         if ($existing === null) {
             $this->isOrdersLoaded = true;
@@ -282,7 +298,8 @@ class TableActionHost extends Component
         }
         $this->expectedSessionRevision = (int) $existing->session_revision;
         $this->isOrdersLoaded = true;
-        $this->forgetSessionOrderComputed();
+        $this->sessionRowCache = $existing;
+        $this->forgetSessionOrderComputed(preserveSessionRowCache: true);
     }
 
     /**

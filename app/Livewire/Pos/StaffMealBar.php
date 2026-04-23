@@ -59,6 +59,7 @@ class StaffMealBar extends Component
     public function onStaffMealFloorReset(): void
     {
         $this->floorSelectedStaffTableId = null;
+        $this->skipRender();
     }
 
     #[On('pos-refresh-tiles')]
