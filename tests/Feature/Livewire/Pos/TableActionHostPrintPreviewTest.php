@@ -26,6 +26,7 @@ final class TableActionHostPrintPreviewTest extends TestCase
         Livewire::actingAs($operator)
             ->test(TableActionHost::class, ['shopId' => (int) $shop->id])
             ->call('onActionHostOpened', (int) $table->id, (int) $session->id)
+            ->call('onActionHostOpenedDetails', (int) $table->id, (int) $session->id)
             ->call('printAddition')
             ->assertSet('showReceiptPreview', true)
             ->assertSet('previewIntent', PrintIntent::Addition->value)

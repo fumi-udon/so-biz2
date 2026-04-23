@@ -31,6 +31,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -49,13 +50,6 @@ class TableActionHost extends Component
     public ?int $activeRestaurantTableId = null;
 
     public ?int $activeTableSessionId = null;
-
-    public ?TableSession $session = null;
-
-    /**
-     * @var Collection<int, PosOrder>
-     */
-    public Collection $posOrders;
 
     public bool $isOrdersLoaded = false;
 
@@ -125,8 +119,55 @@ class TableActionHost extends Component
     public function mount(int $shopId): void
     {
         $this->shopId = $shopId;
-        $this->posOrders = collect();
         $this->isOrdersLoaded = false;
+    }
+
+    /**
+     * Drop memoized #[Computed] session / posOrders so the next render hits the DB again.
+     */
+    private function forgetSessionOrderComputed(): void
+    {
+        unset($this->session, $this->posOrders);
+    }
+
+    #[Computed]
+    public function session(): ?TableSession
+    {
+        if ($this->shopId < 1 || $this->activeTableSessionId === null || $this->activeTableSessionId < 1) {
+            return null;
+        }
+
+        return TableSession::query()
+            ->where('shop_id', $this->shopId)
+            ->whereKey($this->activeTableSessionId)
+            ->first();
+    }
+
+    /**
+     * @return Collection<int, PosOrder>
+     */
+    #[Computed]
+    public function posOrders(): Collection
+    {
+        if ($this->shopId < 1 || ! $this->isOrdersLoaded) {
+            return collect();
+        }
+        if ($this->activeTableSessionId === null || $this->activeTableSessionId < 1) {
+            return collect();
+        }
+        if ($this->session === null) {
+            return collect();
+        }
+
+        return PosOrder::query()
+            ->where('shop_id', $this->shopId)
+            ->where('table_session_id', $this->activeTableSessionId)
+            ->where('status', '!=', OrderStatus::Voided)
+            ->with([
+                'lines' => static fn ($q) => $q->orderBy('id'),
+            ])
+            ->orderBy('id')
+            ->get();
     }
 
     #[On('pos-action-host-opened')]
@@ -156,9 +197,8 @@ class TableActionHost extends Component
                 ->value('name') ?? '');
         $this->memoSessionPricing = null;
         $this->memoStaffMealPreDiscountTaxSum = null;
+        $this->forgetSessionOrderComputed();
         $this->activeTableSessionId = $sid;
-        $this->session = null;
-        $this->posOrders = collect();
         $this->expectedSessionRevision = 0;
         $this->isOrdersLoaded = false;
 
@@ -170,12 +210,8 @@ class TableActionHost extends Component
             return;
         }
 
-        // Stage-1 shell load: session basic only.
+        // Stage-1 shell load: session basic only (#[Computed] session() on demand).
         if ($this->shopId > 0 && $sid !== null && $sid > 0) {
-            $this->session = TableSession::query()
-                ->where('shop_id', $this->shopId)
-                ->whereKey($sid)
-                ->first();
             $this->syncExpectedRevisionFromSession();
         }
         // 賄い卓: セッションは PIN 成功時（confirmStaffMealAuth）まで作らない。ここで ensure しないと Leave 後に空セッションが残りタイルが Active になる。
@@ -206,9 +242,8 @@ class TableActionHost extends Component
     {
         $this->memoSessionPricing = null;
         $this->memoStaffMealPreDiscountTaxSum = null;
+        $this->forgetSessionOrderComputed();
         $this->activeTableSessionId = $sessionId;
-        $this->session = null;
-        $this->posOrders = collect();
         $this->expectedSessionRevision = 0;
         $this->isOrdersLoaded = false;
         if ($this->shopId === 0) {
@@ -221,26 +256,18 @@ class TableActionHost extends Component
 
             return;
         }
-        $this->session = TableSession::query()
+        $existing = TableSession::query()
             ->where('shop_id', $this->shopId)
             ->whereKey($sessionId)
             ->first();
-        if ($this->session === null) {
+        if ($existing === null) {
             $this->isOrdersLoaded = true;
 
             return;
         }
-        $this->posOrders = PosOrder::query()
-            ->where('shop_id', $this->shopId)
-            ->where('table_session_id', $sessionId)
-            ->where('status', '!=', OrderStatus::Voided)
-            ->with([
-                'lines' => static fn ($q) => $q->orderBy('id'),
-            ])
-            ->orderBy('id')
-            ->get();
-        $this->syncExpectedRevisionFromSession();
+        $this->expectedSessionRevision = (int) $existing->session_revision;
         $this->isOrdersLoaded = true;
+        $this->forgetSessionOrderComputed();
     }
 
     /**
@@ -389,13 +416,15 @@ class TableActionHost extends Component
         $this->staffMealAuthPin = '';
         $this->staffMealAuthStaffId = null;
         $this->loadSessionData((int) $this->activeTableSessionId);
-        if ($this->session !== null && trim((string) ($this->session->staff_name ?? '')) === '') {
-            $this->session = $this->session->fresh();
-            if ($this->session !== null && trim((string) ($this->session->staff_name ?? '')) === '') {
-                $this->session->staff_name = (string) $staff->name;
-                $this->session->save();
+        $sessionModel = $this->session;
+        if ($sessionModel !== null && trim((string) ($sessionModel->staff_name ?? '')) === '') {
+            $sessionModel = $sessionModel->fresh();
+            if ($sessionModel !== null && trim((string) ($sessionModel->staff_name ?? '')) === '') {
+                $sessionModel->staff_name = (string) $staff->name;
+                $sessionModel->save();
             }
         }
+        $this->forgetSessionOrderComputed();
         $this->dispatch('pos-refresh-tiles');
     }
 
@@ -417,8 +446,7 @@ class TableActionHost extends Component
         $this->activeRestaurantTableId = null;
         $this->activeTableSessionId = null;
         $this->activeRestaurantTableName = '';
-        $this->session = null;
-        $this->posOrders = collect();
+        $this->forgetSessionOrderComputed();
         $this->isOrdersLoaded = false;
         $this->uiState = 'idle';
         $this->pendingEchoReload = false;

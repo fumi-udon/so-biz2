@@ -17,7 +17,7 @@
         <div class="truncate">morph: <span id="pos-sp-morph">—</span></div>
     </div>
     <div id="pos-speed-panel-hint" class="mt-1 border-t border-zinc-700 pt-0.5 text-[8px] text-zinc-400">
-        srvΔ = responseStart−requestStart (TTFB wait). net~ = wire − srvΔ. morph = first morph → 2×rAF.
+        srvΔ = responseStart−requestStart (TTFB wait). net~ = wire − srvΔ. morph = first morph（単一HTTP時のみ）→ microtask → 2×rAF.
     </div>
 </div>
 
@@ -63,7 +63,7 @@
                         return null;
                     }
 
-                    let cycleFirstMorph = null;
+                    let httpInFlight = 0;
                     let lastWire = null;
                     let lastBack = null;
                     let lastNet = null;
@@ -87,15 +87,27 @@
                                 paintPanel();
                                 return;
                             }
-                            requestAnimationFrame(function () {
-                                requestAnimationFrame(function () {
-                                    try {
-                                        lastMorph = performance.now() - tFirstMorph;
-                                        paintPanel();
-                                    } catch (e) {
-                                        /* ignore */
-                                    }
-                                });
+                            queueMicrotask(function () {
+                                try {
+                                    setTimeout(function () {
+                                        try {
+                                            requestAnimationFrame(function () {
+                                                requestAnimationFrame(function () {
+                                                    try {
+                                                        lastMorph = performance.now() - tFirstMorph;
+                                                        paintPanel();
+                                                    } catch (e) {
+                                                        /* ignore */
+                                                    }
+                                                });
+                                            });
+                                        } catch (e) {
+                                            /* ignore */
+                                        }
+                                    }, 0);
+                                } catch (e) {
+                                    /* ignore */
+                                }
                             });
                         } catch (e) {
                             /* ignore */
@@ -116,14 +128,46 @@
                             lw.hook('request', function (_ref) {
                                 try {
                                     const succeed = _ref.succeed;
+                                    const fail = _ref.fail;
                                     if (typeof succeed !== 'function') {
                                         return;
                                     }
+                                    httpInFlight++;
+                                    const morphSlot = { t0: null };
+                                    let offMorph = null;
+                                    function teardownMorphHook() {
+                                        try {
+                                            if (typeof offMorph === 'function') {
+                                                offMorph();
+                                                offMorph = null;
+                                            }
+                                        } catch (e) {
+                                            /* ignore */
+                                        }
+                                    }
+                                    function endHttp() {
+                                        httpInFlight = Math.max(0, httpInFlight - 1);
+                                        teardownMorphHook();
+                                    }
+                                    try {
+                                        offMorph = lw.hook('morph', function () {
+                                            try {
+                                                if (httpInFlight === 1 && morphSlot.t0 === null) {
+                                                    morphSlot.t0 = performance.now();
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                        });
+                                    } catch (e) {
+                                        offMorph = null;
+                                    }
+
                                     const tRequest = performance.now();
-                                    cycleFirstMorph = null;
 
                                     succeed(function (_fwd) {
                                         try {
+                                            endHttp();
                                             const tSucceed = performance.now();
                                             lastWire = tSucceed - tRequest;
                                             queueMicrotask(function () {
@@ -141,20 +185,22 @@
                                                 }
                                             });
                                             paintPanel();
-                                            scheduleMorphPaintDone(cycleFirstMorph);
+                                            scheduleMorphPaintDone(morphSlot.t0);
                                         } catch (e) {
                                             /* ignore */
                                         }
                                     });
-                                } catch (e) {
-                                    /* ignore */
-                                }
-                            });
 
-                            lw.hook('morph', function () {
-                                try {
-                                    if (cycleFirstMorph == null) {
-                                        cycleFirstMorph = performance.now();
+                                    if (typeof fail === 'function') {
+                                        fail(function () {
+                                            try {
+                                                endHttp();
+                                                lastMorph = null;
+                                                paintPanel();
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                        });
                                     }
                                 } catch (e) {
                                     /* ignore */
