@@ -22,8 +22,12 @@ class TableStatusGrid extends Component
      */
     public array $tiles = [];
 
+    /** Server-only (double-tap guard); selection ring is Alpine-managed. */
+    #[Locked]
     public bool $isPollingPaused = false;
 
+    /** Server-only (double-tap guard); selection ring is Alpine-managed. */
+    #[Locked]
     public ?int $selectedTableId = null;
 
     public function mount(int $shopId): void
@@ -65,6 +69,7 @@ class TableStatusGrid extends Component
         if ($this->isPollingPaused && $this->selectedTableId === $tableId) {
             $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid)
                 ->to(TableActionHost::class);
+            $this->skipRender();
 
             return;
         }
@@ -82,6 +87,7 @@ class TableStatusGrid extends Component
             sessionId: $sid,
             tableName: is_string($tableName) ? trim($tableName) : null,
         )->to(TableActionHost::class);
+        $this->skipRender();
     }
 
     #[On('pos-tile-interaction-ended')]
@@ -89,6 +95,7 @@ class TableStatusGrid extends Component
     {
         $this->isPollingPaused = false;
         $this->selectedTableId = null;
+        $this->skipRender();
     }
 
     /**
@@ -98,6 +105,7 @@ class TableStatusGrid extends Component
     public function onTableSelectionSync(int $tableId): void
     {
         $this->selectedTableId = $tableId;
+        $this->skipRender();
     }
 
     #[On('pos-refresh-tiles')]
@@ -115,6 +123,7 @@ class TableStatusGrid extends Component
     public function onCustomerGridClearSelection(): void
     {
         $this->selectedTableId = null;
+        $this->skipRender();
     }
 
     public function render()

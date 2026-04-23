@@ -3,7 +3,32 @@
     $customerTiles = $grouped['customer'];
 @endphp
 
-<div class="w-full min-h-0 min-w-0">
+<div
+    class="w-full min-h-0 min-w-0"
+    x-data="{
+        selectedTableId: null,
+        optimisticTableId: null,
+        clickTile(tid) {
+            const token = Date.now()
+            this.optimisticTableId = null;
+            this.$nextTick(() => {
+                this.optimisticTableId = tid;
+            })
+            window.dispatchEvent(
+                new CustomEvent('show-local-skeleton', {
+                    detail: {
+                        tid: tid,
+                        token: token,
+                    },
+                    bubbles: true,
+                }),
+            )
+        },
+    }"
+    x-on:pos-tile-interaction-ended.window="optimisticTableId = null; selectedTableId = null"
+    x-on:pos-table-selection-sync.window="selectedTableId = ($event.detail && ($event.detail.tableId ?? $event.detail[0])) ?? null"
+    x-on:pos-customer-grid-clear-selection.window="selectedTableId = null"
+>
     <div
         class="min-w-0 overflow-hidden rounded-lg border-2 border-blue-200 bg-white/95 p-1 dark:border-blue-700 dark:bg-slate-900 sm:rounded-xl"
     >
@@ -15,32 +40,11 @@
             <p class="mb-1 text-[10px] font-extrabold uppercase leading-none tracking-wider text-blue-700 dark:text-blue-300 sm:text-xs">SHOP LOG NAME</p>
             <div
                 class="grid w-full min-w-0 grid-cols-5 content-start justify-items-stretch gap-1 overflow-visible py-0.5 sm:gap-1.5"
-                x-data="{
-                    optimisticTableId: null,
-                    clickTile(tid) {
-                        const token = Date.now()
-                        this.optimisticTableId = null;
-                        this.$nextTick(() => {
-                            this.optimisticTableId = tid;
-                        })
-                        window.dispatchEvent(
-                            new CustomEvent('show-local-skeleton', {
-                                detail: {
-                                    tid: tid,
-                                    token: token,
-                                },
-                                bubbles: true,
-                            }),
-                        )
-                    },
-                }"
-                x-on:pos-tile-interaction-ended.window="optimisticTableId = null"
             >
                 @foreach ($customerTiles as $tile)
                     @php
                         $tid = (int) $tile['restaurantTableId'];
                         $sid = (int) ($tile['activeTableSessionId'] ?? 0);
-                        $isSelected = $selectedTableId === $tid;
                         $status = (string) ($tile['uiStatus'] ?? 'free');
                         $orderCount = (int) ($tile['relevantPosOrderCount'] ?? 0);
                         $totalMinor = (int) ($tile['sessionTotalMinor'] ?? 0);
@@ -51,9 +55,9 @@
                         $metaTone = in_array($status, ['alert', 'pending'], true)
                             ? 'text-white/90'
                             : 'text-slate-700 dark:text-slate-200';
-                        $lineTitle = $isSelected ? 'font-black '.$titleTone : 'font-extrabold '.$titleTone;
-                        $lineMeta = $isSelected ? 'font-black '.$metaTone : 'font-semibold '.$metaTone;
-                        $lineTotal = $isSelected ? 'font-black tabular-nums '.$titleTone : 'font-extrabold tabular-nums '.$titleTone;
+                        $lineTitle = 'font-extrabold '.$titleTone;
+                        $lineMeta = 'font-semibold '.$metaTone;
+                        $lineTotal = 'font-extrabold tabular-nums '.$titleTone;
                     @endphp
                     <div
                         class="w-full min-w-0"
@@ -62,6 +66,7 @@
                         <button
                             type="button"
                             wire:click="openTableContext({{ $tid }}, {{ $sid }}, @js((string) ($tile['restaurantTableName'] ?? '')))"
+                            @click="selectedTableId = {{ $tid }}"
                             @pointerdown="clickTile({{ $tid }})"
                             x-bind:class="{
                                 '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': optimisticTableId === {{ $tid }},
@@ -81,17 +86,26 @@
                                     'ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear dark:ring-amber-400': optimisticTableId === {{ $tid }},
                                 }"
                             >
-                                <div class="line-clamp-1 text-[10px] leading-tight sm:text-xs {{ $lineTitle }}">
+                                <div
+                                    class="line-clamp-1 text-[10px] leading-tight sm:text-xs {{ $lineTitle }}"
+                                    :class="selectedTableId === {{ $tid }} ? '!font-black' : ''"
+                                >
                                     @if ($tile['restaurantTableName'] !== '')
                                         {{ $tile['restaurantTableName'] }}
                                     @else
                                         {{ __('pos.table_name_fallback', ['id' => $tid]) }}
                                     @endif
                                 </div>
-                                <div class="line-clamp-1 text-[9px] leading-tight sm:text-[10px] {{ $lineMeta }}">
+                                <div
+                                    class="line-clamp-1 text-[9px] leading-tight sm:text-[10px] {{ $lineMeta }}"
+                                    :class="selectedTableId === {{ $tid }} ? '!font-black' : ''"
+                                >
                                     {{ trans_choice('pos.tile_order_count', $orderCount, ['count' => $orderCount]) }}
                                 </div>
-                                <div class="line-clamp-1 text-[10px] leading-tight sm:text-xs {{ $lineTotal }}">
+                                <div
+                                    class="line-clamp-1 text-[10px] leading-tight sm:text-xs {{ $lineTotal }}"
+                                    :class="selectedTableId === {{ $tid }} ? '!font-black tabular-nums' : ''"
+                                >
                                     {{ $totalLabel }}
                                 </div>
                             </div>
