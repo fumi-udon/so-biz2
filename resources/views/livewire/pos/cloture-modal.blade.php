@@ -13,9 +13,28 @@
             <div
                 data-pos-cloture-modal="true"
                 wire:key="cloture-modal-{{ $this->tableSessionId }}"
-                x-data
+                x-data="{
+                    inputDt: $wire.entangle('tenderedDtInput'),
+                    finalMinor: {{ (int) $this->finalTotalMinor }},
+                    changeMinor() {
+                        const parsed = Number.parseFloat(this.inputDt || 0)
+                        const normalized = Number.isFinite(parsed) ? parsed : 0
+
+                        return Math.round(normalized * 1000) - this.finalMinor
+                    },
+                    setFromMinor(minor) {
+                        this.inputDt = (minor / 1000).toFixed(3)
+                    },
+                    formattedChange() {
+                        return (this.changeMinor() / 1000).toFixed(3) + ' DT'
+                    },
+                }"
                 x-init="
                     $nextTick(() => {
+                        if (!inputDt) {
+                            inputDt = ''
+                        }
+
                         window.dispatchEvent(
                             new CustomEvent('open-modal', {
                                 detail: { id: 'pos-cloture-checkout-modal' },
@@ -114,11 +133,11 @@
                                     type="button"
                                     size="xs"
                                     outlined
-                                    wire:click="setTendered({{ (int) $this->justeMinor }})"
+                                    x-on:click="setFromMinor({{ (int) $this->justeMinor }})"
                                     wire:key="cloture-sugg-juste-{{ $this->tableSessionId }}"
                                     :disabled="$locked"
                                     wire:loading.attr="disabled"
-                                    wire:target="confirm,setTendered"
+                                    wire:target="confirm"
                                     class="min-w-0 flex-1 !h-auto !px-1.5 !py-1.5 !text-[12px] !font-semibold !leading-tight"
                                 >
                                     <span class="block text-center leading-tight">
@@ -135,11 +154,11 @@
                                         type="button"
                                         size="xs"
                                         outlined
-                                        wire:click="setTendered({{ (int) $p }})"
+                                        x-on:click="setFromMinor({{ (int) $p }})"
                                         wire:key="cloture-sugg-{{ $this->tableSessionId }}-{{ (int) $p }}"
                                         :disabled="$locked"
                                         wire:loading.attr="disabled"
-                                        wire:target="confirm,setTendered"
+                                        wire:target="confirm"
                                         class="min-w-0 flex-1 !h-auto !px-1.5 !py-1.5 !text-[12px] !font-semibold tabular-nums !leading-tight"
                                     >
                                         {{ $this->formatMinor((int) $p) }}
@@ -160,10 +179,10 @@
                                         type="text"
                                         inputmode="decimal"
                                         autocomplete="off"
-                                        wire:model.live.debounce.150ms="tenderedDtInput"
+                                        x-model="inputDt"
                                         :disabled="$locked"
                                         wire:loading.attr="disabled"
-                                        wire:target="confirm,setTendered"
+                                        wire:target="confirm"
                                         aria-label="{{ __('rad_table.cloture_tendered') }}"
                                         class="!py-2 !text-[12px] !font-semibold !leading-snug tabular-nums text-center !text-blue-950 !placeholder:text-blue-600/40 disabled:!text-blue-950/50 disabled:[-webkit-text-fill-color:theme(colors.blue.950)] dark:!text-blue-100 dark:!placeholder:text-blue-300/40 dark:disabled:!text-blue-100/50 dark:disabled:[-webkit-text-fill-color:theme(colors.blue.100)]"
                                     />
@@ -177,8 +196,8 @@
                                 <p class="text-[12px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                                     {{ __('rad_table.cloture_change') }}
                                 </p>
-                                <p class="mt-0.5 text-[12px] font-semibold tabular-nums text-neutral-950 dark:text-neutral-100">
-                                    {{ $this->signedChangeDisplay() }}
+                                <p class="mt-0.5 text-[12px] font-semibold tabular-nums text-neutral-950 dark:text-neutral-100" x-text="formattedChange()">
+                                    0.000 DT
                                 </p>
                             </div>
                         </div>
@@ -194,7 +213,7 @@
                                 wire:click="closeModal"
                                 :disabled="$locked"
                                 wire:loading.attr="disabled"
-                                wire:target="closeModal,confirm,setTendered"
+                                wire:target="closeModal,confirm"
                                 class="!min-h-9 !px-4 !text-[12px] !font-semibold"
                             >
                                 {{ __('rad_table.cloture_cancel') }}
@@ -203,8 +222,8 @@
                                 type="button"
                                 color="danger"
                                 size="sm"
-                                wire:click="confirm"
-                                :disabled="$locked || \App\Support\MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput) < $this->finalTotalMinor"
+                                x-on:click="$wire.set('tenderedDtInput', inputDt); $wire.confirm()"
+                                x-bind:disabled="@js($locked) || changeMinor() < 0"
                                 wire:loading.attr="disabled"
                                 wire:target="confirm"
                                 :loading-indicator="false"

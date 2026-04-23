@@ -110,33 +110,6 @@ class ClotureModal extends Component
         $this->uiState = 'idle';
     }
 
-    /** 近似値ボタンから受領額をセット（Livewire 再描画で入力・お釣り表示を更新）。 */
-    public function setTendered(int $minor): void
-    {
-        $this->tenderedMinor = max(0, $minor);
-        $this->tenderedDtInput = $this->tenderedMinor > 0
-            ? MenuItemMoney::minorToDtInputString($this->tenderedMinor)
-            : '';
-        $this->recomputeChange();
-    }
-
-    public function updatedTenderedDtInput(): void
-    {
-        $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
-        $this->recomputeChange();
-    }
-
-    /** お釣り・不足の表示用（UI）。不足時は先頭にマイナス表記。 */
-    public function signedChangeDisplay(): string
-    {
-        $c = $this->changeMinor;
-        if ($c < 0) {
-            return '− '.$this->formatMinor(abs($c));
-        }
-
-        return $this->formatMinor(max(0, $c));
-    }
-
     public function confirm(): void
     {
         if ($this->uiState === 'in_flight' || $this->tableSessionId === null) {
@@ -146,8 +119,15 @@ class ClotureModal extends Component
 
         try {
             $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
-            $this->recomputeChange();
             $tendered = (int) ($this->tenderedMinor ?? 0);
+            $this->changeMinor = $tendered - $this->finalTotalMinor;
+
+            if ($tendered < $this->finalTotalMinor) {
+                $this->uiState = 'failed';
+                Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
+
+                return;
+            }
 
             app(FinalizeTableSettlementAction::class)->execute(
                 new FinalizeTableSettlementRequest(
@@ -256,11 +236,5 @@ class ClotureModal extends Component
         $this->changeMinor = 0;
 
         return true;
-    }
-
-    private function recomputeChange(): void
-    {
-        $tendered = (int) ($this->tenderedMinor ?? 0);
-        $this->changeMinor = $tendered - $this->finalTotalMinor;
     }
 }
