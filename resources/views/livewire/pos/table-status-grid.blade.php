@@ -19,7 +19,10 @@
                     optimisticTableId: null,
                     clickTile(tid) {
                         const token = Date.now()
-                        this.optimisticTableId = tid;
+                        this.optimisticTableId = null;
+                        this.$nextTick(() => {
+                            this.optimisticTableId = tid;
+                        })
                         window.dispatchEvent(
                             new CustomEvent('show-local-skeleton', {
                                 detail: {
@@ -60,9 +63,8 @@
                             type="button"
                             wire:click="openTableContext({{ $tid }}, {{ $sid }})"
                             @pointerdown="clickTile({{ $tid }})"
-                            @click="clickTile({{ $tid }})"
                             x-bind:class="{
-                                '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': @js($isSelected) || optimisticTableId === {{ $tid }},
+                                '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': optimisticTableId === {{ $tid }},
                             }"
                             @class([
                                 'relative z-0 flex w-full touch-manipulation flex-col rounded-md border-2 border-transparent p-0 py-[2px] text-left text-[10px] font-bold leading-none active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 sm:text-xs',
@@ -76,7 +78,7 @@
                                     $this->tileSurfaceClasses($tile),
                                 ])
                                 :class="{
-                                    'ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear dark:ring-amber-400': @js($isSelected) || optimisticTableId === {{ $tid }},
+                                    'ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear dark:ring-amber-400': optimisticTableId === {{ $tid }},
                                 }"
                             >
                                 <div class="line-clamp-1 text-[10px] leading-tight sm:text-xs {{ $lineTitle }}">
