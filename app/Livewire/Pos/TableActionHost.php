@@ -57,6 +57,8 @@ class TableActionHost extends Component
      */
     public Collection $posOrders;
 
+    public bool $isOrdersLoaded = false;
+
     public string $activeRestaurantTableName = '';
 
     public bool $addModalOpen = false;
@@ -124,6 +126,7 @@ class TableActionHost extends Component
     {
         $this->shopId = $shopId;
         $this->posOrders = collect();
+        $this->isOrdersLoaded = false;
     }
 
     #[On('pos-action-host-opened')]
@@ -148,12 +151,48 @@ class TableActionHost extends Component
             ->where('shop_id', $this->shopId)
             ->whereKey($tid)
             ->value('name') ?? '');
-        $this->loadSessionData($sid);
+        $this->memoSessionPricing = null;
+        $this->memoStaffMealPreDiscountTaxSum = null;
+        $this->activeTableSessionId = $sid;
+        $this->session = null;
+        $this->posOrders = collect();
+        $this->expectedSessionRevision = 0;
+        $this->isOrdersLoaded = false;
+
+        // Stage-1 shell load: session basic only.
+        if ($this->shopId > 0 && $sid !== null && $sid > 0) {
+            $this->session = TableSession::query()
+                ->where('shop_id', $this->shopId)
+                ->whereKey($sid)
+                ->first();
+            $this->syncExpectedRevisionFromSession();
+        }
 
         // 賄い卓: セッションは PIN 成功時（confirmStaffMealAuth）まで作らない。ここで ensure しないと Leave 後に空セッションが残りタイルが Active になる。
     }
 
     public function loadSessionData(?int $sessionId): void
+    {
+        $this->loadOrderDetails($sessionId);
+    }
+
+    #[On('pos-action-host-opened-details')]
+    public function onActionHostOpenedDetails(mixed $tableId = null, mixed $sessionId = null): void
+    {
+        $tid = is_numeric($tableId) ? (int) $tableId : 0;
+        if ($tid < 1 || $this->activeRestaurantTableId === null || $tid !== (int) $this->activeRestaurantTableId) {
+            return;
+        }
+
+        $sid = is_numeric($sessionId) ? (int) $sessionId : null;
+        if (($sid ?? null) !== ($this->activeTableSessionId ?? null)) {
+            return;
+        }
+
+        $this->loadOrderDetails($sid);
+    }
+
+    public function loadOrderDetails(?int $sessionId): void
     {
         $this->memoSessionPricing = null;
         $this->memoStaffMealPreDiscountTaxSum = null;
@@ -161,10 +200,15 @@ class TableActionHost extends Component
         $this->session = null;
         $this->posOrders = collect();
         $this->expectedSessionRevision = 0;
+        $this->isOrdersLoaded = false;
         if ($this->shopId === 0) {
+            $this->isOrdersLoaded = true;
+
             return;
         }
         if ($sessionId === null || $sessionId < 1) {
+            $this->isOrdersLoaded = true;
+
             return;
         }
         $this->session = TableSession::query()
@@ -172,6 +216,8 @@ class TableActionHost extends Component
             ->whereKey($sessionId)
             ->first();
         if ($this->session === null) {
+            $this->isOrdersLoaded = true;
+
             return;
         }
         $this->posOrders = PosOrder::query()
@@ -184,6 +230,7 @@ class TableActionHost extends Component
             ->orderBy('id')
             ->get();
         $this->syncExpectedRevisionFromSession();
+        $this->isOrdersLoaded = true;
     }
 
     /**
@@ -362,6 +409,7 @@ class TableActionHost extends Component
         $this->activeRestaurantTableName = '';
         $this->session = null;
         $this->posOrders = collect();
+        $this->isOrdersLoaded = false;
         $this->uiState = 'idle';
         $this->pendingEchoReload = false;
         $this->expectedSessionRevision = 0;
@@ -1224,7 +1272,9 @@ class TableActionHost extends Component
 
     public function getFooterActionsLockedProperty(): bool
     {
-        return $this->uiState === 'in_flight' || $this->requiresStaffMealAuth;
+        return $this->uiState === 'in_flight'
+            || ! $this->isOrdersLoaded
+            || $this->requiresStaffMealAuth;
     }
 
     public function getActiveTableCategoryProperty(): ?TableCategory
