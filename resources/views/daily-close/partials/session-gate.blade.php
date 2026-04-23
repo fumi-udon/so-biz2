@@ -59,7 +59,7 @@
                 <input
                     id="dc-gate-pin"
                     type="password"
-                    wire:model.live.debounce.300ms="gatePinInput"
+                    wire:model.defer="gatePinInput"
                     maxlength="4"
                     inputmode="numeric"
                     autocomplete="one-time-code"

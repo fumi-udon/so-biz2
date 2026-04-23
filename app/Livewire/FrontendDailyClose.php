@@ -23,6 +23,8 @@ use Throwable;
 #[Layout('layouts.daily-close')]
 class FrontendDailyClose extends Component
 {
+    private const RESPONSIBLE_MIN_LEVEL_EXCLUSIVE = 1;
+
     private const ERR_RECETTES_LUNCH_BEFORE_15H = 'Les données seront synchronisées après 15h00. Réessayez plus tard.';
 
     private const ERR_RECETTES_DINNER_BEFORE_2210 = 'Les données seront synchronisées après 22h00. Réessayez plus tard.';
@@ -128,52 +130,52 @@ class FrontendDailyClose extends Component
 
     public function updatedDataLunchRecettes(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('lunch_recettes', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataLunchChips(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('lunch_chips', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataLunchCash(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('lunch_cash', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataLunchCheque(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('lunch_cheque', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataLunchCarte(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('lunch_carte', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataDinnerRecettes(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('dinner_recettes', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataDinnerChips(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('dinner_chips', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataDinnerCash(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('dinner_cash', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataDinnerCheque(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('dinner_cheque', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedDataDinnerCarte(mixed $value): void
     {
-        $this->syncNormalizedCaisseMoney('dinner_carte', $value);
+        // Keep in-progress text untouched while typing.
     }
 
     public function updatedGatePinInput(mixed $value): void
@@ -182,14 +184,6 @@ class FrontendDailyClose extends Component
         $digits = substr($digits, 0, 4);
         if ($digits !== (string) $value) {
             $this->gatePinInput = $digits;
-        }
-    }
-
-    private function syncNormalizedCaisseMoney(string $key, mixed $value): void
-    {
-        $normalized = CaisseMoneyInputNormalizer::normalizeToMaxOneDecimal($value);
-        if (($this->data[$key] ?? null) !== $normalized) {
-            $this->data[$key] = $normalized;
         }
     }
 
@@ -221,7 +215,7 @@ class FrontendDailyClose extends Component
             ->where('pin_code', '!=', '')
             ->whereHas(
                 'jobLevel',
-                fn ($query) => $query->where('level', '>', 3),
+                fn ($query) => $query->where('level', '>', self::RESPONSIBLE_MIN_LEVEL_EXCLUSIVE),
             )
             ->orderBy('name')
             ->pluck('name', 'id')
@@ -257,12 +251,15 @@ class FrontendDailyClose extends Component
             ->where('pin_code', '!=', '')
             ->whereHas(
                 'jobLevel',
-                fn ($query) => $query->where('level', '>', 3),
+                fn ($query) => $query->where('level', '>', self::RESPONSIBLE_MIN_LEVEL_EXCLUSIVE),
             )
             ->find($staffId);
 
         if ($staff === null) {
-            $this->addError('gateStaffId', 'Responsable invalide ou niveau insuffisant (niveau > 3 requis).');
+            $this->addError('gateStaffId', sprintf(
+                'Responsable invalide ou niveau insuffisant (niveau > %d requis).',
+                self::RESPONSIBLE_MIN_LEVEL_EXCLUSIVE
+            ));
 
             return;
         }
@@ -458,6 +455,8 @@ class FrontendDailyClose extends Component
 
             return;
         }
+
+        $this->normalizeSelectedShiftMoneyInputsForSubmit();
 
         $rules = $this->rulesForSubmit();
         $this->validate($rules, [], $this->validationAttributes());
@@ -770,5 +769,18 @@ class FrontendDailyClose extends Component
             'chips' => $data[$prefix.'chips'] ?? 0,
             'montant_initial' => $data[$prefix.'montant_initial'] ?? 0,
         ];
+    }
+
+    private function normalizeSelectedShiftMoneyInputsForSubmit(): void
+    {
+        $shift = (string) ($this->data['shift'] ?? 'dinner');
+        $prefix = $shift === 'lunch' ? 'lunch_' : 'dinner_';
+        $keys = ['recettes', 'chips', 'cash', 'cheque', 'carte'];
+
+        foreach ($keys as $key) {
+            $fullKey = $prefix.$key;
+            $normalized = CaisseMoneyInputNormalizer::normalizeToMaxOneDecimal($this->data[$fullKey] ?? null);
+            $this->data[$fullKey] = $normalized ?? '0';
+        }
     }
 }
