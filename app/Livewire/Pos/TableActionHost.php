@@ -130,7 +130,7 @@ class TableActionHost extends Component
     }
 
     #[On('pos-action-host-opened')]
-    public function onActionHostOpened(mixed $tableId = null, mixed $sessionId = null): void
+    public function onActionHostOpened(mixed $tableId = null, mixed $sessionId = null, mixed $tableName = null): void
     {
         $tid = is_numeric($tableId) ? (int) $tableId : null;
         if ($sessionId === null || $sessionId === 'null' || $sessionId === '') {
@@ -147,10 +147,13 @@ class TableActionHost extends Component
         $this->staffMealAuthPin = '';
 
         $this->activeRestaurantTableId = $tid;
-        $this->activeRestaurantTableName = (string) (RestaurantTable::query()
-            ->where('shop_id', $this->shopId)
-            ->whereKey($tid)
-            ->value('name') ?? '');
+        $incomingTableName = is_string($tableName) ? trim($tableName) : '';
+        $this->activeRestaurantTableName = $incomingTableName !== ''
+            ? $incomingTableName
+            : (string) (RestaurantTable::query()
+                ->where('shop_id', $this->shopId)
+                ->whereKey($tid)
+                ->value('name') ?? '');
         $this->memoSessionPricing = null;
         $this->memoStaffMealPreDiscountTaxSum = null;
         $this->activeTableSessionId = $sid;
@@ -158,15 +161,6 @@ class TableActionHost extends Component
         $this->posOrders = collect();
         $this->expectedSessionRevision = 0;
         $this->isOrdersLoaded = false;
-
-        // Stage-1 shell load: session basic only.
-        if ($this->shopId > 0 && $sid !== null && $sid > 0) {
-            $this->session = TableSession::query()
-                ->where('shop_id', $this->shopId)
-                ->whereKey($sid)
-                ->first();
-            $this->syncExpectedRevisionFromSession();
-        }
 
         // 賄い卓: セッションは PIN 成功時（confirmStaffMealAuth）まで作らない。ここで ensure しないと Leave 後に空セッションが残りタイルが Active になる。
     }
@@ -225,7 +219,7 @@ class TableActionHost extends Component
             ->where('table_session_id', $sessionId)
             ->where('status', '!=', OrderStatus::Voided)
             ->with([
-                'lines' => static fn ($q) => $q->orderBy('id')->with('menuItem'),
+                'lines' => static fn ($q) => $q->orderBy('id'),
             ])
             ->orderBy('id')
             ->get();

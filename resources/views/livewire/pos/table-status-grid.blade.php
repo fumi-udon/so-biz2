@@ -58,7 +58,7 @@
                     >
                         <button
                             type="button"
-                            wire:click="openTableContext({{ $tid }}, {{ $sid }})"
+                            wire:click="openTableContext({{ $tid }}, {{ $sid }}, @js((string) ($tile['restaurantTableName'] ?? '')))"
                             @pointerdown="clickTile({{ $tid }})"
                             @click="clickTile({{ $tid }})"
                             x-bind:class="{

@@ -53,7 +53,7 @@ class TableStatusGrid extends Component
         );
     }
 
-    public function openTableContext(int $tableId, mixed $sessionId = null): void
+    public function openTableContext(int $tableId, mixed $sessionId = null, ?string $tableName = null): void
     {
         $sid = is_numeric($sessionId) ? (int) $sessionId : null;
         if ($sid !== null && $sid < 1) {
@@ -63,7 +63,12 @@ class TableStatusGrid extends Component
         $this->selectedTableId = $tableId;
         $this->isPollingPaused = true;
         $this->dispatch('pos-tile-interaction-started');
-        $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid);
+        $this->dispatch(
+            'pos-action-host-opened',
+            tableId: $tableId,
+            sessionId: $sid,
+            tableName: is_string($tableName) ? trim($tableName) : null,
+        );
     }
 
     #[On('pos-tile-interaction-ended')]

@@ -85,14 +85,12 @@
         const detail = $event.detail || {}
         const tableId = detail.tableId ?? null
         const sessionId = detail.sessionId ?? null
-        setTimeout(() => {
-            if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
-                window.Livewire.dispatch('pos-action-host-opened-details', {
-                    tableId: tableId,
-                    sessionId: sessionId,
-                })
-            }
-        }, 50)
+        if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
+            window.Livewire.dispatch('pos-action-host-opened-details', {
+                tableId: tableId,
+                sessionId: sessionId,
+            })
+        }
     "
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
