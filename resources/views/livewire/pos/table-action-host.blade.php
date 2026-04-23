@@ -85,11 +85,16 @@
         const detail = $event.detail || {}
         const tableId = detail.tableId ?? null
         const sessionId = detail.sessionId ?? null
-        if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
-            window.Livewire.dispatch('pos-action-host-opened-details', {
-                tableId: tableId,
-                sessionId: sessionId,
-            })
+        const sid = sessionId !== null ? Number(sessionId) : null
+        if (sid !== null && Number.isFinite(sid) && sid > 0) {
+            setTimeout(() => {
+                if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
+                    window.Livewire.dispatch('pos-action-host-opened-details', {
+                        tableId: tableId,
+                        sessionId: sessionId,
+                    })
+                }
+            }, 0)
         }
     "
     x-on:pos-tile-interaction-ended.window="
