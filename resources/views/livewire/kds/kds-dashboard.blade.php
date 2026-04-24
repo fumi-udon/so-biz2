@@ -39,24 +39,24 @@
                 </span>
                 <span class="hidden text-[10px] text-slate-500 sm:inline sm:text-xs">{{ now()->format('H:i') }}</span>
                 @if ($hasShop)
-                    <div class="hidden shrink-0 flex-col gap-0.5 border-l border-slate-700 pl-1.5 sm:flex">
-                        <label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[10px] font-medium text-slate-200">
+                    <div class="hidden shrink-0 flex-row flex-wrap items-center gap-x-5 gap-y-2 border-l border-slate-700 pl-2 sm:flex md:gap-x-8">
+                        <label class="flex min-h-12 min-w-0 cursor-pointer touch-manipulation select-none items-center gap-3 rounded-lg border border-slate-600/90 bg-slate-800/90 px-3 py-2 sm:min-h-14 sm:gap-3.5 sm:px-4 sm:py-2.5">
                             <input
                                 type="checkbox"
-                                class="h-3.5 w-3.5 rounded border-slate-500 bg-slate-800 text-rose-600"
+                                class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
                                 x-model="showKitchen"
                                 @change="persistKdsFilterToggles()"
                             />
-                            <span>{{ __('kds.filter_kitchen') }}</span>
+                            <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_kitchen') }}</span>
                         </label>
-                        <label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[10px] font-medium text-slate-200">
+                        <label class="flex min-h-12 min-w-0 cursor-pointer touch-manipulation select-none items-center gap-3 rounded-lg border border-slate-600/90 bg-slate-800/90 px-3 py-2 sm:min-h-14 sm:gap-3.5 sm:px-4 sm:py-2.5">
                             <input
                                 type="checkbox"
-                                class="h-3.5 w-3.5 rounded border-slate-500 bg-slate-800 text-rose-600"
+                                class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
                                 x-model="showHall"
                                 @change="persistKdsFilterToggles()"
                             />
-                            <span>{{ __('kds.filter_hall') }}</span>
+                            <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_hall') }}</span>
                         </label>
                     </div>
                     @php
