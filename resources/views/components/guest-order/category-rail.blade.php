@@ -1,12 +1,12 @@
 {{--
-    Category sticky tab rail.
+    Category tab rail: fixed under header on small screens, sticky sidebar on md+.
     Props:
       $categories  – array of ['id' => string, 'label' => string]
 --}}
 @props(['categories'])
 
 <nav
-    class="sticky top-0 z-30 max-w-full border-b border-slate-200 bg-white/95 text-gray-950 backdrop-blur-sm dark:border-slate-700 dark:bg-gray-900/95 dark:text-white md:top-0 md:z-20 md:w-52 md:max-w-full md:shrink-0 md:self-start md:border-b-0 md:border-r md:overflow-hidden"
+    class="max-md:fixed max-md:inset-x-0 max-md:top-14 max-md:z-30 max-md:max-w-full md:sticky md:top-0 md:z-20 max-w-full border-b border-slate-200 bg-white/95 text-gray-950 backdrop-blur-sm dark:border-slate-700 dark:bg-gray-900/95 dark:text-white md:w-52 md:max-w-full md:shrink-0 md:self-start md:border-b-0 md:border-r md:overflow-hidden"
     aria-label="{{ __('guest-order.your_order') }}"
 >
     <div

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Exports;
 
+use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\MenuItem;
 use Filament\Actions\Exports\ExportColumn;
 use Filament\Actions\Exports\Exporter;
@@ -10,6 +11,8 @@ use Illuminate\Support\Number;
 
 class MenuItemExporter extends Exporter
 {
+    use RunsFilamentCsvJobsOnSyncQueueInLocal;
+
     protected static ?string $model = MenuItem::class;
 
     public static function getColumns(): array

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Imports;
 
+use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\DietaryBadge;
 use App\Models\MenuItem;
 use Filament\Actions\Imports\ImportColumn;
@@ -12,6 +13,8 @@ use Illuminate\Support\Number;
 
 class MenuItemImporter extends Importer
 {
+    use RunsFilamentCsvJobsOnSyncQueueInLocal;
+
     protected static ?string $model = MenuItem::class;
 
     public static function getColumns(): array

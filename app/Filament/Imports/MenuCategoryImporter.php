@@ -2,6 +2,7 @@
 
 namespace App\Filament\Imports;
 
+use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\MenuCategory;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
@@ -11,6 +12,8 @@ use Illuminate\Support\Number;
 
 class MenuCategoryImporter extends Importer
 {
+    use RunsFilamentCsvJobsOnSyncQueueInLocal;
+
     protected static ?string $model = MenuCategory::class;
 
     public static function getColumns(): array

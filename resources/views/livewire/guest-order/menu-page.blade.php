@@ -103,6 +103,9 @@
         <div class="w-5"></div>
     </header>
 
+    {{-- Reserve height for fixed category rail on small screens (rail is out of flow). --}}
+    <div class="h-12 shrink-0 md:hidden" aria-hidden="true"></div>
+
     {{-- ── Catalog + cart: column on phone, row from md (rail | menu | cart) ─ --}}
     <div class="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row md:items-start">
         {{-- ── Sticky category rail (horizontal phone / vertical md+) ───────── --}}

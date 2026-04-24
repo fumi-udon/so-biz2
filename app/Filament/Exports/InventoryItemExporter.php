@@ -2,6 +2,7 @@
 
 namespace App\Filament\Exports;
 
+use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\InventoryItem;
 use Filament\Actions\Exports\ExportColumn;
 use Filament\Actions\Exports\Exporter;
@@ -10,6 +11,8 @@ use Illuminate\Support\Number;
 
 class InventoryItemExporter extends Exporter
 {
+    use RunsFilamentCsvJobsOnSyncQueueInLocal;
+
     protected static ?string $model = InventoryItem::class;
 
     public static function getColumns(): array

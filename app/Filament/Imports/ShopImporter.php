@@ -2,6 +2,7 @@
 
 namespace App\Filament\Imports;
 
+use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\Shop;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
@@ -11,6 +12,8 @@ use Illuminate\Support\Number;
 
 class ShopImporter extends Importer
 {
+    use RunsFilamentCsvJobsOnSyncQueueInLocal;
+
     protected static ?string $model = Shop::class;
 
     public static function getColumns(): array

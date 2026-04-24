@@ -2,6 +2,7 @@
 
 namespace App\Filament\Exports;
 
+use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\Staff;
 use App\Support\FixedShiftsCsv;
 use Filament\Actions\Exports\ExportColumn;
@@ -11,6 +12,8 @@ use Illuminate\Support\Number;
 
 class StaffExporter extends Exporter
 {
+    use RunsFilamentCsvJobsOnSyncQueueInLocal;
+
     protected static ?string $model = Staff::class;
 
     public static function getColumns(): array

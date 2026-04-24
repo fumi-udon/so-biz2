@@ -2,6 +2,7 @@
 
 namespace App\Filament\Imports;
 
+use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\Staff;
 use App\Support\FixedShiftsCsv;
 use Filament\Actions\Imports\ImportColumn;
@@ -12,6 +13,8 @@ use Illuminate\Support\Number;
 
 class StaffImporter extends Importer
 {
+    use RunsFilamentCsvJobsOnSyncQueueInLocal;
+
     protected static ?string $model = Staff::class;
 
     public static function getColumns(): array
