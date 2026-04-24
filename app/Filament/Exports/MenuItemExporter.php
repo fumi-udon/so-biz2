@@ -34,14 +34,18 @@ class MenuItemExporter extends Exporter
             ExportColumn::make('allergy_note')->label('allergy_note'),
             ExportColumn::make('dietary_slugs')
                 ->label('dietary_slugs')
-                ->formatStateUsing(function (mixed $state, MenuItem $record): string {
+                ->state(function (MenuItem $record): string {
                     return $record->dietaryBadges->pluck('slug')->implode(',');
                 }),
             ExportColumn::make('options_payload')
                 ->label('options_payload')
-                ->formatStateUsing(fn ($state): string => is_array($state)
-                    ? json_encode($state, JSON_UNESCAPED_UNICODE)
-                    : (string) $state),
+                ->state(function (MenuItem $record): string {
+                    $payload = $record->options_payload;
+
+                    return is_array($payload)
+                        ? json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                        : (string) ($payload ?? '');
+                }),
         ];
     }
 
