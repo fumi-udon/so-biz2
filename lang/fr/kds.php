@@ -40,4 +40,8 @@ return [
     'last_ok_at' => 'Dernier succès',
     'bucket_staff' => 'Staff',
     'bucket_takeaway' => 'Takeaway',
+
+    'filter_kitchen' => 'Kitchen',
+    'filter_hall' => 'Hall',
+    'filter_config_warning' => 'Filtres KDS Kitchen/Hall non configurés. Réglez-les dans Admin → Filtre KDS. Tous les articles sont affichés.',
 ];

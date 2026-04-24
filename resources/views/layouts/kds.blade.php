@@ -11,6 +11,7 @@
 
     <style>
         html, body { background-color: #0b1120; }
+        [x-cloak] { display: none !important; }
     </style>
 </head>
 <body class="h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none bg-slate-950 text-slate-100 antialiased">
@@ -46,8 +47,15 @@
          * - Pusher 障害時は何も起こらず、wire:poll.10s が 10 秒以内に追従する。
          */
         document.addEventListener('alpine:init', () => {
-            window.Alpine.data('kdsEchoBridge', ({ shopId }) => ({
-                shopId: Number(shopId) || 0,
+            window.Alpine.data('kdsEchoBridge', (opts = {}) => ({
+                shopId: Number(opts.shopId) || 0,
+                kitchenIds: Array.isArray(opts.kitchenIds) ? opts.kitchenIds.map((n) => Number(n)) : [],
+                hallIds: Array.isArray(opts.hallIds) ? opts.hallIds.map((n) => Number(n)) : [],
+                filterStrict: Boolean(opts.filterStrict),
+                showFilterConfigWarning: Boolean(opts.showFilterConfigWarning),
+                columnFilterMetas: Array.isArray(opts.columnFilterMetas) ? opts.columnFilterMetas : [],
+                showKitchen: true,
+                showHall: true,
                 pendingEchoReload: null,
                 channel: null,
                 privateChannel: null,
@@ -63,7 +71,76 @@
                     }
                 },
 
+                loadKdsFilterTogglesFromStorage() {
+                    if (!this.shopId) {
+                        return;
+                    }
+                    try {
+                        const raw = localStorage.getItem('kds.filters.v1.' + this.shopId);
+                        if (!raw) {
+                            return;
+                        }
+                        const p = JSON.parse(raw);
+                        if (typeof p.showKitchen === 'boolean') {
+                            this.showKitchen = p.showKitchen;
+                        }
+                        if (typeof p.showHall === 'boolean') {
+                            this.showHall = p.showHall;
+                        }
+                    } catch (e) {
+                        /* ignore */
+                    }
+                },
+
+                persistKdsFilterToggles() {
+                    if (!this.shopId) {
+                        return;
+                    }
+                    try {
+                        localStorage.setItem(
+                            'kds.filters.v1.' + this.shopId,
+                            JSON.stringify({ showKitchen: this.showKitchen, showHall: this.showHall }),
+                        );
+                    } catch (e) {
+                        /* ignore */
+                    }
+                },
+
+                ticketVisible(cat) {
+                    if (!this.filterStrict) {
+                        return true;
+                    }
+                    if (cat === null || cat === undefined) {
+                        return true;
+                    }
+                    const c = Number(cat);
+                    if (Number.isNaN(c)) {
+                        return true;
+                    }
+                    const inK = this.kitchenIds.includes(c);
+                    const inH = this.hallIds.includes(c);
+                    if (!inK && !inH) {
+                        return true;
+                    }
+                    if (!this.showKitchen && !this.showHall) {
+                        return true;
+                    }
+                    return (this.showKitchen && inK) || (this.showHall && inH);
+                },
+
+                visibleTicketCountForColumn(idx) {
+                    const meta = this.columnFilterMetas[idx] || [];
+                    let n = 0;
+                    for (let i = 0; i < meta.length; i++) {
+                        if (this.ticketVisible(meta[i].c)) {
+                            n++;
+                        }
+                    }
+                    return n;
+                },
+
                 initEcho() {
+                    this.loadKdsFilterTogglesFromStorage();
                     if (!this.shopId || typeof window.Echo === 'undefined') {
                         this.pushStatus('disconnected');
                         return;

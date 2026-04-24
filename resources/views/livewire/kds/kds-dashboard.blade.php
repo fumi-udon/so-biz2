@@ -3,12 +3,13 @@
     /** @var int $queuedBatchCount */
     /** @var bool $hasShop */
     /** @var array{offline:bool,last_fail_at:?string,last_fail_hms:?string,last_ok_hms:?string,last_fail_error:?string} $broadcastHealth */
+    /** @var array<string, mixed> $kdsClientBootstrap */
 @endphp
 <div
     id="kds-dashboard-root"
     class="flex h-[100dvh] max-h-[100dvh] w-screen min-w-0 flex-col overflow-hidden bg-slate-950 text-slate-100"
     wire:poll.{{ max(2, min(60, (int) $pollSeconds)) }}s
-    x-data="kdsEchoBridge({ shopId: {{ (int) $shopId }} })"
+    x-data="kdsEchoBridge(@js($kdsClientBootstrap))"
     x-init="initEcho(); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
 >
     <header class="z-10 shrink-0 border-b border-slate-800 bg-slate-900/90 backdrop-blur">
@@ -38,6 +39,26 @@
                 </span>
                 <span class="hidden text-[10px] text-slate-500 sm:inline sm:text-xs">{{ now()->format('H:i') }}</span>
                 @if ($hasShop)
+                    <div class="hidden shrink-0 flex-col gap-0.5 border-l border-slate-700 pl-1.5 sm:flex">
+                        <label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[10px] font-medium text-slate-200">
+                            <input
+                                type="checkbox"
+                                class="h-3.5 w-3.5 rounded border-slate-500 bg-slate-800 text-rose-600"
+                                x-model="showKitchen"
+                                @change="persistKdsFilterToggles()"
+                            />
+                            <span>{{ __('kds.filter_kitchen') }}</span>
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[10px] font-medium text-slate-200">
+                            <input
+                                type="checkbox"
+                                class="h-3.5 w-3.5 rounded border-slate-500 bg-slate-800 text-rose-600"
+                                x-model="showHall"
+                                @change="persistKdsFilterToggles()"
+                            />
+                            <span>{{ __('kds.filter_hall') }}</span>
+                        </label>
+                    </div>
                     @php
                         $q = max(0, (int) $queuedBatchCount);
                         $queueBadgeClass = $q === 0
@@ -78,6 +99,16 @@
     </header>
 
     <main class="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden px-1 py-1">
+        @if ($hasShop)
+            <div
+                x-cloak
+                x-show="showFilterConfigWarning"
+                class="mb-1.5 shrink-0 rounded border border-amber-500/70 bg-amber-950/50 px-2 py-1.5 text-[10px] font-medium text-amber-100 sm:text-xs"
+                role="status"
+            >
+                {{ __('kds.filter_config_warning') }}
+            </div>
+        @endif
         @if ($broadcastHealth['offline'])
             <div class="mb-1.5 shrink-0 rounded border border-amber-600/60 bg-amber-900/30 px-2 py-1.5 text-[10px] text-amber-100 sm:text-xs">
                 <p class="font-semibold">{{ __('kds.offline_mode_title') }}</p>
@@ -110,7 +141,7 @@
             </div>
         @else
             <div class="grid min-h-0 min-w-0 flex-1 grid-cols-3 gap-1.5 overflow-hidden pb-1 sm:gap-2">
-                @foreach ($columns as $col)
+                @foreach ($columns as $colIndex => $col)
                     @php
                         $isBacklog = in_array($col['category'] ?? '', ['staff', 'takeaway'], true);
                     @endphp
@@ -129,7 +160,7 @@
                                     </span>
                                 @endif
                                 <span class="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">
-                                    {{ count($col['tickets']) }}
+                                    <span x-text="visibleTicketCountForColumn({{ (int) $colIndex }})">{{ count($col['tickets']) }}</span>
                                 </span>
                             </div>
                         </header>
@@ -175,6 +206,7 @@
                                         isNew: {{ ($ticket->kds_is_new_arrival ?? false) ? 'true' : 'false' }},
                                         animate: false,
                                     }"
+                                    x-show="$root.ticketVisible(@js($ticket->menuItem?->menu_category_id))"
                                     x-init="
                                         window.__kdsSeenKeys = window.__kdsSeenKeys || {};
                                         if (!window.__kdsSeenKeys[key] && isNew) {

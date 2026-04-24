@@ -40,4 +40,8 @@ return [
     'last_ok_at' => '直近成功',
     'bucket_staff' => 'スタッフ',
     'bucket_takeaway' => 'Takeaway',
+
+    'filter_kitchen' => 'Kitchen',
+    'filter_hall' => 'Hall',
+    'filter_config_warning' => 'KDS フィルター（Kitchen/Hall）の対象カテゴリが未設定です。管理画面の「KDS フィルター」から設定してください。全商品を表示しています。',
 ];

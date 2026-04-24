@@ -12,6 +12,7 @@ use App\Models\Shop;
 use App\Models\TableSession;
 use App\Services\Kds\KdsBroadcastService;
 use App\Services\Kds\KdsQueryService;
+use App\Support\KdsFilterSetting;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -172,6 +173,11 @@ class KdsDashboard extends Component
             $ordinal = (int) $tableBatchOrdinal[$tid];
             $baseName = (string) ($col['tableName'] !== '' ? $col['tableName'] : '#'.$tid);
             $col['displayLabel'] = $ordinal === 1 ? $baseName : "{$baseName} (Add #{$ordinal})";
+            $col['filterTicketMeta'] = array_values(array_map(static function (OrderLine $t): array {
+                $mid = $t->menuItem?->menu_category_id;
+
+                return ['c' => $mid !== null ? (int) $mid : null];
+            }, $tickets));
             $out[] = $col;
         }
 
@@ -197,6 +203,40 @@ class KdsDashboard extends Component
     public function getQueuedBatchCountProperty(): int
     {
         return $this->kdsBoard['queuedBatchCount'];
+    }
+
+    /**
+     * Alpine `kdsEchoBridge` 向け（wire:poll 後も localStorage でトグルを復元）。
+     *
+     * @return array{shopId: int, kitchenIds: list<int>, hallIds: list<int>, filterStrict: bool, showFilterConfigWarning: bool, columnFilterMetas: list<list<array{c: int|null}>>}
+     */
+    public function getKdsClientBootstrapProperty(): array
+    {
+        if ($this->shopId === 0) {
+            return [
+                'shopId' => 0,
+                'kitchenIds' => [],
+                'hallIds' => [],
+                'filterStrict' => false,
+                'showFilterConfigWarning' => false,
+                'columnFilterMetas' => [],
+            ];
+        }
+
+        $configured = KdsFilterSetting::isCategoryFilterConfigured($this->shopId);
+        $cols = $this->tableColumns;
+
+        return [
+            'shopId' => $this->shopId,
+            'kitchenIds' => KdsFilterSetting::kitchenCategoryIds($this->shopId),
+            'hallIds' => KdsFilterSetting::hallCategoryIds($this->shopId),
+            'filterStrict' => $configured,
+            'showFilterConfigWarning' => ! $configured,
+            'columnFilterMetas' => array_values(array_map(
+                static fn (array $c): array => $c['filterTicketMeta'] ?? [],
+                $cols
+            )),
+        ];
     }
 
     /**
@@ -431,6 +471,7 @@ class KdsDashboard extends Component
             'queuedBatchCount' => $this->queuedBatchCount,
             'hasShop' => $this->shopId !== 0,
             'broadcastHealth' => $this->broadcastHealth,
+            'kdsClientBootstrap' => $this->kdsClientBootstrap,
         ]);
     }
 }

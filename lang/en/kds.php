@@ -40,4 +40,8 @@ return [
     'last_ok_at' => 'Last success',
     'bucket_staff' => 'Staff',
     'bucket_takeaway' => 'Takeaway',
+
+    'filter_kitchen' => 'Kitchen',
+    'filter_hall' => 'Hall',
+    'filter_config_warning' => 'KDS Kitchen/Hall category filters are not configured. Set them in Admin → KDS filter. Showing all items.',
 ];
