@@ -1,5 +1,6 @@
 @php
     /** @var list<array<string, mixed>> $columns */
+    /** @var int $queuedBatchCount */
     /** @var bool $hasShop */
     /** @var array{offline:bool,last_fail_at:?string,last_fail_hms:?string,last_ok_hms:?string,last_fail_error:?string} $broadcastHealth */
 @endphp
@@ -37,6 +38,20 @@
                 </span>
                 <span class="hidden text-[10px] text-slate-500 sm:inline sm:text-xs">{{ now()->format('H:i') }}</span>
                 @if ($hasShop)
+                    @php
+                        $q = max(0, (int) $queuedBatchCount);
+                        $queueBadgeClass = $q === 0
+                            ? 'bg-gray-800 text-gray-400'
+                            : ($q >= 5
+                                ? 'bg-amber-900/40 text-amber-100 animate-pulse'
+                                : 'bg-blue-900/40 text-blue-100');
+                    @endphp
+                    <span
+                        class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold tabular-nums sm:text-xs {{ $queueBadgeClass }}"
+                        title="{{ __('kds.queue_waiting', ['count' => $q]) }}"
+                    >
+                        {{ __('kds.queue_waiting', ['count' => $q]) }}
+                    </span>
                     <button
                         type="button"
                         wire:click="toggleHistory"
@@ -94,29 +109,14 @@
                 <p class="mt-1 text-xs text-slate-400">{{ __('kds.empty_subtitle') }}</p>
             </div>
         @else
-            <div class="flex min-h-0 min-w-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1 transition-all duration-300 [-webkit-overflow-scrolling:touch] sm:gap-3">
+            <div class="grid min-h-0 min-w-0 flex-1 grid-cols-3 gap-1.5 overflow-hidden pb-1 sm:gap-2">
                 @foreach ($columns as $col)
                     @php
                         $isBacklog = in_array($col['category'] ?? '', ['staff', 'takeaway'], true);
                     @endphp
                     <section
                         wire:key="kds-batch-{{ $col['batchKey'] }}"
-                        class="flex h-full max-h-full min-h-0 w-[min(18rem,72vw)] flex-none flex-col overflow-hidden rounded-lg border shadow-lg sm:w-72 {{ $isBacklog ? 'border-slate-700 bg-slate-800/80' : 'border-slate-800 bg-slate-900/70' }}"
-                        x-data="{
-                            dismissing: false,
-                            allServed: {{ ($col['allServed'] ?? false) ? 'true' : 'false' }},
-                            triggerDismiss() {
-                                if (this.dismissing) {
-                                    return;
-                                }
-                                this.dismissing = true;
-                            }
-                        }"
-                        x-init="if (allServed) setTimeout(() => triggerDismiss(), 40); $watch('allServed', v => { if (v) setTimeout(() => triggerDismiss(), 40) })"
-                        x-show="!dismissing"
-                        x-transition:leave="ease-in duration-400"
-                        x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                        x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
+                        class="flex h-full max-h-full min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-lg border shadow-lg {{ $isBacklog ? 'border-slate-700 bg-slate-800/80' : 'border-slate-800 bg-slate-900/70' }}"
                     >
                         <header class="flex min-h-14 items-center justify-between border-b px-4 py-3 {{ $isBacklog ? 'border-slate-700 bg-slate-800' : 'border-slate-800 bg-slate-900' }}">
                             <h2 class="text-lg font-bold tracking-wide {{ $isBacklog ? 'text-slate-200' : 'text-slate-100' }}">
@@ -229,9 +229,7 @@
                                                     <span class="text-xs font-normal leading-snug {{ $modColor }}">+ {{ implode(', ', $toppingNames) }}</span>
                                                 @endif
                                             </span>
-                                            <span class="shrink-0 rounded-full bg-rose-700/70 px-2 py-1 text-xs text-rose-50">
-                                                {{ __('kds.tap_to_serve') }}
-                                            </span>
+
                                         </button>
                                     @endif
                                 </li>

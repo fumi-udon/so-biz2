@@ -5,6 +5,7 @@ return [
 
     'dashboard_title' => 'Écran cuisine',
     'dashboard_subtitle' => 'Auto-refresh 60s en ligne / 2s hors ligne',
+    'queue_waiting' => 'En attente : :count',
     'poll_indicator' => 'En direct',
     'no_shop' => "Aucune boutique active n'est configurée.",
     'empty_title' => 'Aucun ticket actif',

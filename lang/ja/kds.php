@@ -5,6 +5,7 @@ return [
 
     'dashboard_title' => 'キッチンディスプレイ',
     'dashboard_subtitle' => 'Echo接続時は60秒、切断時は2秒で自動更新',
+    'queue_waiting' => '待機中: :count',
     'poll_indicator' => '稼働中',
     'no_shop' => 'アクティブな店舗が設定されていません。',
     'empty_title' => '現在アクティブなチケットはありません',

@@ -58,22 +58,18 @@ class KdsDashboard extends Component
     }
 
     /**
-     * テーブル単位にグルーピング済みのチケット集合を返す。
+     * KDS ボード状態（FIFO ソート済み全列・先頭 3 列・待機数）。
      *
-     * 形: [
-     *   'tableId' => int,
-     *   'tableName' => string,
-     *   'sortOrder' => int,
-     *   'tickets' => list<OrderLine>, // 赤→緑→新しい順
-     *   'allServed' => bool, // 列内がすべて Served のとき true（アニメ用）
-     * ][]
-     *
-     * @return list<array<string, mixed>>
+     * @return array{visibleColumns: list<array<string, mixed>>, queuedBatchCount: int, totalBatchCount: int}
      */
-    public function getTableColumnsProperty(): array
+    public function getKdsBoardProperty(): array
     {
         if ($this->shopId === 0) {
-            return [];
+            return [
+                'visibleColumns' => [],
+                'queuedBatchCount' => 0,
+                'totalBatchCount' => 0,
+            ];
         }
 
         /** @var Collection<int, OrderLine> $rows */
@@ -163,14 +159,21 @@ class KdsDashboard extends Component
         unset($col);
 
         $cols = array_values($byBatch);
-        $query = app(KdsQueryService::class);
-        usort($cols, static function (array $a, array $b) use ($query): int {
-            $ap = $query->tableCategoryPriorityForKds((int) ($a['tableId'] ?? 0));
-            $bp = $query->tableCategoryPriorityForKds((int) ($b['tableId'] ?? 0));
-            $at = optional($a['batchAt'] ?? null)?->getTimestamp() ?? 0;
-            $bt = optional($b['batchAt'] ?? null)?->getTimestamp() ?? 0;
+        usort($cols, static function (array $a, array $b): int {
+            $tokenA = self::columnFifoSortToken($a);
+            $tokenB = self::columnFifoSortToken($b);
+            $c = strcmp($tokenA, $tokenB);
+            if ($c !== 0) {
+                return $c;
+            }
 
-            return [$ap, $a['sortOrder'], $a['tableId'], $at, $a['orderId']] <=> [$bp, $b['sortOrder'], $b['tableId'], $bt, $b['orderId']];
+            $sessionA = (int) ($a['tableSessionId'] ?? 0);
+            $sessionB = (int) ($b['tableSessionId'] ?? 0);
+            if ($sessionA !== $sessionB) {
+                return $sessionA <=> $sessionB;
+            }
+
+            return ((int) ($a['orderId'] ?? 0)) <=> ((int) ($b['orderId'] ?? 0));
         });
 
         $out = [];
@@ -178,19 +181,52 @@ class KdsDashboard extends Component
         foreach ($cols as $col) {
             /** @var list<OrderLine> $tickets */
             $tickets = $col['tickets'];
-            $allServed = collect($tickets)->every(
-                static fn (OrderLine $line): bool => $line->status === OrderLineStatus::Served
-            );
             $tid = (int) ($col['tableId'] ?? 0);
             $tableBatchOrdinal[$tid] = ($tableBatchOrdinal[$tid] ?? 0) + 1;
             $ordinal = (int) $tableBatchOrdinal[$tid];
             $baseName = (string) ($col['tableName'] !== '' ? $col['tableName'] : '#'.$tid);
             $col['displayLabel'] = $ordinal === 1 ? $baseName : "{$baseName} (Add #{$ordinal})";
-            $col['allServed'] = $allServed;
             $out[] = $col;
         }
 
-        return $out;
+        $total = count($out);
+
+        return [
+            'visibleColumns' => array_slice($out, 0, 3),
+            'queuedBatchCount' => max(0, $total - 3),
+            'totalBatchCount' => $total,
+        ];
+    }
+
+    /**
+     * 画面に出す最大 3 列（FIFO 先頭）。
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getTableColumnsProperty(): array
+    {
+        return $this->kdsBoard['visibleColumns'];
+    }
+
+    public function getQueuedBatchCountProperty(): int
+    {
+        return $this->kdsBoard['queuedBatchCount'];
+    }
+
+    /**
+     * 列ソート用: kds_ticket_batch_id（無ければ order フォールバック）を文字列化。
+     */
+    private static function columnFifoSortToken(array $col): string
+    {
+        /** @var list<OrderLine> $tickets */
+        $tickets = $col['tickets'] ?? [];
+        $first = $tickets[0] ?? null;
+        $batchId = $first?->kds_ticket_batch_id;
+        if (is_string($batchId) && $batchId !== '') {
+            return $batchId;
+        }
+
+        return 'order:'.((int) ($col['orderId'] ?? 0));
     }
 
     public function toggleHistory(): void
@@ -299,7 +335,7 @@ class KdsDashboard extends Component
      * Pusher (Echo) からの「即時更新ベル」受信時に Alpine からデバウンス越しに呼ばれる。
      *
      * 実装は意図的に no-op としている。Livewire はこのメソッド呼び出しに伴って
-     * 通常の Mount/Render サイクルを走らせ、`tableColumns` プロパティが
+     * 通常の Mount/Render サイクルを走らせ、`kdsBoard` / `tableColumns` が
      * `KdsQueryService` を再実行することで最新状態を返す。
      *
      * これにより:
@@ -348,6 +384,7 @@ class KdsDashboard extends Component
     {
         return view('livewire.kds.kds-dashboard', [
             'columns' => $this->tableColumns,
+            'queuedBatchCount' => $this->queuedBatchCount,
             'hasShop' => $this->shopId !== 0,
             'broadcastHealth' => $this->broadcastHealth,
         ]);

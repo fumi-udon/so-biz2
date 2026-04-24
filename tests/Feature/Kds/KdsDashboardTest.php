@@ -160,7 +160,7 @@ class KdsDashboardTest extends TestCase
         $this->withSession(['kds.active_shop_id' => (int) $p['shop']->id]);
         Livewire::test(KdsDashboard::class)
             ->assertSee('T-MIX')
-            ->assertSee('allServed: false', false);
+            ->assertSee('Ramen K');
     }
 
     public function test_old_served_lines_remain_visible_when_addon_confirmed_same_session(): void
@@ -317,7 +317,7 @@ class KdsDashboardTest extends TestCase
             ->assertSee('T-S');
     }
 
-    public function test_customer_columns_are_sorted_before_staff_and_takeaway(): void
+    public function test_kds_column_sort_orders_by_batch_id_then_session_then_order(): void
     {
         $shop = Shop::query()->create([
             'name' => 'KDS sort shop',
@@ -415,6 +415,7 @@ class KdsDashboardTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Confirmed,
             'line_revision' => 1,
+            'kds_ticket_batch_id' => '10000000-0000-4000-8000-000000000001',
         ]);
         OrderLine::query()->create([
             'order_id' => $staffOrder->id,
@@ -427,6 +428,7 @@ class KdsDashboardTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Confirmed,
             'line_revision' => 1,
+            'kds_ticket_batch_id' => '10000000-0000-4000-8000-000000000002',
         ]);
         OrderLine::query()->create([
             'order_id' => $takeawayOrder->id,
@@ -439,6 +441,7 @@ class KdsDashboardTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Confirmed,
             'line_revision' => 1,
+            'kds_ticket_batch_id' => '10000000-0000-4000-8000-000000000003',
         ]);
 
         $this->withSession(['kds.active_shop_id' => (int) $shop->id]);
@@ -447,8 +450,8 @@ class KdsDashboardTest extends TestCase
         $ids = array_map(static fn (array $c): int => (int) $c['tableId'], $columns);
 
         $this->assertSame(10, $ids[0]);
-        $this->assertContains(100, $ids);
-        $this->assertContains(200, $ids);
+        $this->assertSame(100, $ids[1]);
+        $this->assertSame(200, $ids[2]);
     }
 
     public function test_realtime_state_switches_poll_interval_between_60_and_2_seconds(): void
@@ -743,5 +746,263 @@ class KdsDashboardTest extends TestCase
             $columns[0]['tickets']
         );
         $this->assertSame(['Alpha', 'Beta', 'Zebra'], $names);
+    }
+
+    public function test_dashboard_shows_at_most_three_columns(): void
+    {
+        $shop = Shop::query()->create([
+            'name' => 'KDS max cols',
+            'slug' => 'kds-max-cols-'.bin2hex(random_bytes(3)),
+            'is_active' => true,
+        ]);
+        $cat = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'M',
+            'slug' => 'm-max-'.bin2hex(random_bytes(3)),
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $item = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $cat->id,
+            'name' => 'X',
+            'kitchen_name' => 'X',
+            'slug' => 'x-max-'.bin2hex(random_bytes(3)),
+            'from_price_minor' => 1000,
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+
+        for ($i = 1; $i <= 4; $i++) {
+            $table = RestaurantTable::query()->create([
+                'shop_id' => $shop->id,
+                'name' => 'FIFO-'.$i,
+                'qr_token' => 'kds-fifo-'.$i.'-'.bin2hex(random_bytes(6)),
+                'sort_order' => $i,
+                'is_active' => true,
+            ]);
+            $session = $this->createActiveTableSession($shop, $table);
+            $order = PosOrder::query()->create([
+                'shop_id' => $shop->id,
+                'table_session_id' => $session->id,
+                'status' => OrderStatus::Confirmed,
+                'total_price_minor' => 1000,
+                'placed_at' => now(),
+            ]);
+            OrderLine::query()->create([
+                'order_id' => $order->id,
+                'menu_item_id' => $item->id,
+                'qty' => 1,
+                'unit_price_minor' => 1000,
+                'line_total_minor' => 1000,
+                'snapshot_name' => 'L'.$i,
+                'snapshot_kitchen_name' => 'L'.$i,
+                'snapshot_options_payload' => [],
+                'status' => OrderLineStatus::Confirmed,
+                'line_revision' => 1,
+                'kds_ticket_batch_id' => sprintf('20000000-0000-4000-8000-%012d', $i),
+            ]);
+        }
+
+        $this->withSession(['kds.active_shop_id' => (int) $shop->id]);
+        $c = Livewire::test(KdsDashboard::class);
+        $this->assertSame(3, count($c->instance()->tableColumns));
+    }
+
+    public function test_dashboard_exposes_queued_count_when_more_than_three(): void
+    {
+        $shop = Shop::query()->create([
+            'name' => 'KDS queue cnt',
+            'slug' => 'kds-queue-'.bin2hex(random_bytes(3)),
+            'is_active' => true,
+        ]);
+        $cat = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'M',
+            'slug' => 'm-q-'.bin2hex(random_bytes(3)),
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $item = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $cat->id,
+            'name' => 'X',
+            'kitchen_name' => 'X',
+            'slug' => 'x-q-'.bin2hex(random_bytes(3)),
+            'from_price_minor' => 1000,
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+
+        for ($i = 1; $i <= 5; $i++) {
+            $table = RestaurantTable::query()->create([
+                'shop_id' => $shop->id,
+                'name' => 'Q-'.$i,
+                'qr_token' => 'kds-q-'.$i.'-'.bin2hex(random_bytes(6)),
+                'sort_order' => $i,
+                'is_active' => true,
+            ]);
+            $session = $this->createActiveTableSession($shop, $table);
+            $order = PosOrder::query()->create([
+                'shop_id' => $shop->id,
+                'table_session_id' => $session->id,
+                'status' => OrderStatus::Confirmed,
+                'total_price_minor' => 1000,
+                'placed_at' => now(),
+            ]);
+            OrderLine::query()->create([
+                'order_id' => $order->id,
+                'menu_item_id' => $item->id,
+                'qty' => 1,
+                'unit_price_minor' => 1000,
+                'line_total_minor' => 1000,
+                'snapshot_name' => 'L'.$i,
+                'snapshot_kitchen_name' => 'L'.$i,
+                'snapshot_options_payload' => [],
+                'status' => OrderLineStatus::Confirmed,
+                'line_revision' => 1,
+                'kds_ticket_batch_id' => sprintf('30000000-0000-4000-8000-%012d', $i),
+            ]);
+        }
+
+        $this->withSession(['kds.active_shop_id' => (int) $shop->id]);
+        $c = Livewire::test(KdsDashboard::class);
+        $this->assertSame(2, $c->instance()->queuedBatchCount);
+        $c->assertSee(__('kds.queue_waiting', ['count' => 2]));
+    }
+
+    public function test_dashboard_queue_empty_when_three_or_fewer_columns(): void
+    {
+        $shop = Shop::query()->create([
+            'name' => 'KDS queue zero',
+            'slug' => 'kds-q0-'.bin2hex(random_bytes(3)),
+            'is_active' => true,
+        ]);
+        $cat = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'M',
+            'slug' => 'm-q0-'.bin2hex(random_bytes(3)),
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $item = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $cat->id,
+            'name' => 'X',
+            'kitchen_name' => 'X',
+            'slug' => 'x-q0-'.bin2hex(random_bytes(3)),
+            'from_price_minor' => 1000,
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+
+        for ($i = 1; $i <= 3; $i++) {
+            $table = RestaurantTable::query()->create([
+                'shop_id' => $shop->id,
+                'name' => 'Z-'.$i,
+                'qr_token' => 'kds-z-'.$i.'-'.bin2hex(random_bytes(6)),
+                'sort_order' => $i,
+                'is_active' => true,
+            ]);
+            $session = $this->createActiveTableSession($shop, $table);
+            $order = PosOrder::query()->create([
+                'shop_id' => $shop->id,
+                'table_session_id' => $session->id,
+                'status' => OrderStatus::Confirmed,
+                'total_price_minor' => 1000,
+                'placed_at' => now(),
+            ]);
+            OrderLine::query()->create([
+                'order_id' => $order->id,
+                'menu_item_id' => $item->id,
+                'qty' => 1,
+                'unit_price_minor' => 1000,
+                'line_total_minor' => 1000,
+                'snapshot_name' => 'L'.$i,
+                'snapshot_kitchen_name' => 'L'.$i,
+                'snapshot_options_payload' => [],
+                'status' => OrderLineStatus::Confirmed,
+                'line_revision' => 1,
+                'kds_ticket_batch_id' => sprintf('40000000-0000-4000-8000-%012d', $i),
+            ]);
+        }
+
+        $this->withSession(['kds.active_shop_id' => (int) $shop->id]);
+        $c = Livewire::test(KdsDashboard::class);
+        $this->assertSame(0, $c->instance()->queuedBatchCount);
+        $c->assertSee(__('kds.queue_waiting', ['count' => 0]));
+    }
+
+    public function test_column_order_preserves_fifo_when_queue_advances(): void
+    {
+        $shop = Shop::query()->create([
+            'name' => 'KDS fifo advance',
+            'slug' => 'kds-fifo-adv-'.bin2hex(random_bytes(3)),
+            'is_active' => true,
+        ]);
+        $cat = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'M',
+            'slug' => 'm-fa-'.bin2hex(random_bytes(3)),
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $item = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $cat->id,
+            'name' => 'X',
+            'kitchen_name' => 'X',
+            'slug' => 'x-fa-'.bin2hex(random_bytes(3)),
+            'from_price_minor' => 1000,
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+
+        $tables = [];
+        $lines = [];
+        for ($i = 1; $i <= 4; $i++) {
+            $table = RestaurantTable::query()->create([
+                'shop_id' => $shop->id,
+                'name' => 'ADV-'.$i,
+                'qr_token' => 'kds-adv-'.$i.'-'.bin2hex(random_bytes(6)),
+                'sort_order' => $i,
+                'is_active' => true,
+            ]);
+            $tables[] = $table;
+            $session = $this->createActiveTableSession($shop, $table);
+            $order = PosOrder::query()->create([
+                'shop_id' => $shop->id,
+                'table_session_id' => $session->id,
+                'status' => OrderStatus::Confirmed,
+                'total_price_minor' => 1000,
+                'placed_at' => now(),
+            ]);
+            $lines[] = OrderLine::query()->create([
+                'order_id' => $order->id,
+                'menu_item_id' => $item->id,
+                'qty' => 1,
+                'unit_price_minor' => 1000,
+                'line_total_minor' => 1000,
+                'snapshot_name' => 'L'.$i,
+                'snapshot_kitchen_name' => 'L'.$i,
+                'snapshot_options_payload' => [],
+                'status' => OrderLineStatus::Confirmed,
+                'line_revision' => 1,
+                'kds_ticket_batch_id' => sprintf('50000000-0000-4000-8000-%012d', $i),
+            ]);
+        }
+
+        $this->withSession(['kds.active_shop_id' => (int) $shop->id]);
+        $c = Livewire::test(KdsDashboard::class);
+        $before = $c->instance()->tableColumns;
+        $this->assertCount(3, $before);
+        $this->assertSame((int) $tables[0]->id, (int) $before[0]['tableId']);
+
+        $c->call('markServed', (int) $lines[0]->id, 1);
+
+        $after = $c->instance()->tableColumns;
+        $this->assertCount(3, $after);
+        $this->assertSame((int) $tables[1]->id, (int) $after[0]['tableId']);
+        $this->assertSame((int) $tables[3]->id, (int) $after[2]['tableId']);
     }
 }

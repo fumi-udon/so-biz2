@@ -5,6 +5,7 @@ return [
 
     'dashboard_title' => 'Kitchen Display',
     'dashboard_subtitle' => 'Auto-refresh 60s online / 2s offline',
+    'queue_waiting' => 'Queued: :count',
     'poll_indicator' => 'Live',
     'no_shop' => 'No active shop is configured.',
     'empty_title' => 'No active tickets right now',
