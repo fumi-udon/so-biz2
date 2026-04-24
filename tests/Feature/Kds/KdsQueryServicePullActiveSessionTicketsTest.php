@@ -56,7 +56,7 @@ class KdsQueryServicePullActiveSessionTicketsTest extends TestCase
         return compact('shop', 'item', 'table');
     }
 
-    public function test_served_line_remains_visible_while_session_has_pending_lines(): void
+    public function test_served_line_remains_visible_while_virtual_batch_has_pending_lines(): void
     {
         $p = $this->makeShopWithTableItem();
         $session = $this->createActiveTableSession($p['shop'], $p['table']);
@@ -67,6 +67,7 @@ class KdsQueryServicePullActiveSessionTicketsTest extends TestCase
             'total_price_minor' => 2000,
             'placed_at' => now(),
         ]);
+        $batchUuid = '70000000-0000-4000-8000-000000000001';
         $served = OrderLine::query()->create([
             'order_id' => $order->id,
             'menu_item_id' => $p['item']->id,
@@ -78,6 +79,7 @@ class KdsQueryServicePullActiveSessionTicketsTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Served,
             'line_revision' => 2,
+            'kds_ticket_batch_id' => $batchUuid,
         ]);
         $pending = OrderLine::query()->create([
             'order_id' => $order->id,
@@ -90,6 +92,7 @@ class KdsQueryServicePullActiveSessionTicketsTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Confirmed,
             'line_revision' => 1,
+            'kds_ticket_batch_id' => $batchUuid,
         ]);
 
         $rows = app(KdsQueryService::class)->pullActiveSessionTicketsForDashboard((int) $p['shop']->id);
@@ -97,6 +100,59 @@ class KdsQueryServicePullActiveSessionTicketsTest extends TestCase
 
         $this->assertContains($served->id, $ids);
         $this->assertContains($pending->id, $ids);
+    }
+
+    public function test_served_lines_excluded_when_sibling_virtual_batch_has_pending(): void
+    {
+        $p = $this->makeShopWithTableItem();
+        $session = $this->createActiveTableSession($p['shop'], $p['table']);
+        $orderA = PosOrder::query()->create([
+            'shop_id' => $p['shop']->id,
+            'table_session_id' => $session->id,
+            'status' => OrderStatus::Confirmed,
+            'total_price_minor' => 1000,
+            'placed_at' => now(),
+        ]);
+        $orderB = PosOrder::query()->create([
+            'shop_id' => $p['shop']->id,
+            'table_session_id' => $session->id,
+            'status' => OrderStatus::Confirmed,
+            'total_price_minor' => 1000,
+            'placed_at' => now(),
+        ]);
+        $lineServedA = OrderLine::query()->create([
+            'order_id' => $orderA->id,
+            'menu_item_id' => $p['item']->id,
+            'qty' => 1,
+            'unit_price_minor' => 1000,
+            'line_total_minor' => 1000,
+            'snapshot_name' => 'A',
+            'snapshot_kitchen_name' => 'A',
+            'snapshot_options_payload' => [],
+            'status' => OrderLineStatus::Served,
+            'line_revision' => 2,
+            'kds_ticket_batch_id' => '80000000-0000-4000-8000-000000000001',
+        ]);
+        OrderLine::query()->create([
+            'order_id' => $orderB->id,
+            'menu_item_id' => $p['item']->id,
+            'qty' => 1,
+            'unit_price_minor' => 1000,
+            'line_total_minor' => 1000,
+            'snapshot_name' => 'B',
+            'snapshot_kitchen_name' => 'B',
+            'snapshot_options_payload' => [],
+            'status' => OrderLineStatus::Confirmed,
+            'line_revision' => 1,
+            'kds_ticket_batch_id' => '80000000-0000-4000-8000-000000000002',
+        ]);
+
+        $rows = app(KdsQueryService::class)->pullActiveSessionTicketsForDashboard((int) $p['shop']->id);
+        $ids = $rows->pluck('id')->all();
+
+        $this->assertNotContains($lineServedA->id, $ids);
+        $bLineId = (int) OrderLine::query()->where('order_id', $orderB->id)->where('status', OrderLineStatus::Confirmed)->value('id');
+        $this->assertContains($bLineId, $ids);
     }
 
     public function test_session_disappears_when_all_lines_served(): void

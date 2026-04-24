@@ -87,9 +87,9 @@ class KdsDashboard extends Component
             $sessionId = (int) $session->id;
             $orderId = (int) $order->id;
             $batchUuid = $line->kds_ticket_batch_id;
-            $batchKey = (is_string($batchUuid) && $batchUuid !== '')
-                ? "{$sessionId}:b:{$batchUuid}"
-                : "{$sessionId}:o:{$orderId}";
+            $batchKey = (is_string($batchUuid) && trim($batchUuid) !== '')
+                ? 'b:'.trim($batchUuid)
+                : 'o:'.$orderId;
 
             if (! isset($byBatch[$batchKey])) {
                 $staffName = $session->staff_name;
@@ -222,11 +222,11 @@ class KdsDashboard extends Component
         $tickets = $col['tickets'] ?? [];
         $first = $tickets[0] ?? null;
         $batchId = $first?->kds_ticket_batch_id;
-        if (is_string($batchId) && $batchId !== '') {
-            return $batchId;
+        if (is_string($batchId) && trim($batchId) !== '') {
+            return 'b:'.trim($batchId);
         }
 
-        return 'order:'.((int) ($col['orderId'] ?? 0));
+        return 'o:'.((int) ($col['orderId'] ?? 0));
     }
 
     public function toggleHistory(): void

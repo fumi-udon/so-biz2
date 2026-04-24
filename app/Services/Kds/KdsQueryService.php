@@ -61,10 +61,11 @@ final class KdsQueryService
     }
 
     /**
-     * KDS ダッシュボード用: Active セッションのうち、同一 table_session に
-     * Confirmed / Cooking が 1 件でも残っているものに属する行を返す。
-     * その条件を満たすセッションでは Served 行も含め（Cancelled は除外）、
-     * 未完了がなくなったセッションは結果に含まれない。
+     * KDS ダッシュボード用: Active セッションのうち、仮想バッチキー
+     *（COALESCE(TRIM(kds_ticket_batch_id), CONCAT('o:', order_id))）単位で
+     * Confirmed / Cooking が 1 件でも残っているバッチに属する行を返す。
+     * そのバッチでは Served 行も含め（Cancelled は除外）、
+     * バッチ内がすべて Served 等で未完了がなくなったバッチは結果に含まれない。
      *
      * @return Collection<int, OrderLine>
      */
@@ -83,12 +84,18 @@ final class KdsQueryService
                 fn ($q) => $q->where('status', TableSessionStatus::Active)
             )
             ->whereExists(function ($query): void {
+                $p = $query->getConnection()->getTablePrefix();
+                $olPending = '`'.$p.'ol_pending`';
+                $olOuter = '`'.$p.'order_lines`';
                 $query->selectRaw('1')
                     ->from('order_lines as ol_pending')
                     ->join('orders as po_pending', 'ol_pending.order_id', '=', 'po_pending.id')
                     ->join('orders as po_self', 'po_self.id', '=', 'order_lines.order_id')
                     ->whereColumn('po_pending.table_session_id', 'po_self.table_session_id')
                     ->whereColumn('ol_pending.shop_id', 'order_lines.shop_id')
+                    ->whereRaw(
+                        "COALESCE(NULLIF(TRIM({$olPending}.`kds_ticket_batch_id`), ''), CONCAT('o:', {$olPending}.`order_id`)) = COALESCE(NULLIF(TRIM({$olOuter}.`kds_ticket_batch_id`), ''), CONCAT('o:', {$olOuter}.`order_id`))"
+                    )
                     ->whereIn('ol_pending.status', [
                         OrderLineStatus::Confirmed,
                         OrderLineStatus::Cooking,
