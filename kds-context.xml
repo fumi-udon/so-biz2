@@ -153,503 +153,6 @@ final class KdsBroadcastService
 }
 </file>
 
-<file path="app/Livewire/Kds/KdsDashboard.php">
-<?php
-
-namespace App\Livewire\Kds;
-
-use App\Actions\Kds\UpdateOrderLineStatusAction;
-use App\Domains\Pos\Tables\TableCategory;
-use App\Enums\OrderLineStatus;
-use App\Enums\TableSessionStatus;
-use App\Exceptions\RevisionConflictException;
-use App\Models\OrderLine;
-use App\Models\Shop;
-use App\Models\TableSession;
-use App\Services\Kds\KdsBroadcastService;
-use App\Services\Kds\KdsQueryService;
-use App\Support\Pos\StaffTableSettlementPricing;
-use Carbon\CarbonImmutable;
-use Filament\Notifications\Notification;
-use Illuminate\Contracts\View\View;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
-use Livewire\Attributes\Layout;
-use Livewire\Attributes\Locked;
-use Livewire\Component;
-use Throwable;
-
-#[Layout('layouts.kds')]
-class KdsDashboard extends Component
-{
-    /**
-     * Shop scope（端末 PIN ログイン後の `session('kds.active_shop_id')`）。
-     * `Locked` でクライアントからの上書きを防ぐ。
-     */
-    #[Locked]
-    public int $shopId = 0;
-
-    private const NEW_ARRIVAL_HIGHLIGHT_SECONDS = 12;
-
-    public bool $historyOpen = false;
-
-    /** @var 'connecting'|'connected'|'disconnected'|'error' */
-    public string $realtimeState = 'connecting';
-
-    public int $pollSeconds = 2;
-
-    public ?string $lastRealtimeEventAt = null;
-
-    public function mount(): void
-    {
-        $id = (int) session('kds.active_shop_id', 0);
-        if ($id > 0 && Shop::query()->whereKey($id)->where('is_active', true)->exists()) {
-            $this->shopId = $id;
-        } else {
-            $this->shopId = 0;
-        }
-        if ($this->shopId === 0) {
-            $this->realtimeState = 'disconnected';
-        }
-    }
-
-    /**
-     * テーブル単位にグルーピング済みのチケット集合を返す。
-     *
-     * 形: [
-     *   'tableId' => int,
-     *   'tableName' => string,
-     *   'sortOrder' => int,
-     *   'tickets' => list<OrderLine>, // 赤→緑→新しい順
-     *   'allServed' => bool, // 列内がすべて Served のとき true（アニメ用）
-     * ][]
-     *
-     * @return list<array<string, mixed>>
-     */
-    public function getTableColumnsProperty(): array
-    {
-        if ($this->shopId === 0) {
-            return [];
-        }
-
-        /** @var Collection<int, OrderLine> $rows */
-        $rows = app(KdsQueryService::class)->pullActiveSessionTicketsForDashboard($this->shopId);
-
-        $byBatch = [];
-        foreach ($rows as $line) {
-            $order = $line->order;
-            $session = $line->order?->tableSession;
-            $table = $session?->restaurantTable;
-            if ($session === null || $table === null || $order === null) {
-                continue;
-            }
-            $tid = (int) $table->id;
-            $sessionId = (int) $session->id;
-            $orderId = (int) $order->id;
-            $batchUuid = $line->kds_ticket_batch_id;
-            $batchKey = (is_string($batchUuid) && $batchUuid !== '')
-                ? "{$sessionId}:b:{$batchUuid}"
-                : "{$sessionId}:o:{$orderId}";
-
-            if (! isset($byBatch[$batchKey])) {
-                $staffName = $session->staff_name;
-                $tableName = (string) ($table->name ?? '');
-                if (StaffTableSettlementPricing::isStaffMealTableId($tid)
-                    && is_string($staffName)
-                    && trim($staffName) !== '') {
-                    $tableName = trim($staffName);
-                } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
-                    && is_string($session->customer_name)
-                    && trim($session->customer_name) !== '') {
-                    $tableName = trim($session->customer_name);
-                }
-                $byBatch[$batchKey] = [
-                    'batchKey' => $batchKey,
-                    'tableId' => $tid,
-                    'tableSessionId' => $sessionId,
-                    'orderId' => $orderId,
-                    'batchAt' => $order->placed_at ?? $line->updated_at,
-                    'tableName' => $tableName,
-                    'sortOrder' => (int) ($table->sort_order ?? 0),
-                    'category' => app(KdsQueryService::class)->tableCategoryForTableId($tid)?->value ?? 'other',
-                    'tickets' => [],
-                ];
-            } else {
-                $byBatch[$batchKey]['orderId'] = min((int) $byBatch[$batchKey]['orderId'], $orderId);
-                $placedAt = $order->placed_at;
-                if ($placedAt !== null) {
-                    $current = $byBatch[$batchKey]['batchAt'] ?? null;
-                    if ($current === null || $placedAt->lt($current)) {
-                        $byBatch[$batchKey]['batchAt'] = $placedAt;
-                    }
-                }
-            }
-            $byBatch[$batchKey]['tickets'][] = $line;
-        }
-
-        foreach ($byBatch as &$col) {
-            usort($col['tickets'], static function (OrderLine $a, OrderLine $b): int {
-                $ca = (int) ($a->menuItem?->menuCategory?->sort_order ?? PHP_INT_MAX);
-                $cb = (int) ($b->menuItem?->menuCategory?->sort_order ?? PHP_INT_MAX);
-                if ($ca !== $cb) {
-                    return $ca <=> $cb;
-                }
-
-                $ia = (int) ($a->menuItem?->sort_order ?? PHP_INT_MAX);
-                $ib = (int) ($b->menuItem?->sort_order ?? PHP_INT_MAX);
-                if ($ia !== $ib) {
-                    return $ia <=> $ib;
-                }
-
-                $na = mb_strtolower(trim((string) ($a->snapshot_kitchen_name ?: $a->snapshot_name ?: $a->menuItem?->name ?: '')));
-                $nb = mb_strtolower(trim((string) ($b->snapshot_kitchen_name ?: $b->snapshot_name ?: $b->menuItem?->name ?: '')));
-                if ($na !== $nb) {
-                    return $na <=> $nb;
-                }
-
-                return ((int) $a->id) <=> ((int) $b->id);
-            });
-
-            foreach ($col['tickets'] as $ticket) {
-                $isActionable = in_array($ticket->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true);
-                $ageSeconds = optional($ticket->updated_at)?->diffInSeconds(now()) ?? 999999;
-                $ticket->setAttribute('kds_is_new_arrival', $isActionable && $ageSeconds <= self::NEW_ARRIVAL_HIGHLIGHT_SECONDS);
-            }
-        }
-        unset($col);
-
-        $cols = array_values($byBatch);
-        $query = app(KdsQueryService::class);
-        usort($cols, static function (array $a, array $b) use ($query): int {
-            $ap = $query->tableCategoryPriorityForKds((int) ($a['tableId'] ?? 0));
-            $bp = $query->tableCategoryPriorityForKds((int) ($b['tableId'] ?? 0));
-            $at = optional($a['batchAt'] ?? null)?->getTimestamp() ?? 0;
-            $bt = optional($b['batchAt'] ?? null)?->getTimestamp() ?? 0;
-
-            return [$ap, $a['sortOrder'], $a['tableId'], $at, $a['orderId']] <=> [$bp, $b['sortOrder'], $b['tableId'], $bt, $b['orderId']];
-        });
-
-        $out = [];
-        $tableBatchOrdinal = [];
-        foreach ($cols as $col) {
-            /** @var list<OrderLine> $tickets */
-            $tickets = $col['tickets'];
-            $allServed = collect($tickets)->every(
-                static fn (OrderLine $line): bool => $line->status === OrderLineStatus::Served
-            );
-            $tid = (int) ($col['tableId'] ?? 0);
-            $tableBatchOrdinal[$tid] = ($tableBatchOrdinal[$tid] ?? 0) + 1;
-            $ordinal = (int) $tableBatchOrdinal[$tid];
-            $baseName = (string) ($col['tableName'] !== '' ? $col['tableName'] : '#'.$tid);
-            $col['displayLabel'] = $ordinal === 1 ? $baseName : "{$baseName} (Add #{$ordinal})";
-            $col['allServed'] = $allServed;
-            $out[] = $col;
-        }
-
-        return $out;
-    }
-
-    public function toggleHistory(): void
-    {
-        $this->historyOpen = ! $this->historyOpen;
-    }
-
-    /**
-     * 履歴ドロワーが開いているときのみ DB を参照する（poll ごとに叩かない）。
-     *
-     * @return list<array<string, mixed>>
-     */
-    public function getHistoryColumnsProperty(): array
-    {
-        if (! $this->historyOpen || $this->shopId === 0) {
-            return [];
-        }
-
-        return app(KdsQueryService::class)
-            ->pullServedSessionsForToday($this->shopId)
-            ->map(static function (TableSession $s): array {
-                $lines = $s->posOrders->flatMap(static fn ($o) => $o->lines)->values();
-                $tid = (int) ($s->restaurant_table_id ?? 0);
-                $tn = (string) ($s->restaurantTable?->name ?? '');
-                if (StaffTableSettlementPricing::isStaffMealTableId($tid)
-                    && is_string($s->staff_name)
-                    && trim($s->staff_name) !== '') {
-                    $tn = trim($s->staff_name);
-                } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
-                    && is_string($s->customer_name)
-                    && trim($s->customer_name) !== '') {
-                    $tn = trim($s->customer_name);
-                }
-
-                return [
-                    'sessionId' => (int) $s->id,
-                    'tableName' => $tn,
-                    'openedAt' => $s->opened_at,
-                    'isClosed' => $s->status === TableSessionStatus::Closed,
-                    'lines' => $lines,
-                ];
-            })
-            ->values()
-            ->all();
-    }
-
-    /**
-     * 赤チケット（Confirmed/Cooking）をタップ → Served（緑）へ。
-     * 楽観的ロックで失敗（他スタッフが先に更新）した場合は握り潰し、
-     * 即時再描画（Livewire 標準の再レンダリング）で最新状態を出す。
-     */
-    public function markServed(int $orderLineId, int $expectedLineRevision): void
-    {
-        try {
-            app(UpdateOrderLineStatusAction::class)->execute(
-                $orderLineId,
-                OrderLineStatus::Served->value,
-                $expectedLineRevision,
-            );
-        } catch (RevisionConflictException $e) {
-            Notification::make()
-                ->title(__('kds.conflict_title'))
-                ->body(__('kds.conflict_body'))
-                ->warning()
-                ->send();
-        } catch (Throwable $e) {
-            Log::warning('KDS markServed failed', [
-                'order_line_id' => $orderLineId,
-                'expected_revision' => $expectedLineRevision,
-                'error' => $e->getMessage(),
-            ]);
-            Notification::make()
-                ->title(__('kds.update_failed'))
-                ->body($e->getMessage())
-                ->danger()
-                ->send();
-        }
-    }
-
-    /**
-     * 同一店舗内で赤→緑、緑→赤のロールバック（誤タップ救済）も可能にする。
-     */
-    public function revertToConfirmed(int $orderLineId, int $expectedLineRevision): void
-    {
-        try {
-            app(UpdateOrderLineStatusAction::class)->execute(
-                $orderLineId,
-                OrderLineStatus::Confirmed->value,
-                $expectedLineRevision,
-            );
-        } catch (RevisionConflictException $e) {
-            Notification::make()
-                ->title(__('kds.conflict_title'))
-                ->body(__('kds.conflict_body'))
-                ->warning()
-                ->send();
-        } catch (Throwable $e) {
-            Log::warning('KDS revert failed', [
-                'order_line_id' => $orderLineId,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
-     * Pusher (Echo) からの「即時更新ベル」受信時に Alpine からデバウンス越しに呼ばれる。
-     *
-     * 実装は意図的に no-op としている。Livewire はこのメソッド呼び出しに伴って
-     * 通常の Mount/Render サイクルを走らせ、`tableColumns` プロパティが
-     * `KdsQueryService` を再実行することで最新状態を返す。
-     *
-     * これにより:
-     *   - DOM Morph と `wire:poll.10s` の競合が起きない（Livewire が応答を 1 本に直列化）
-     *   - Echo がバースト発火しても 300ms デバウンスで 1 リクエストに集約される
-     */
-    public function refreshTickets(): void
-    {
-        // no-op: Livewire の標準再レンダリングのみで十分。
-    }
-
-    public function syncRealtimeState(string $state): void
-    {
-        if (! in_array($state, ['connecting', 'connected', 'disconnected', 'error'], true)) {
-            return;
-        }
-
-        $this->realtimeState = $state;
-        $this->pollSeconds = $state === 'connected' ? 60 : 2;
-    }
-
-    public function markRealtimeEventReceived(): void
-    {
-        $this->lastRealtimeEventAt = now()->format('H:i:s');
-    }
-
-    /**
-     * @return array{offline:bool,last_fail_at:?string,last_fail_hms:?string,last_ok_hms:?string,last_fail_error:?string}
-     */
-    public function getBroadcastHealthProperty(): array
-    {
-        $health = app(KdsBroadcastService::class)->recentHealthForShop($this->shopId);
-        $failAt = is_string($health['last_fail_at'] ?? null) ? CarbonImmutable::parse($health['last_fail_at']) : null;
-        $okAt = is_string($health['last_ok_at'] ?? null) ? CarbonImmutable::parse($health['last_ok_at']) : null;
-
-        return [
-            'offline' => $this->realtimeState !== 'connected',
-            'last_fail_at' => $failAt?->toIso8601String(),
-            'last_fail_hms' => $failAt?->format('H:i:s'),
-            'last_ok_hms' => $okAt?->format('H:i:s'),
-            'last_fail_error' => is_string($health['last_fail_error'] ?? null) ? $health['last_fail_error'] : null,
-        ];
-    }
-
-    public function render(): View
-    {
-        return view('livewire.kds.kds-dashboard', [
-            'columns' => $this->tableColumns,
-            'hasShop' => $this->shopId !== 0,
-            'broadcastHealth' => $this->broadcastHealth,
-        ]);
-    }
-}
-</file>
-
-<file path="app/Services/Kds/KdsQueryService.php">
-<?php
-
-namespace App\Services\Kds;
-
-use App\Domains\Pos\Tables\TableCategory;
-use App\Enums\OrderLineStatus;
-use App\Enums\TableSessionStatus;
-use App\Models\OrderLine;
-use App\Models\TableSession;
-use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Collection;
-
-final class KdsQueryService
-{
-    private const int TRANSIENT_SERVED_SECONDS = 6;
-
-    public function tableCategoryForTableId(int $tableId): ?TableCategory
-    {
-        return TableCategory::tryResolveFromId($tableId);
-    }
-
-    public function tableCategoryPriorityForKds(int $tableId): int
-    {
-        return match ($this->tableCategoryForTableId($tableId)) {
-            TableCategory::Customer => 0,
-            TableCategory::Staff, TableCategory::Takeaway => 1,
-            default => 2,
-        };
-    }
-
-    /**
-     * Keyset Pull（§10）: `OFFSET` は使用しない。
-     *
-     * @return Collection<int, OrderLine>
-     */
-    public function pullActiveTickets(
-        int $shopId,
-        ?string $cursorUpdatedAt = null,
-        ?int $cursorId = null,
-        int $limit = 200,
-    ): Collection {
-        $limit = max(1, min(500, $limit));
-
-        $q = OrderLine::query()
-            ->where('shop_id', $shopId)
-            ->whereIn('status', [
-                OrderLineStatus::Confirmed,
-                OrderLineStatus::Cooking,
-            ])
-            ->with(['menuItem'])
-            ->orderBy('updated_at')
-            ->orderBy('id');
-
-        if ($cursorUpdatedAt !== null && $cursorId !== null) {
-            $t = Carbon::parse($cursorUpdatedAt);
-            $q->whereRaw(
-                '(updated_at > ?) OR (updated_at = ? AND id > ?)',
-                [$t, $t, $cursorId]
-            );
-        }
-
-        return $q->limit($limit)->get();
-    }
-
-    /**
-     * KDS ダッシュボード用: 現在「Active」なテーブルセッション配下の
-     * Confirmed / Cooking / Served 行を一括取得（Bistro 規模なので全件で十分）。
-     *
-     * Served も含めるのは、タップで赤→緑に変化したチケットが
-     * 直後に消えず「列の一番下」に残る UX を成立させるため。
-     * セッションが Closed になれば自然に画面から消える。
-     *
-     * @return Collection<int, OrderLine>
-     */
-    public function pullActiveSessionTicketsForDashboard(int $shopId): Collection
-    {
-        $servedCutoff = now()->subSeconds(self::TRANSIENT_SERVED_SECONDS);
-
-        return OrderLine::query()
-            ->where('order_lines.shop_id', $shopId)
-            ->where(static function ($q) use ($servedCutoff): void {
-                $q->whereIn('status', [
-                    OrderLineStatus::Confirmed,
-                    OrderLineStatus::Cooking,
-                ])
-                    ->orWhere(static function ($served) use ($servedCutoff): void {
-                        $served->where('status', OrderLineStatus::Served)
-                            ->where('updated_at', '>=', $servedCutoff);
-                    });
-            })
-            ->whereHas(
-                'order.tableSession',
-                fn ($q) => $q->where('status', TableSessionStatus::Active)
-            )
-            ->with([
-                'menuItem:id,menu_category_id,name,kitchen_name,role_category,sort_order',
-                'menuItem.menuCategory:id,sort_order',
-                'order:id,table_session_id,shop_id,placed_at',
-                'order.tableSession:id,restaurant_table_id,shop_id,staff_name,customer_name',
-                'order.tableSession.restaurantTable:id,shop_id,name,sort_order',
-            ])
-            ->orderBy('id')
-            ->get();
-    }
-
-    /**
-     * 当日開始のセッションのうち、少なくとも 1 件の Served 行を持つものを返す。
-     * Active / Closed の両方を含む（会計済みも当日履歴として参照するため）。
-     *
-     * @return Collection<int, TableSession>
-     */
-    public function pullServedSessionsForToday(int $shopId): Collection
-    {
-        return TableSession::query()
-            ->where('shop_id', $shopId)
-            ->where('opened_at', '>=', now()->startOfDay())
-            ->whereIn('status', [
-                TableSessionStatus::Active,
-                TableSessionStatus::Closed,
-            ])
-            ->whereHas(
-                'posOrders.lines',
-                fn ($q) => $q->where('status', OrderLineStatus::Served)
-            )
-            ->with([
-                'restaurantTable:id,shop_id,name,sort_order',
-                'posOrders.lines' => function ($q): void {
-                    $q->where('status', OrderLineStatus::Served)
-                        ->orderBy('id')
-                        ->with(['menuItem:id,name,kitchen_name']);
-                },
-            ])
-            ->orderByDesc('opened_at')
-            ->get();
-    }
-}
-</file>
-
 <file path="resources/views/layouts/kds.blade.php">
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full dark">
@@ -802,6 +305,7 @@ final class KdsQueryService
 <file path="resources/views/livewire/kds/kds-dashboard.blade.php">
 @php
     /** @var list<array<string, mixed>> $columns */
+    /** @var int $queuedBatchCount */
     /** @var bool $hasShop */
     /** @var array{offline:bool,last_fail_at:?string,last_fail_hms:?string,last_ok_hms:?string,last_fail_error:?string} $broadcastHealth */
 @endphp
@@ -839,6 +343,20 @@ final class KdsQueryService
                 </span>
                 <span class="hidden text-[10px] text-slate-500 sm:inline sm:text-xs">{{ now()->format('H:i') }}</span>
                 @if ($hasShop)
+                    @php
+                        $q = max(0, (int) $queuedBatchCount);
+                        $queueBadgeClass = $q === 0
+                            ? 'bg-gray-800 text-gray-400'
+                            : ($q >= 5
+                                ? 'bg-amber-900/40 text-amber-100 animate-pulse'
+                                : 'bg-blue-900/40 text-blue-100');
+                    @endphp
+                    <span
+                        class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold tabular-nums sm:text-xs {{ $queueBadgeClass }}"
+                        title="{{ __('kds.queue_waiting', ['count' => $q]) }}"
+                    >
+                        {{ __('kds.queue_waiting', ['count' => $q]) }}
+                    </span>
                     <button
                         type="button"
                         wire:click="toggleHistory"
@@ -896,29 +414,14 @@ final class KdsQueryService
                 <p class="mt-1 text-xs text-slate-400">{{ __('kds.empty_subtitle') }}</p>
             </div>
         @else
-            <div class="flex min-h-0 min-w-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden pb-1 transition-all duration-300 [-webkit-overflow-scrolling:touch] sm:gap-3">
+            <div class="grid min-h-0 min-w-0 flex-1 grid-cols-3 gap-1.5 overflow-hidden pb-1 sm:gap-2">
                 @foreach ($columns as $col)
                     @php
                         $isBacklog = in_array($col['category'] ?? '', ['staff', 'takeaway'], true);
                     @endphp
                     <section
                         wire:key="kds-batch-{{ $col['batchKey'] }}"
-                        class="flex h-full max-h-full min-h-0 w-[min(18rem,72vw)] flex-none flex-col overflow-hidden rounded-lg border shadow-lg sm:w-72 {{ $isBacklog ? 'border-slate-700 bg-slate-800/80' : 'border-slate-800 bg-slate-900/70' }}"
-                        x-data="{
-                            dismissing: false,
-                            allServed: {{ ($col['allServed'] ?? false) ? 'true' : 'false' }},
-                            triggerDismiss() {
-                                if (this.dismissing) {
-                                    return;
-                                }
-                                this.dismissing = true;
-                            }
-                        }"
-                        x-init="if (allServed) setTimeout(() => triggerDismiss(), 40); $watch('allServed', v => { if (v) setTimeout(() => triggerDismiss(), 40) })"
-                        x-show="!dismissing"
-                        x-transition:leave="ease-in duration-400"
-                        x-transition:leave-start="opacity-100 scale-100 translate-y-0"
-                        x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
+                        class="flex h-full max-h-full min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-lg border shadow-lg {{ $isBacklog ? 'border-slate-700 bg-slate-800/80' : 'border-slate-800 bg-slate-900/70' }}"
                     >
                         <header class="flex min-h-14 items-center justify-between border-b px-4 py-3 {{ $isBacklog ? 'border-slate-700 bg-slate-800' : 'border-slate-800 bg-slate-900' }}">
                             <h2 class="text-lg font-bold tracking-wide {{ $isBacklog ? 'text-slate-200' : 'text-slate-100' }}">
@@ -1031,9 +534,7 @@ final class KdsQueryService
                                                     <span class="text-xs font-normal leading-snug {{ $modColor }}">+ {{ implode(', ', $toppingNames) }}</span>
                                                 @endif
                                             </span>
-                                            <span class="shrink-0 rounded-full bg-rose-700/70 px-2 py-1 text-xs text-rose-50">
-                                                {{ __('kds.tap_to_serve') }}
-                                            </span>
+
                                         </button>
                                     @endif
                                 </li>
@@ -1166,6 +667,578 @@ final class KdsQueryService
         </div>
     @endif
 </div>
+</file>
+
+<file path="app/Services/Kds/KdsQueryService.php">
+<?php
+
+namespace App\Services\Kds;
+
+use App\Domains\Pos\Tables\TableCategory;
+use App\Enums\OrderLineStatus;
+use App\Enums\TableSessionStatus;
+use App\Models\OrderLine;
+use App\Models\TableSession;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
+
+final class KdsQueryService
+{
+    public function tableCategoryForTableId(int $tableId): ?TableCategory
+    {
+        return TableCategory::tryResolveFromId($tableId);
+    }
+
+    public function tableCategoryPriorityForKds(int $tableId): int
+    {
+        return match ($this->tableCategoryForTableId($tableId)) {
+            TableCategory::Customer => 0,
+            TableCategory::Staff, TableCategory::Takeaway => 1,
+            default => 2,
+        };
+    }
+
+    /**
+     * Keyset Pull（§10）: `OFFSET` は使用しない。
+     *
+     * @return Collection<int, OrderLine>
+     */
+    public function pullActiveTickets(
+        int $shopId,
+        ?string $cursorUpdatedAt = null,
+        ?int $cursorId = null,
+        int $limit = 200,
+    ): Collection {
+        $limit = max(1, min(500, $limit));
+
+        $q = OrderLine::query()
+            ->where('shop_id', $shopId)
+            ->whereIn('status', [
+                OrderLineStatus::Confirmed,
+                OrderLineStatus::Cooking,
+            ])
+            ->with(['menuItem'])
+            ->orderBy('updated_at')
+            ->orderBy('id');
+
+        if ($cursorUpdatedAt !== null && $cursorId !== null) {
+            $t = Carbon::parse($cursorUpdatedAt);
+            $q->whereRaw(
+                '(updated_at > ?) OR (updated_at = ? AND id > ?)',
+                [$t, $t, $cursorId]
+            );
+        }
+
+        return $q->limit($limit)->get();
+    }
+
+    /**
+     * KDS ダッシュボード用: Active セッションのうち、仮想バッチキー
+     *（COALESCE(TRIM(kds_ticket_batch_id), CONCAT('o:', order_id))）単位で
+     * Confirmed / Cooking が 1 件でも残っているバッチに属する行を返す。
+     * そのバッチでは Served 行も含め（Cancelled は除外）、
+     * バッチ内がすべて Served 等で未完了がなくなったバッチは結果に含まれない。
+     *
+     * @return Collection<int, OrderLine>
+     */
+    public function pullActiveSessionTicketsForDashboard(int $shopId): Collection
+    {
+        return OrderLine::query()
+            ->where('order_lines.shop_id', $shopId)
+            ->whereNot('order_lines.status', OrderLineStatus::Cancelled)
+            ->whereIn('order_lines.status', [
+                OrderLineStatus::Confirmed,
+                OrderLineStatus::Cooking,
+                OrderLineStatus::Served,
+            ])
+            ->whereHas(
+                'order.tableSession',
+                fn ($q) => $q->where('status', TableSessionStatus::Active)
+            )
+            ->whereExists(function ($query): void {
+                $p = $query->getConnection()->getTablePrefix();
+                $olPending = '`'.$p.'ol_pending`';
+                $olOuter = '`'.$p.'order_lines`';
+                $query->selectRaw('1')
+                    ->from('order_lines as ol_pending')
+                    ->join('orders as po_pending', 'ol_pending.order_id', '=', 'po_pending.id')
+                    ->join('orders as po_self', 'po_self.id', '=', 'order_lines.order_id')
+                    ->whereColumn('po_pending.table_session_id', 'po_self.table_session_id')
+                    ->whereColumn('ol_pending.shop_id', 'order_lines.shop_id')
+                    ->whereRaw(
+                        "COALESCE(NULLIF(TRIM({$olPending}.`kds_ticket_batch_id`), ''), CONCAT('o:', {$olPending}.`order_id`)) = COALESCE(NULLIF(TRIM({$olOuter}.`kds_ticket_batch_id`), ''), CONCAT('o:', {$olOuter}.`order_id`))"
+                    )
+                    ->whereIn('ol_pending.status', [
+                        OrderLineStatus::Confirmed,
+                        OrderLineStatus::Cooking,
+                    ]);
+            })
+            ->with([
+                'menuItem:id,menu_category_id,name,kitchen_name,role_category,sort_order',
+                'menuItem.menuCategory:id,sort_order',
+                'order:id,table_session_id,shop_id,placed_at',
+                'order.tableSession:id,restaurant_table_id,shop_id,staff_name,customer_name',
+                'order.tableSession.restaurantTable:id,shop_id,name,sort_order',
+            ])
+            ->orderBy('order_lines.id')
+            ->get();
+    }
+
+    /**
+     * 当日開始のセッションのうち、少なくとも 1 件の Served 行を持つものを返す。
+     * Active / Closed の両方を含む（会計済みも当日履歴として参照するため）。
+     *
+     * @return Collection<int, TableSession>
+     */
+    public function pullServedSessionsForToday(int $shopId): Collection
+    {
+        return TableSession::query()
+            ->where('shop_id', $shopId)
+            ->where('opened_at', '>=', now()->startOfDay())
+            ->whereIn('status', [
+                TableSessionStatus::Active,
+                TableSessionStatus::Closed,
+            ])
+            ->whereHas(
+                'posOrders.lines',
+                fn ($q) => $q->where('status', OrderLineStatus::Served)
+            )
+            ->with([
+                'restaurantTable:id,shop_id,name,sort_order',
+                'posOrders.lines' => function ($q): void {
+                    $q->where('status', OrderLineStatus::Served)
+                        ->orderBy('id')
+                        ->with(['menuItem:id,name,kitchen_name']);
+                },
+            ])
+            ->orderByDesc('opened_at')
+            ->get();
+    }
+}
+</file>
+
+<file path="app/Livewire/Kds/KdsDashboard.php">
+<?php
+
+namespace App\Livewire\Kds;
+
+use App\Actions\Kds\UpdateOrderLineStatusAction;
+use App\Domains\Pos\Tables\TableCategory;
+use App\Enums\OrderLineStatus;
+use App\Enums\TableSessionStatus;
+use App\Exceptions\RevisionConflictException;
+use App\Models\OrderLine;
+use App\Models\Shop;
+use App\Models\TableSession;
+use App\Services\Kds\KdsBroadcastService;
+use App\Services\Kds\KdsQueryService;
+use App\Support\Pos\StaffTableSettlementPricing;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Filament\Notifications\Notification;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
+use Livewire\Component;
+use Throwable;
+
+#[Layout('layouts.kds')]
+class KdsDashboard extends Component
+{
+    /**
+     * Shop scope（端末 PIN ログイン後の `session('kds.active_shop_id')`）。
+     * `Locked` でクライアントからの上書きを防ぐ。
+     */
+    #[Locked]
+    public int $shopId = 0;
+
+    private const NEW_ARRIVAL_HIGHLIGHT_SECONDS = 12;
+
+    public bool $historyOpen = false;
+
+    /** @var 'connecting'|'connected'|'disconnected'|'error' */
+    public string $realtimeState = 'connecting';
+
+    public int $pollSeconds = 2;
+
+    public ?string $lastRealtimeEventAt = null;
+
+    public function mount(): void
+    {
+        $id = (int) session('kds.active_shop_id', 0);
+        if ($id > 0 && Shop::query()->whereKey($id)->where('is_active', true)->exists()) {
+            $this->shopId = $id;
+        } else {
+            $this->shopId = 0;
+        }
+        if ($this->shopId === 0) {
+            $this->realtimeState = 'disconnected';
+        }
+    }
+
+    /**
+     * KDS ボード状態（FIFO ソート済み全列・先頭 3 列・待機数）。
+     *
+     * @return array{visibleColumns: list<array<string, mixed>>, queuedBatchCount: int, totalBatchCount: int}
+     */
+    public function getKdsBoardProperty(): array
+    {
+        if ($this->shopId === 0) {
+            return [
+                'visibleColumns' => [],
+                'queuedBatchCount' => 0,
+                'totalBatchCount' => 0,
+            ];
+        }
+
+        /** @var Collection<int, OrderLine> $rows */
+        $rows = app(KdsQueryService::class)->pullActiveSessionTicketsForDashboard($this->shopId);
+
+        $byBatch = [];
+        foreach ($rows as $line) {
+            $order = $line->order;
+            $session = $line->order?->tableSession;
+            $table = $session?->restaurantTable;
+            if ($session === null || $table === null || $order === null) {
+                continue;
+            }
+            $tid = (int) $table->id;
+            $sessionId = (int) $session->id;
+            $orderId = (int) $order->id;
+            $batchUuid = $line->kds_ticket_batch_id;
+            $batchKey = (is_string($batchUuid) && trim($batchUuid) !== '')
+                ? 'b:'.trim($batchUuid)
+                : 'o:'.$orderId;
+
+            if (! isset($byBatch[$batchKey])) {
+                $staffName = $session->staff_name;
+                $tableName = (string) ($table->name ?? '');
+                if (StaffTableSettlementPricing::isStaffMealTableId($tid)
+                    && is_string($staffName)
+                    && trim($staffName) !== '') {
+                    $tableName = trim($staffName);
+                } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
+                    && is_string($session->customer_name)
+                    && trim($session->customer_name) !== '') {
+                    $tableName = trim($session->customer_name);
+                }
+                $byBatch[$batchKey] = [
+                    'batchKey' => $batchKey,
+                    'tableId' => $tid,
+                    'tableSessionId' => $sessionId,
+                    'orderId' => $orderId,
+                    'batchAt' => $order->placed_at ?? $line->updated_at,
+                    'tableName' => $tableName,
+                    'sortOrder' => (int) ($table->sort_order ?? 0),
+                    'category' => app(KdsQueryService::class)->tableCategoryForTableId($tid)?->value ?? 'other',
+                    'tickets' => [],
+                ];
+            } else {
+                $byBatch[$batchKey]['orderId'] = min((int) $byBatch[$batchKey]['orderId'], $orderId);
+                $placedAt = $order->placed_at;
+                if ($placedAt !== null) {
+                    $current = $byBatch[$batchKey]['batchAt'] ?? null;
+                    if ($current === null || $placedAt->lt($current)) {
+                        $byBatch[$batchKey]['batchAt'] = $placedAt;
+                    }
+                }
+            }
+            $byBatch[$batchKey]['tickets'][] = $line;
+        }
+
+        foreach ($byBatch as &$col) {
+            usort($col['tickets'], static function (OrderLine $a, OrderLine $b): int {
+                $ca = (int) ($a->menuItem?->menuCategory?->sort_order ?? PHP_INT_MAX);
+                $cb = (int) ($b->menuItem?->menuCategory?->sort_order ?? PHP_INT_MAX);
+                if ($ca !== $cb) {
+                    return $ca <=> $cb;
+                }
+
+                $ia = (int) ($a->menuItem?->sort_order ?? PHP_INT_MAX);
+                $ib = (int) ($b->menuItem?->sort_order ?? PHP_INT_MAX);
+                if ($ia !== $ib) {
+                    return $ia <=> $ib;
+                }
+
+                $na = mb_strtolower(trim((string) ($a->snapshot_kitchen_name ?: $a->snapshot_name ?: $a->menuItem?->name ?: '')));
+                $nb = mb_strtolower(trim((string) ($b->snapshot_kitchen_name ?: $b->snapshot_name ?: $b->menuItem?->name ?: '')));
+                if ($na !== $nb) {
+                    return $na <=> $nb;
+                }
+
+                return ((int) $a->id) <=> ((int) $b->id);
+            });
+
+            foreach ($col['tickets'] as $ticket) {
+                $isActionable = in_array($ticket->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true);
+                $ageSeconds = optional($ticket->updated_at)?->diffInSeconds(now()) ?? 999999;
+                $ticket->setAttribute('kds_is_new_arrival', $isActionable && $ageSeconds <= self::NEW_ARRIVAL_HIGHLIGHT_SECONDS);
+            }
+        }
+        unset($col);
+
+        $cols = array_values($byBatch);
+        usort($cols, static fn (array $a, array $b): int => self::compareKdsColumnsByFifo($a, $b));
+
+        $out = [];
+        $tableBatchOrdinal = [];
+        foreach ($cols as $col) {
+            /** @var list<OrderLine> $tickets */
+            $tickets = $col['tickets'];
+            $tid = (int) ($col['tableId'] ?? 0);
+            $tableBatchOrdinal[$tid] = ($tableBatchOrdinal[$tid] ?? 0) + 1;
+            $ordinal = (int) $tableBatchOrdinal[$tid];
+            $baseName = (string) ($col['tableName'] !== '' ? $col['tableName'] : '#'.$tid);
+            $col['displayLabel'] = $ordinal === 1 ? $baseName : "{$baseName} (Add #{$ordinal})";
+            $out[] = $col;
+        }
+
+        $total = count($out);
+
+        return [
+            'visibleColumns' => array_slice($out, 0, 3),
+            'queuedBatchCount' => max(0, $total - 3),
+            'totalBatchCount' => $total,
+        ];
+    }
+
+    /**
+     * 画面に出す最大 3 列（FIFO 先頭）。
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getTableColumnsProperty(): array
+    {
+        return $this->kdsBoard['visibleColumns'];
+    }
+
+    public function getQueuedBatchCountProperty(): int
+    {
+        return $this->kdsBoard['queuedBatchCount'];
+    }
+
+    /**
+     * 列間 FIFO: UUID の辞書順は投入順と一致しないため、kds_ticket_batch_id は使わない。
+     * 列内の最古 OrderLine の created_at、同値なら最小 id、さらに table_session_id / order_id。
+     *
+     * @param  array<string, mixed>  $a
+     * @param  array<string, mixed>  $b
+     */
+    private static function compareKdsColumnsByFifo(array $a, array $b): int
+    {
+        [$minCreatedA, $minIdA] = self::columnFifoEarliestTicketMeta($a);
+        [$minCreatedB, $minIdB] = self::columnFifoEarliestTicketMeta($b);
+
+        if ($minCreatedA !== null && $minCreatedB !== null) {
+            $cmp = $minCreatedA <=> $minCreatedB;
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+        } elseif ($minCreatedA !== null xor $minCreatedB !== null) {
+            return $minCreatedA === null ? 1 : -1;
+        }
+
+        if ($minIdA !== $minIdB) {
+            return $minIdA <=> $minIdB;
+        }
+
+        $sessionA = (int) ($a['tableSessionId'] ?? 0);
+        $sessionB = (int) ($b['tableSessionId'] ?? 0);
+        if ($sessionA !== $sessionB) {
+            return $sessionA <=> $sessionB;
+        }
+
+        return ((int) ($a['orderId'] ?? 0)) <=> ((int) ($b['orderId'] ?? 0));
+    }
+
+    /**
+     * @param  array<string, mixed>  $col
+     * @return array{CarbonInterface|null, int}
+     */
+    private static function columnFifoEarliestTicketMeta(array $col): array
+    {
+        $minCreated = null;
+        $minId = PHP_INT_MAX;
+        foreach ($col['tickets'] ?? [] as $line) {
+            if (! $line instanceof OrderLine) {
+                continue;
+            }
+            $minId = min($minId, (int) $line->id);
+            $created = $line->created_at;
+            if ($created === null) {
+                continue;
+            }
+            if ($minCreated === null || $created->lt($minCreated)) {
+                $minCreated = $created;
+            }
+        }
+
+        return [$minCreated, $minId];
+    }
+
+    public function toggleHistory(): void
+    {
+        $this->historyOpen = ! $this->historyOpen;
+    }
+
+    /**
+     * 履歴ドロワーが開いているときのみ DB を参照する（poll ごとに叩かない）。
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function getHistoryColumnsProperty(): array
+    {
+        if (! $this->historyOpen || $this->shopId === 0) {
+            return [];
+        }
+
+        return app(KdsQueryService::class)
+            ->pullServedSessionsForToday($this->shopId)
+            ->map(static function (TableSession $s): array {
+                $lines = $s->posOrders->flatMap(static fn ($o) => $o->lines)->values();
+                $tid = (int) ($s->restaurant_table_id ?? 0);
+                $tn = (string) ($s->restaurantTable?->name ?? '');
+                if (StaffTableSettlementPricing::isStaffMealTableId($tid)
+                    && is_string($s->staff_name)
+                    && trim($s->staff_name) !== '') {
+                    $tn = trim($s->staff_name);
+                } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
+                    && is_string($s->customer_name)
+                    && trim($s->customer_name) !== '') {
+                    $tn = trim($s->customer_name);
+                }
+
+                return [
+                    'sessionId' => (int) $s->id,
+                    'tableName' => $tn,
+                    'openedAt' => $s->opened_at,
+                    'isClosed' => $s->status === TableSessionStatus::Closed,
+                    'lines' => $lines,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * 赤チケット（Confirmed/Cooking）をタップ → Served（緑）へ。
+     * 楽観的ロックで失敗（他スタッフが先に更新）した場合は握り潰し、
+     * 即時再描画（Livewire 標準の再レンダリング）で最新状態を出す。
+     */
+    public function markServed(int $orderLineId, int $expectedLineRevision): void
+    {
+        try {
+            app(UpdateOrderLineStatusAction::class)->execute(
+                $orderLineId,
+                OrderLineStatus::Served->value,
+                $expectedLineRevision,
+            );
+        } catch (RevisionConflictException $e) {
+            Notification::make()
+                ->title(__('kds.conflict_title'))
+                ->body(__('kds.conflict_body'))
+                ->warning()
+                ->send();
+        } catch (Throwable $e) {
+            Log::warning('KDS markServed failed', [
+                'order_line_id' => $orderLineId,
+                'expected_revision' => $expectedLineRevision,
+                'error' => $e->getMessage(),
+            ]);
+            Notification::make()
+                ->title(__('kds.update_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    /**
+     * 同一店舗内で赤→緑、緑→赤のロールバック（誤タップ救済）も可能にする。
+     */
+    public function revertToConfirmed(int $orderLineId, int $expectedLineRevision): void
+    {
+        try {
+            app(UpdateOrderLineStatusAction::class)->execute(
+                $orderLineId,
+                OrderLineStatus::Confirmed->value,
+                $expectedLineRevision,
+            );
+        } catch (RevisionConflictException $e) {
+            Notification::make()
+                ->title(__('kds.conflict_title'))
+                ->body(__('kds.conflict_body'))
+                ->warning()
+                ->send();
+        } catch (Throwable $e) {
+            Log::warning('KDS revert failed', [
+                'order_line_id' => $orderLineId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Pusher (Echo) からの「即時更新ベル」受信時に Alpine からデバウンス越しに呼ばれる。
+     *
+     * 実装は意図的に no-op としている。Livewire はこのメソッド呼び出しに伴って
+     * 通常の Mount/Render サイクルを走らせ、`kdsBoard` / `tableColumns` が
+     * `KdsQueryService` を再実行することで最新状態を返す。
+     *
+     * これにより:
+     *   - DOM Morph と `wire:poll.10s` の競合が起きない（Livewire が応答を 1 本に直列化）
+     *   - Echo がバースト発火しても 300ms デバウンスで 1 リクエストに集約される
+     */
+    public function refreshTickets(): void
+    {
+        // no-op: Livewire の標準再レンダリングのみで十分。
+    }
+
+    public function syncRealtimeState(string $state): void
+    {
+        if (! in_array($state, ['connecting', 'connected', 'disconnected', 'error'], true)) {
+            return;
+        }
+
+        $this->realtimeState = $state;
+        $this->pollSeconds = $state === 'connected' ? 60 : 2;
+    }
+
+    public function markRealtimeEventReceived(): void
+    {
+        $this->lastRealtimeEventAt = now()->format('H:i:s');
+    }
+
+    /**
+     * @return array{offline:bool,last_fail_at:?string,last_fail_hms:?string,last_ok_hms:?string,last_fail_error:?string}
+     */
+    public function getBroadcastHealthProperty(): array
+    {
+        $health = app(KdsBroadcastService::class)->recentHealthForShop($this->shopId);
+        $failAt = is_string($health['last_fail_at'] ?? null) ? CarbonImmutable::parse($health['last_fail_at']) : null;
+        $okAt = is_string($health['last_ok_at'] ?? null) ? CarbonImmutable::parse($health['last_ok_at']) : null;
+
+        return [
+            'offline' => $this->realtimeState !== 'connected',
+            'last_fail_at' => $failAt?->toIso8601String(),
+            'last_fail_hms' => $failAt?->format('H:i:s'),
+            'last_ok_hms' => $okAt?->format('H:i:s'),
+            'last_fail_error' => is_string($health['last_fail_error'] ?? null) ? $health['last_fail_error'] : null,
+        ];
+    }
+
+    public function render(): View
+    {
+        return view('livewire.kds.kds-dashboard', [
+            'columns' => $this->tableColumns,
+            'queuedBatchCount' => $this->queuedBatchCount,
+            'hasShop' => $this->shopId !== 0,
+            'broadcastHealth' => $this->broadcastHealth,
+        ]);
+    }
+}
 </file>
 
 </files>

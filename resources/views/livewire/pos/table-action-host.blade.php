@@ -166,12 +166,9 @@
                 </svg>
             </button>
             <div class="min-w-0 flex-1">
-                <h2 class="line-clamp-1 text-sm font-black text-gray-950 dark:text-white">
-                    {{ $this->activeSessionLabel }}
-                </h2>
                 <div class="mt-0.5 flex items-center gap-1.5">
-                    <span class="rounded-full border-2 border-blue-600 bg-blue-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-blue-900 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-100">
-                        {{ $this->activeCategoryLabel }}
+                    <span class="rounded-full border-2 border-amber-400 bg-amber-100 px-4 py-1 text-[14px] font-extrabold uppercase tracking-wider text-blue-900 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-100">
+                    {{ $this->activeSessionLabel }}
                     </span>
                     @if ($this->isBilledState)
                         <span class="rounded-full border-2 border-amber-500 bg-amber-200 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900 dark:border-amber-400 dark:bg-amber-900/50 dark:text-amber-100">
