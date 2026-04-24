@@ -5,12 +5,14 @@ namespace App\Filament\Imports;
 use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\DietaryBadge;
 use App\Models\MenuItem;
+use App\Support\MenuItemMoney;
 use Filament\Actions\Imports\Exceptions\RowImportFailedException;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
 use Filament\Actions\Imports\Models\Import;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Number;
+use Illuminate\Support\Str;
 
 class MenuItemImporter extends Importer
 {
@@ -81,15 +83,239 @@ class MenuItemImporter extends Importer
             ImportColumn::make('options_payload')
                 ->rules(['nullable'])
                 ->castStateUsing(function (mixed $state): ?array {
+                    // C-2: 不正 JSON・構造崩れは RowImportFailedException（行失敗）。空セルは null のまま（従来どおりクリア可）。
                     if ($state === null || $state === '') {
                         return null;
                     }
-                    if (is_array($state)) {
-                        return $state;
-                    }
-                    $decoded = json_decode((string) $state, true);
 
-                    return is_array($decoded) ? $decoded : null;
+                    if (is_array($state)) {
+                        $decoded = $state;
+                    } else {
+                        $raw = trim((string) $state);
+                        if ($raw === '') {
+                            return null;
+                        }
+                        $decoded = json_decode($raw, true);
+                        if (json_last_error() !== JSON_ERROR_NONE) {
+                            throw new RowImportFailedException(
+                                'options_payload の JSON が不正です（JSON パースに失敗）。'
+                            );
+                        }
+                        if ($decoded === null && strtolower($raw) === 'null') {
+                            return null;
+                        }
+                    }
+
+                    if (! is_array($decoded)) {
+                        throw new RowImportFailedException(
+                            'options_payload の JSON が不正です（JSON パースに失敗、または配列形式ではありません）。'
+                        );
+                    }
+
+                    if (array_key_exists('rules', $decoded) && ! is_array($decoded['rules'])) {
+                        throw new RowImportFailedException(
+                            'options_payload.rules はオブジェクト（連想配列）である必要があります。'
+                        );
+                    }
+                    if (array_key_exists('styles', $decoded) && ! is_array($decoded['styles'])) {
+                        throw new RowImportFailedException(
+                            'options_payload.styles は配列である必要があります。'
+                        );
+                    }
+                    if (array_key_exists('toppings', $decoded) && ! is_array($decoded['toppings'])) {
+                        throw new RowImportFailedException(
+                            'options_payload.toppings は配列である必要があります。'
+                        );
+                    }
+
+                    $rulesIn = is_array($decoded['rules'] ?? null) ? $decoded['rules'] : [];
+                    if (array_key_exists('style_required', $rulesIn)) {
+                        $sr = $rulesIn['style_required'];
+                        $allowed = is_bool($sr)
+                            || is_int($sr)
+                            || (is_string($sr) && in_array(strtolower(trim($sr)), ['0', '1', 'true', 'false', 'yes', 'no', 'on', 'off'], true));
+                        if (! $allowed) {
+                            throw new RowImportFailedException(
+                                'options_payload の rules.style_required は true / false（または 0 / 1）である必要があります。'
+                            );
+                        }
+                    }
+                    $styleRequired = false;
+                    if (array_key_exists('style_required', $rulesIn)) {
+                        $sr = $rulesIn['style_required'];
+                        if (is_bool($sr)) {
+                            $styleRequired = $sr;
+                        } elseif (is_int($sr)) {
+                            $styleRequired = $sr !== 0;
+                        } else {
+                            $styleRequired = in_array(strtolower(trim((string) $sr)), ['1', 'true', 'yes', 'on'], true);
+                        }
+                    }
+
+                    $makeUnique = static function (string $base, array &$used): string {
+                        $candidate = $base;
+                        if (! isset($used[$candidate])) {
+                            $used[$candidate] = true;
+
+                            return $candidate;
+                        }
+                        $n = 2;
+                        while (true) {
+                            $candidate = $base.'-'.$n;
+                            if (! isset($used[$candidate])) {
+                                $used[$candidate] = true;
+
+                                return $candidate;
+                            }
+                            $n++;
+                        }
+                    };
+
+                    $usedStyleIds = [];
+                    $styles = [];
+                    foreach ($decoded['styles'] ?? [] as $i => $style) {
+                        if (! is_array($style)) {
+                            throw new RowImportFailedException(
+                                sprintf('options_payload.styles[%d] は配列である必要があります。', $i)
+                            );
+                        }
+                        $name = trim((string) ($style['name'] ?? ''));
+                        $id = trim((string) ($style['id'] ?? ''));
+                        if ($id === '') {
+                            $id = Str::slug($name) ?: 'style-'.($i + 1);
+                        }
+                        $id = $makeUnique($id, $usedStyleIds);
+                        $pv = $style['price_minor'] ?? 0;
+                        if ($pv === null || $pv === '') {
+                            $pv = 0;
+                        }
+                        if (is_string($pv)) {
+                            $pv = trim($pv);
+                            if ($pv === '') {
+                                $pv = 0;
+                            }
+                        }
+                        if (is_bool($pv) || is_array($pv)) {
+                            throw new RowImportFailedException(
+                                sprintf(
+                                    'options_payload.styles[%d].price_minor は 0 以上の整数である必要があります（入力値: %s）。',
+                                    $i,
+                                    var_export($pv, true)
+                                )
+                            );
+                        }
+                        if (! is_numeric($pv)) {
+                            throw new RowImportFailedException(
+                                sprintf(
+                                    'options_payload.styles[%d].price_minor は 0 以上の整数である必要があります（入力値: %s）。',
+                                    $i,
+                                    var_export($pv, true)
+                                )
+                            );
+                        }
+                        if ((float) $pv < 0) {
+                            throw new RowImportFailedException(
+                                sprintf(
+                                    'options_payload.styles[%d].price_minor は 0 以上の整数である必要があります（入力値: %s）。',
+                                    $i,
+                                    var_export($pv, true)
+                                )
+                            );
+                        }
+                        $minor = MenuItemMoney::normalizePersistedOptionMinor($pv);
+                        if ($minor < 0) {
+                            throw new RowImportFailedException(
+                                sprintf(
+                                    'options_payload.styles[%d].price_minor は 0 以上の整数である必要があります（入力値: %s）。',
+                                    $i,
+                                    var_export($pv, true)
+                                )
+                            );
+                        }
+                        $styles[] = [
+                            'id' => $id,
+                            'name' => (string) ($style['name'] ?? ''),
+                            'price_minor' => $minor,
+                        ];
+                    }
+
+                    $usedToppingIds = [];
+                    $toppings = [];
+                    foreach ($decoded['toppings'] ?? [] as $i => $topping) {
+                        if (! is_array($topping)) {
+                            throw new RowImportFailedException(
+                                sprintf('options_payload.toppings[%d] は配列である必要があります。', $i)
+                            );
+                        }
+                        $name = trim((string) ($topping['name'] ?? ''));
+                        $id = trim((string) ($topping['id'] ?? ''));
+                        if ($id === '') {
+                            $id = Str::slug($name) ?: 'topping-'.($i + 1);
+                        }
+                        $id = $makeUnique($id, $usedToppingIds);
+                        $dv = $topping['price_delta_minor'] ?? 0;
+                        if ($dv === null || $dv === '') {
+                            $dv = 0;
+                        }
+                        if (is_string($dv)) {
+                            $dv = trim($dv);
+                            if ($dv === '') {
+                                $dv = 0;
+                            }
+                        }
+                        if (is_bool($dv) || is_array($dv)) {
+                            throw new RowImportFailedException(
+                                sprintf(
+                                    'options_payload.toppings[%d].price_delta_minor は 0 以上の整数である必要があります（入力値: %s）。',
+                                    $i,
+                                    var_export($dv, true)
+                                )
+                            );
+                        }
+                        if (! is_numeric($dv)) {
+                            throw new RowImportFailedException(
+                                sprintf(
+                                    'options_payload.toppings[%d].price_delta_minor は 0 以上の整数である必要があります（入力値: %s）。',
+                                    $i,
+                                    var_export($dv, true)
+                                )
+                            );
+                        }
+                        if ((float) $dv < 0) {
+                            throw new RowImportFailedException(
+                                sprintf(
+                                    'options_payload.toppings[%d].price_delta_minor は 0 以上の整数である必要があります（入力値: %s）。',
+                                    $i,
+                                    var_export($dv, true)
+                                )
+                            );
+                        }
+                        $delta = MenuItemMoney::normalizePersistedOptionMinor($dv);
+                        if ($delta < 0) {
+                            throw new RowImportFailedException(
+                                sprintf(
+                                    'options_payload.toppings[%d].price_delta_minor は 0 以上の整数である必要があります（入力値: %s）。',
+                                    $i,
+                                    var_export($dv, true)
+                                )
+                            );
+                        }
+                        $toppings[] = [
+                            'id' => $id,
+                            'name' => (string) ($topping['name'] ?? ''),
+                            'price_delta_minor' => $delta,
+                        ];
+                    }
+
+                    if (! $styleRequired && $styles === [] && $toppings === []) {
+                        return null;
+                    }
+
+                    return [
+                        'rules' => ['style_required' => $styleRequired],
+                        'styles' => array_values($styles),
+                        'toppings' => array_values($toppings),
+                    ];
                 }),
         ];
     }

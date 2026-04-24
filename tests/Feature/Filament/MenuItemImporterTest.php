@@ -212,4 +212,113 @@ class MenuItemImporterTest extends TestCase
         $this->assertEquals($payload['styles'], $fresh->options_payload['styles']);
         $this->assertEquals($payload['toppings'], $fresh->options_payload['toppings']);
     }
+
+    /**
+     * C-2: JSON として解釈できない options_payload は RowImportFailedException で拒否され、レコードが増えないことを検証する。
+     */
+    public function test_options_payload_invalid_json_is_rejected(): void
+    {
+        $p = $this->seedShopAndCategory();
+        $import = $this->createImportModel($p['user'], MenuItemImporter::class);
+        $before = MenuItem::query()->count();
+
+        try {
+            $this->runMenuItemImport($import, [
+                'shop_id' => (string) $p['shop']->id,
+                'menu_category_id' => (string) $p['category']->id,
+                'name' => 'Bad JSON Row',
+                'kitchen_name' => '',
+                'slug' => 'bad-json-'.bin2hex(random_bytes(4)),
+                'description' => '',
+                'hero_image_path' => '',
+                'from_price_minor' => '1000',
+                'sort_order' => '0',
+                'is_active' => '1',
+                'allergy_note' => '',
+                'dietary_slugs' => '',
+                'options_payload' => '{"rules":{"style_required":true}, broken',
+            ]);
+            $this->fail('例外が投げられるべき');
+        } catch (RowImportFailedException $e) {
+            $this->assertStringContainsString('JSON が不正', $e->getMessage());
+        }
+
+        $this->assertSame($before, MenuItem::query()->count());
+    }
+
+    /**
+     * C-2: styles[].price_minor が負の値のとき行が拒否されることを検証する。
+     */
+    public function test_options_payload_negative_price_is_rejected(): void
+    {
+        $p = $this->seedShopAndCategory();
+        $import = $this->createImportModel($p['user'], MenuItemImporter::class);
+        $before = MenuItem::query()->count();
+        $bad = json_encode([
+            'rules' => ['style_required' => true],
+            'styles' => [['id' => 'a', 'name' => 'A', 'price_minor' => -100]],
+            'toppings' => [],
+        ], JSON_UNESCAPED_UNICODE);
+
+        try {
+            $this->runMenuItemImport($import, [
+                'shop_id' => (string) $p['shop']->id,
+                'menu_category_id' => (string) $p['category']->id,
+                'name' => 'Neg Price',
+                'kitchen_name' => '',
+                'slug' => 'neg-'.bin2hex(random_bytes(4)),
+                'description' => '',
+                'hero_image_path' => '',
+                'from_price_minor' => '1000',
+                'sort_order' => '0',
+                'is_active' => '1',
+                'allergy_note' => '',
+                'dietary_slugs' => '',
+                'options_payload' => $bad,
+            ]);
+            $this->fail('例外が投げられるべき');
+        } catch (RowImportFailedException $e) {
+            $this->assertStringContainsString('styles[0].price_minor', $e->getMessage());
+        }
+
+        $this->assertSame($before, MenuItem::query()->count());
+    }
+
+    /**
+     * C-2: styles の要素が配列でないとき行が拒否されることを検証する。
+     */
+    public function test_options_payload_style_row_not_array_is_rejected(): void
+    {
+        $p = $this->seedShopAndCategory();
+        $import = $this->createImportModel($p['user'], MenuItemImporter::class);
+        $before = MenuItem::query()->count();
+        $bad = json_encode([
+            'rules' => ['style_required' => false],
+            'styles' => ['not-an-object'],
+            'toppings' => [],
+        ], JSON_UNESCAPED_UNICODE);
+
+        try {
+            $this->runMenuItemImport($import, [
+                'shop_id' => (string) $p['shop']->id,
+                'menu_category_id' => (string) $p['category']->id,
+                'name' => 'Bad Style Row',
+                'kitchen_name' => '',
+                'slug' => 'bad-style-'.bin2hex(random_bytes(4)),
+                'description' => '',
+                'hero_image_path' => '',
+                'from_price_minor' => '1000',
+                'sort_order' => '0',
+                'is_active' => '1',
+                'allergy_note' => '',
+                'dietary_slugs' => '',
+                'options_payload' => $bad,
+            ]);
+            $this->fail('例外が投げられるべき');
+        } catch (RowImportFailedException $e) {
+            $this->assertStringContainsString('styles[0]', $e->getMessage());
+        }
+
+        $this->assertSame($before, MenuItem::query()->count());
+    }
 }
