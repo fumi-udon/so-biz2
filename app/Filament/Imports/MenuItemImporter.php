@@ -78,7 +78,7 @@ class MenuItemImporter extends Importer
                     // モデル属性には載せず saveRecord() で pivot 同期
                 }),
             ImportColumn::make('options_payload')
-                ->rules(['nullable', 'string'])
+            ->rules(['nullable'])
                 ->castStateUsing(function (mixed $state): ?array {
                     if ($state === null || $state === '') {
                         return null;

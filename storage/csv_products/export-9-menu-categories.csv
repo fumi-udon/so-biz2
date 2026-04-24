@@ -1,0 +1,9 @@
+﻿id,shop_id,name,slug,sort_order,is_active
+5,3,"🥟 Entrées / Tapas",entrees-tapas,1,1
+1,3,"🍜 Ramen",ramen,2,1
+2,3,"🍲 Udon",udon,2,1
+3,3,"🍝 Yakisoba",yakisoba,3,1
+4,3,"🍱 Donburi / Riz",donburi-riz,4,1
+6,3,"🍹 Boissons / Kombucha",boissons-kombucha,6,1
+7,3,"🍰 Desserts",desserts,7,1
+8,3,"➕ Suppléments",supplements,8,1
