@@ -12,8 +12,6 @@ use Illuminate\Database\Eloquent\Collection;
 
 final class KdsQueryService
 {
-    private const int TRANSIENT_SERVED_SECONDS = 6;
-
     public function tableCategoryForTableId(int $tableId): ?TableCategory
     {
         return TableCategory::tryResolveFromId($tableId);
@@ -63,35 +61,39 @@ final class KdsQueryService
     }
 
     /**
-     * KDS ダッシュボード用: 現在「Active」なテーブルセッション配下の
-     * Confirmed / Cooking / Served 行を一括取得（Bistro 規模なので全件で十分）。
-     *
-     * Served も含めるのは、タップで赤→緑に変化したチケットが
-     * 直後に消えず「列の一番下」に残る UX を成立させるため。
-     * セッションが Closed になれば自然に画面から消える。
+     * KDS ダッシュボード用: Active セッションのうち、同一 table_session に
+     * Confirmed / Cooking が 1 件でも残っているものに属する行を返す。
+     * その条件を満たすセッションでは Served 行も含め（Cancelled は除外）、
+     * 未完了がなくなったセッションは結果に含まれない。
      *
      * @return Collection<int, OrderLine>
      */
     public function pullActiveSessionTicketsForDashboard(int $shopId): Collection
     {
-        $servedCutoff = now()->subSeconds(self::TRANSIENT_SERVED_SECONDS);
-
         return OrderLine::query()
             ->where('order_lines.shop_id', $shopId)
-            ->where(static function ($q) use ($servedCutoff): void {
-                $q->whereIn('status', [
-                    OrderLineStatus::Confirmed,
-                    OrderLineStatus::Cooking,
-                ])
-                    ->orWhere(static function ($served) use ($servedCutoff): void {
-                        $served->where('status', OrderLineStatus::Served)
-                            ->where('updated_at', '>=', $servedCutoff);
-                    });
-            })
+            ->whereNot('order_lines.status', OrderLineStatus::Cancelled)
+            ->whereIn('order_lines.status', [
+                OrderLineStatus::Confirmed,
+                OrderLineStatus::Cooking,
+                OrderLineStatus::Served,
+            ])
             ->whereHas(
                 'order.tableSession',
                 fn ($q) => $q->where('status', TableSessionStatus::Active)
             )
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('order_lines as ol_pending')
+                    ->join('orders as po_pending', 'ol_pending.order_id', '=', 'po_pending.id')
+                    ->join('orders as po_self', 'po_self.id', '=', 'order_lines.order_id')
+                    ->whereColumn('po_pending.table_session_id', 'po_self.table_session_id')
+                    ->whereColumn('ol_pending.shop_id', 'order_lines.shop_id')
+                    ->whereIn('ol_pending.status', [
+                        OrderLineStatus::Confirmed,
+                        OrderLineStatus::Cooking,
+                    ]);
+            })
             ->with([
                 'menuItem:id,menu_category_id,name,kitchen_name,role_category,sort_order',
                 'menuItem.menuCategory:id,sort_order',
@@ -99,7 +101,7 @@ final class KdsQueryService
                 'order.tableSession:id,restaurant_table_id,shop_id,staff_name,customer_name',
                 'order.tableSession.restaurantTable:id,shop_id,name,sort_order',
             ])
-            ->orderBy('id')
+            ->orderBy('order_lines.id')
             ->get();
     }
 

@@ -123,9 +123,9 @@ class KdsDashboardTest extends TestCase
         $this->assertSame(1, (int) $fresh->line_revision);
     }
 
-    public function test_fully_served_column_stays_visible_within_grace_period(): void
+    public function test_fully_served_session_hidden_from_dashboard(): void
     {
-        $p = $this->seedActiveTicket('T-GRACE');
+        $p = $this->seedActiveTicket('T-ALL-SERVED');
         OrderLine::query()->whereKey($p['line']->id)->update([
             'status' => OrderLineStatus::Served,
             'line_revision' => 2,
@@ -134,23 +134,7 @@ class KdsDashboardTest extends TestCase
 
         $this->withSession(['kds.active_shop_id' => (int) $p['shop']->id]);
         Livewire::test(KdsDashboard::class)
-            ->assertSee('Ramen K')
-            ->assertSee('T-GRACE')
-            ->assertSee('allServed: true', false);
-    }
-
-    public function test_fully_served_column_dropped_after_grace_period(): void
-    {
-        $p = $this->seedActiveTicket('T-HIDE');
-        OrderLine::query()->whereKey($p['line']->id)->update([
-            'status' => OrderLineStatus::Served,
-            'line_revision' => 2,
-            'updated_at' => now()->subSeconds(10),
-        ]);
-
-        $this->withSession(['kds.active_shop_id' => (int) $p['shop']->id]);
-        Livewire::test(KdsDashboard::class)
-            ->assertDontSee('T-HIDE');
+            ->assertDontSee('T-ALL-SERVED');
     }
 
     public function test_column_with_mixed_pending_and_served_stays_visible(): void
@@ -179,7 +163,7 @@ class KdsDashboardTest extends TestCase
             ->assertSee('allServed: false', false);
     }
 
-    public function test_old_served_lines_do_not_revive_when_new_add_on_is_confirmed(): void
+    public function test_old_served_lines_remain_visible_when_addon_confirmed_same_session(): void
     {
         $p = $this->seedActiveTicket('T-DELTA');
         OrderLine::query()->whereKey($p['line']->id)->update([
@@ -204,7 +188,7 @@ class KdsDashboardTest extends TestCase
         $this->withSession(['kds.active_shop_id' => (int) $p['shop']->id]);
         Livewire::test(KdsDashboard::class)
             ->assertSee('Fresh add-on')
-            ->assertDontSee('Old served item');
+            ->assertSee('Old served item');
     }
 
     public function test_history_columns_empty_when_drawer_closed(): void
@@ -303,6 +287,18 @@ class KdsDashboardTest extends TestCase
         OrderLine::query()->whereKey($servedSeed['line']->id)->update([
             'status' => OrderLineStatus::Served,
             'line_revision' => 2,
+        ]);
+        OrderLine::query()->create([
+            'order_id' => (int) $servedSeed['line']->order_id,
+            'menu_item_id' => (int) $servedSeed['item']->id,
+            'qty' => 1,
+            'unit_price_minor' => 1000,
+            'line_total_minor' => 1000,
+            'snapshot_name' => 'Hold open',
+            'snapshot_kitchen_name' => 'Hold open K',
+            'snapshot_options_payload' => [],
+            'status' => OrderLineStatus::Confirmed,
+            'line_revision' => 1,
         ]);
 
         // Match only visible text content (between tags), so substrings inside
