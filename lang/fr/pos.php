@@ -18,6 +18,8 @@ return [
     'action_addition_bill' => 'Addition',
     'action_changer_table' => 'Changer de table',
     'action_logout' => 'Déconnexion',
+    'logout_confirm' => 'Se déconnecter de cette caisse ? Les modifications non enregistrées pourront être perdues.',
+    'footer_utility_menu' => 'Plus d’actions',
     'kiosk_open_admin' => 'Ouvrir l’admin (interface complète)',
     'staff_orders' => 'Commandes staff',
     'takeout_heading' => 'TAKEOUT',

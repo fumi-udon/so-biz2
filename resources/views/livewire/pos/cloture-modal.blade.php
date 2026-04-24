@@ -1,7 +1,7 @@
 @php
     $locked = $this->uiState === 'in_flight';
     $clotureModalWindowAttrs = (new \Illuminate\View\ComponentAttributeBag)->class([
-        'max-h-[min(92dvh,720px)] overflow-hidden',
+        'max-h-[min(92dvh,720px)] max-w-full overflow-hidden',
     ]);
     /** 近似値ボタンは最大3個（ぴったり1 + proche 最大2） */
     $procheMinorForButtons = array_slice($this->procheMinor, 0, 2);

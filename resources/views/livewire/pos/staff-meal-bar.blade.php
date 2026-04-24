@@ -1,5 +1,5 @@
 <div @class([
-    'w-full shrink-0',
+    'w-full max-w-full shrink-0 max-md:w-full',
     'min-w-0 max-w-full' => $inlineInFooter,
 ])>
     <div
@@ -16,7 +16,15 @@
         aria-hidden="{{ $this->showStaffMealBar ? 'false' : 'true' }}"
     >
         <div
-            class="flex w-full min-w-0 max-w-full flex-nowrap items-center justify-start gap-0.5 overflow-x-auto overflow-y-visible py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            class="flex max-w-full items-center justify-between gap-1 px-0.5 pb-0.5 max-md:flex md:hidden"
+        >
+            <span class="truncate text-[10px] font-extrabold uppercase leading-none tracking-wide text-gray-950 dark:text-gray-100">
+                {{ __('pos.staff_tile_heading') }}
+            </span>
+            <span class="shrink-0 text-[10px] font-semibold text-slate-500 dark:text-slate-400" aria-hidden="true">↔</span>
+        </div>
+        <div
+            class="max-md:relative max-md:w-full max-md:rounded-md max-md:bg-white/95 max-md:ring-1 max-md:ring-slate-300/70 max-md:shadow-[inset_-10px_0_10px_-8px_rgba(15,23,42,0.06)] max-md:dark:bg-slate-900/95 max-md:dark:ring-slate-600/70 flex w-full min-w-0 max-w-full flex-nowrap items-center justify-start gap-0.5 overflow-x-auto overflow-y-visible py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             x-data="{
                 optimisticStaffTableId: null,
                 peerStaffTid: null,

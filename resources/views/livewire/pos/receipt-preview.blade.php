@@ -1,7 +1,7 @@
 {{-- Single root required: nested Livewire must not have sibling <link> roots or wire:click binds to parent TableActionHost. --}}
 <div
     wire:key="pos-receipt-preview-shell"
-    class="fixed inset-0 z-[340] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-white text-gray-950 dark:bg-slate-950 dark:text-white"
+    class="fixed inset-0 z-[340] flex h-[100dvh] max-h-[100dvh] max-w-full flex-col overflow-x-hidden overflow-y-hidden bg-white text-gray-950 dark:bg-slate-950 dark:text-white"
     style="isolation: isolate;"
     x-data="{ isPrinting: false }"
     x-on:pos-print-lifecycle.window="if ($event.detail && $event.detail.phase === 'start') { isPrinting = true } else if ($event.detail && $event.detail.phase === 'end') { isPrinting = false }"

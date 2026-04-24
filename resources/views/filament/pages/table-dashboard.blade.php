@@ -5,29 +5,27 @@
 {{-- Filament の <x-filament-panels::page> は py-8 を付けるためキオスクでは使わない --}}
 <div
     @class([
-        'fi-page fi-pos-dashboard-page flex h-full min-h-0 flex-col overflow-hidden p-0',
-        'max-w-none',
+        'fi-page fi-pos-dashboard-page flex h-full min-h-0 w-full max-w-full min-w-0 flex-col overflow-x-hidden p-0 text-gray-950 dark:text-gray-100 max-md:overflow-y-visible md:overflow-y-hidden',
     ])
 >
     <div
         @class([
             'fi-pos-viewport',
-            'flex w-full min-h-0 flex-1 flex-col overflow-hidden overscroll-none bg-gray-100 dark:bg-gray-950',
+            'flex w-full max-w-full min-h-0 flex-1 flex-col overflow-x-hidden overscroll-none bg-gray-100 text-gray-950 dark:bg-gray-950 dark:text-gray-100 max-md:overflow-y-visible md:overflow-y-hidden',
             'h-[100dvh] max-h-[100dvh]' => $shopId > 0,
             'min-h-[50vh]' => $shopId <= 0,
         ])
     >
         <div
             @class([
-                'flex min-h-0 w-full flex-1 flex-col overflow-hidden',
-                'md:flex-row',
+                'flex min-h-0 w-full max-w-full min-w-0 flex-1 flex-col overflow-x-hidden max-md:overflow-y-visible md:flex-row md:overflow-y-hidden',
             ])
         >
             <div
                 @class([
-                    'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-gray-200 dark:border-gray-600',
-                    'border-e',
+                    'flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden border-b border-gray-200 dark:border-gray-600 max-md:overflow-y-visible md:border-e md:border-b-0 md:overflow-y-hidden',
                     'w-full',
+                    'max-md:min-h-0 max-md:flex-1',
                     'md:h-full md:w-1/2 md:flex-none md:shrink-0' => $shopId > 0,
                 ])
             >
@@ -54,38 +52,19 @@
                 @endif
 
                 <div
-                    class="fi-pos-footer flex flex-none min-h-0 flex-wrap items-center justify-between gap-1 border-t border-gray-200 bg-white p-1 dark:border-gray-600 dark:bg-gray-900 sm:gap-1.5 sm:p-1.5"
+                    class="fi-pos-footer relative z-[1] flex flex-none min-h-0 flex-wrap items-center justify-between gap-1 border-t border-gray-200 bg-white p-1 dark:border-gray-600 dark:bg-gray-900 sm:gap-1.5 sm:p-1.5"
                 >
                     <div
-                        class="flex min-w-0 flex-1 flex-wrap items-center gap-1 sm:gap-1.5"
+                        class="flex min-h-0 min-w-0 max-w-full flex-1 flex-col gap-1 max-md:items-stretch md:flex-row md:flex-wrap md:items-center sm:gap-1.5"
                     >
-                        <button
-                            type="button"
-                            class="inline-flex min-h-11 shrink-0 touch-manipulation items-center justify-center rounded border border-emerald-700 bg-emerald-100 px-2 py-1 text-[10px] font-bold leading-none text-emerald-900 hover:bg-emerald-200 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 focus:ring-offset-white active:scale-[0.98] dark:border-emerald-500 dark:bg-emerald-900/40 dark:text-emerald-100 dark:hover:bg-emerald-900/60 dark:focus:ring-offset-gray-900 sm:px-2.5 sm:text-[11px]"
-                            x-on:click="
-                                if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
-                                    window.Livewire.dispatch('pos-tile-interaction-ended');
-                                }
-                            "
+                        <div
+                            class="flex shrink-0 flex-wrap items-center gap-1 max-md:w-full sm:gap-1.5"
                         >
-                            {{ __('pos.action_changer_table') }}
-                        </button>
-                        <form
-                            method="post"
-                            action="{{ filament()->getLogoutUrl() }}"
-                            class="shrink-0"
-                        >
-                            @csrf
-                            <button
-                                type="submit"
-                                class="inline-flex min-h-11 touch-manipulation items-center justify-center rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold leading-none text-slate-600 hover:bg-slate-50 focus:ring-2 focus:ring-slate-400 focus:ring-offset-1 focus:ring-offset-white active:scale-[0.98] dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:focus:ring-offset-gray-900 sm:px-2.5 sm:text-[11px]"
-                            >
-                                {{ __('pos.action_logout') }}
-                            </button>
-                        </form>
+                            @include('components.pos.footer-utility-menu')
+                        </div>
                         @if ($shopId > 0)
                             <div
-                                class="min-h-0 min-w-0 max-w-full flex-1 sm:max-w-[20rem] sm:flex-initial"
+                                class="min-h-0 min-w-0 max-w-full max-md:basis-full max-md:w-full max-md:flex-none md:flex-1 sm:max-w-[20rem] sm:flex-initial"
                             >
                                 <livewire:pos.staff-meal-bar
                                     :shop-id="$shopId"
@@ -99,32 +78,6 @@
                     <div
                         class="flex shrink-0 items-center gap-0.5 sm:gap-1"
                     >
-                        <a
-                            href="{{ url('/admin') }}"
-                            class="inline-flex h-11 w-11 min-h-11 min-w-11 touch-manipulation items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-400 active:scale-95 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                            title="{{ __('pos.kiosk_open_admin') }}"
-                            aria-label="{{ __('pos.kiosk_open_admin') }}"
-                        >
-                            <svg
-                                class="h-5 w-5 shrink-0"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.5"
-                                aria-hidden="true"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.37.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.377-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
-                                />
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-                                />
-                            </svg>
-                        </a>
                         <button
                             type="button"
                             wire:click="$toggle('staffDoorOpen')"
@@ -156,7 +109,7 @@
             @if ($shopId > 0)
                 <div
                     @class([
-                        'flex h-full min-h-0 w-full flex-none flex-col overflow-y-auto overflow-x-hidden border-gray-200 bg-white dark:border-gray-600 dark:bg-slate-950',
+                        'flex h-auto max-h-[min(52dvh,30rem)] min-h-0 w-full max-w-full flex-none flex-col overflow-x-hidden border-gray-200 bg-white text-gray-950 dark:border-gray-600 dark:bg-slate-950 dark:text-gray-100 max-md:overflow-y-visible md:h-full md:max-h-none md:overflow-y-auto',
                         'md:w-1/2 md:shrink-0',
                     ])
                 >

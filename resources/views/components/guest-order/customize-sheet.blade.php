@@ -14,7 +14,7 @@
     x-transition:leave-start="opacity-100"
     x-transition:leave-end="opacity-0"
     @click="$store.cart.closeSheet()"
-    class="fixed inset-0 z-40 bg-black/50"
+    class="fixed inset-0 z-40 max-w-[100vw] bg-black/50"
     style="overscroll-behavior: none; touch-action: none;"
     aria-hidden="true"
     x-cloak
@@ -29,7 +29,7 @@
     x-transition:leave="transition duration-200 ease-in"
     x-transition:leave-start="translate-y-0"
     x-transition:leave-end="translate-y-full"
-    class="fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white rounded-t-2xl shadow-2xl max-h-[90dvh]"
+    class="fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] max-w-full flex-col overflow-x-hidden rounded-t-2xl bg-white text-gray-950 shadow-2xl dark:bg-gray-900 dark:text-white"
     role="dialog"
     aria-modal="true"
     :aria-label="$store.cart.editingItem?.name ?? ''"

@@ -13,7 +13,7 @@
     x-transition:leave-start="opacity-100"
     x-transition:leave-end="opacity-0"
     @click="$store.cart.closeCartPanel()"
-    class="fixed inset-0 z-55 bg-black/50"
+    class="fixed inset-0 z-55 max-w-[100vw] bg-black/50"
     style="overscroll-behavior: none; touch-action: none;"
     aria-hidden="true"
     x-cloak
@@ -29,7 +29,7 @@
     x-transition:leave-start="translate-y-0"
     x-transition:leave-end="translate-y-full"
     @keydown.escape.window="$store.cart.cartPanelOpen && $store.cart.closeCartPanel()"
-    class="fixed inset-x-0 bottom-0 z-60 flex max-h-[min(92dvh,100%)] flex-col rounded-t-2xl bg-white text-slate-900 shadow-[0_-12px_40px_rgba(15,23,42,0.18)]"
+    class="fixed inset-x-0 bottom-0 z-60 flex max-h-[min(92dvh,100%)] max-w-full flex-col overflow-x-hidden rounded-t-2xl bg-white text-gray-950 shadow-[0_-12px_40px_rgba(15,23,42,0.18)] dark:bg-gray-900 dark:text-white"
     style="padding-top: env(safe-area-inset-top);"
     role="dialog"
     aria-modal="true"

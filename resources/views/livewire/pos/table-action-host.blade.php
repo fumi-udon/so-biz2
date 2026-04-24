@@ -13,7 +13,11 @@
 @endphp
 
 <div
-    class="fi-no-print flex h-full min-h-0 w-full min-w-0 flex-col border-s-4 border-blue-600 bg-linear-to-b from-white via-blue-50 to-blue-100 text-slate-900 dark:border-blue-500 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950"
+    @class([
+        'fi-no-print flex min-h-0 w-full min-w-0 max-w-full flex-col border-s-4 border-blue-600 bg-linear-to-b from-white via-blue-50 to-blue-100 text-gray-950 dark:border-blue-500 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:text-gray-100',
+        'h-full',
+        'max-md:fixed max-md:inset-0 max-md:z-[320] max-md:h-[100dvh] max-md:max-h-[100dvh] max-md:flex-col max-md:overflow-hidden max-md:overscroll-contain max-md:bg-white max-md:shadow-[0_-8px_30px_rgba(15,23,42,0.25)] max-md:dark:bg-slate-950' => $open,
+    ])
     x-data="{
         isLocalSkeletonVisible: false,
         localSkeletonToken: null,
@@ -118,7 +122,19 @@
             class="flex min-h-0 flex-1 flex-col"
         >
             <div class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900">
-                <div class="min-w-0 w-full">
+                <button
+                    type="button"
+                    wire:click="closeHost"
+                    wire:loading.attr="disabled"
+                    wire:target="closeHost"
+                    class="me-0.5 inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-md border-2 border-slate-400 bg-white text-gray-950 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 md:hidden dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
+                    aria-label="{{ __('pos.detail_pick_table') }}"
+                >
+                    <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="13,4 7,10 13,16" />
+                    </svg>
+                </button>
+                <div class="min-w-0 w-full flex-1">
                     <div class="h-4 w-40 animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/70"></div>
                     <div class="mt-1 h-3 w-28 animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/70"></div>
                 </div>
@@ -137,7 +153,19 @@
         <div
             class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900"
         >
-            <div class="min-w-0">
+            <button
+                type="button"
+                wire:click="closeHost"
+                wire:loading.attr="disabled"
+                wire:target="closeHost"
+                class="me-0.5 inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-md border-2 border-slate-400 bg-white text-gray-950 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 md:hidden dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
+                aria-label="{{ __('pos.detail_pick_table') }}"
+            >
+                <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="13,4 7,10 13,16" />
+                </svg>
+            </button>
+            <div class="min-w-0 flex-1">
                 <h2 class="line-clamp-1 text-sm font-black text-gray-950 dark:text-white">
                     {{ $this->activeSessionLabel }}
                 </h2>

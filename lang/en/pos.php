@@ -18,6 +18,8 @@ return [
     'action_addition_bill' => 'Interim bill',
     'action_changer_table' => 'Change table',
     'action_logout' => 'Log out',
+    'logout_confirm' => 'Log out of this till? Unsaved changes on this device may be lost.',
+    'footer_utility_menu' => 'More actions',
     'kiosk_open_admin' => 'Open admin (full UI)',
     'staff_orders' => 'Staff orders',
     'takeout_heading' => 'Takeout',

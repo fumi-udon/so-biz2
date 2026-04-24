@@ -18,6 +18,8 @@ return [
     'action_addition_bill' => '中間伝票',
     'action_changer_table' => '卓を変える',
     'action_logout' => 'ログアウト',
+    'logout_confirm' => 'この端末からログアウトしますか？未保存の内容は失われることがあります。',
+    'footer_utility_menu' => 'その他の操作',
     'kiosk_open_admin' => '管理画面（通常UI）を開く',
     'staff_orders' => 'スタッフ受注',
     'takeout_heading' => 'テイクアウト',

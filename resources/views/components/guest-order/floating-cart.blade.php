@@ -6,20 +6,19 @@
 <div
     x-show="$store.cart.lineCount() > 0 && !$store.cart.cartPanelOpen"
     x-transition:enter="transition duration-200 ease-out"
-    x-transition:enter-start="opacity-0 translate-y-4"
+    x-transition:enter-start="opacity-0 translate-y-4 md:translate-y-0"
     x-transition:enter-end="opacity-100 translate-y-0"
     x-transition:leave="transition duration-150 ease-in"
     x-transition:leave-start="opacity-100 translate-y-0"
-    x-transition:leave-end="opacity-0 translate-y-4"
-    class="fixed inset-x-0 bottom-0 z-30 px-4 pt-3"
-    style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
+    x-transition:leave-end="opacity-0 translate-y-4 md:translate-y-0"
+    class="fixed inset-x-0 bottom-0 z-30 max-w-full px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:static md:inset-auto md:z-10 md:w-72 md:max-w-full md:shrink-0 md:self-start md:sticky md:top-3 md:border-l md:border-slate-200 md:bg-transparent md:px-4 md:pt-4 md:pb-3 md:dark:border-slate-700"
     x-cloak
 >
     <button
         id="guest-cart-cta"
         type="button"
         @click.stop="$store.cart.openCartPanel()"
-        class="w-full flex items-center justify-between gap-3 px-5 py-4 rounded-(--go-radius-button) shadow-2xl text-white transition active:scale-[0.98] focus:outline-none"
+        class="flex w-full max-w-full items-center justify-between gap-3 rounded-(--go-radius-button) px-5 py-4 text-white shadow-2xl transition focus:outline-none active:scale-[0.98] md:flex-col md:items-stretch md:gap-3 md:py-5"
         :class="$store.cart.cartGlow ? 'ring-4 ring-blue-300/60' : ''"
         :style="`
             background-color: var(--go-cart-bg);
@@ -30,7 +29,7 @@
         aria-live="polite"
     >
         {{-- Left: item count badge + label --}}
-        <span class="flex items-center gap-2">
+        <span class="flex min-w-0 items-center gap-2">
             <span
                 class="flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold"
                 :style="'background-color: var(--go-primary); color: var(--go-on-primary);'"

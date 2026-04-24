@@ -11,7 +11,7 @@
 <div class="fi-no-print">
     @if ($open)
         <div
-            class="fixed inset-0 z-115 flex items-end justify-center sm:items-center"
+            class="fixed inset-0 z-115 flex max-w-[100vw] items-end justify-center overflow-x-hidden sm:items-center"
             role="dialog"
             aria-modal="true"
             wire:key="discount-modal"

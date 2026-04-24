@@ -4,7 +4,7 @@
 @endphp
 
 <div
-    class="w-full min-h-0 min-w-0"
+    class="w-full max-w-full min-h-0 min-w-0"
     x-data="{
         selectedTableId: null,
         optimisticTableId: null,
@@ -39,7 +39,7 @@
         @else
             <p class="mb-1 text-[10px] font-extrabold uppercase leading-none tracking-wider text-blue-700 dark:text-blue-300 sm:text-xs">SHOP LOG NAME</p>
             <div
-                class="grid w-full min-w-0 grid-cols-5 content-start justify-items-stretch gap-1 overflow-visible py-0.5 sm:gap-1.5"
+                class="grid w-full min-w-0 max-w-full grid-cols-2 content-start justify-items-stretch gap-1 overflow-visible py-0.5 sm:grid-cols-5 sm:gap-1.5"
             >
                 @foreach ($customerTiles as $tile)
                     @php

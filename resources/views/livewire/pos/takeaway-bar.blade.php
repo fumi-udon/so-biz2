@@ -9,7 +9,7 @@
     role="region"
     aria-label="{{ __('pos.takeaway_region_label') }}"
 >
-    <div class="px-4 py-4 sm:px-6 sm:py-5">
+    <div class="max-w-full px-2 py-2 sm:px-6 sm:py-5">
         <p class="mb-0.5 text-[12px] font-extrabold uppercase tracking-wider text-yellow-900 dark:text-yellow-100 sm:text-[10px]">
             {{ __('pos.takeaway_heading') }}
         </p>
@@ -19,7 +19,7 @@
             </p>
         @else
             {{-- 6 卓固定・1 行。選択: amber 反転 + scale / クリックフラッシュ: app.css --}}
-            <div class="flex w-full min-w-0 flex-nowrap gap-0.5 overflow-visible py-0.5 sm:gap-1">
+            <div class="flex w-full min-w-0 flex-nowrap gap-px overflow-visible py-px sm:gap-0.5 sm:py-0.5 md:gap-1">
                 @foreach ($takeawayTiles as $tile)
                     @php
                         $tid = (int) $tile['restaurantTableId'];
@@ -40,7 +40,7 @@
                         data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
                         title="{{ $this->tileLabel($tile) }}"
                         @class([
-                            'relative z-0 inline-flex min-h-10 min-w-0 flex-1 basis-0 items-center justify-center rounded border px-0.5 py-2 text-[14px] leading-none shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 sm:min-h-[4rem] sm:px-1 sm:py-3 sm:text-[10px] '.$surface,
+                            'relative z-0 inline-flex min-h-8 min-w-0 flex-1 basis-0 items-center justify-center rounded border px-1 py-1 text-[9px] font-semibold leading-none shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 sm:min-h-[3rem] sm:px-0.5 sm:py-1 sm:text-[9px] '.$surface,
                             '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isFloorSel,
                             'font-semibold' => ! $isFloorSel,
                             'font-black' => $isFloorSel,
