@@ -14,6 +14,7 @@ use App\Services\Kds\KdsBroadcastService;
 use App\Services\Kds\KdsQueryService;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
@@ -159,22 +160,7 @@ class KdsDashboard extends Component
         unset($col);
 
         $cols = array_values($byBatch);
-        usort($cols, static function (array $a, array $b): int {
-            $tokenA = self::columnFifoSortToken($a);
-            $tokenB = self::columnFifoSortToken($b);
-            $c = strcmp($tokenA, $tokenB);
-            if ($c !== 0) {
-                return $c;
-            }
-
-            $sessionA = (int) ($a['tableSessionId'] ?? 0);
-            $sessionB = (int) ($b['tableSessionId'] ?? 0);
-            if ($sessionA !== $sessionB) {
-                return $sessionA <=> $sessionB;
-            }
-
-            return ((int) ($a['orderId'] ?? 0)) <=> ((int) ($b['orderId'] ?? 0));
-        });
+        usort($cols, static fn (array $a, array $b): int => self::compareKdsColumnsByFifo($a, $b));
 
         $out = [];
         $tableBatchOrdinal = [];
@@ -214,19 +200,62 @@ class KdsDashboard extends Component
     }
 
     /**
-     * 列ソート用: kds_ticket_batch_id（無ければ order フォールバック）を文字列化。
+     * 列間 FIFO: UUID の辞書順は投入順と一致しないため、kds_ticket_batch_id は使わない。
+     * 列内の最古 OrderLine の created_at、同値なら最小 id、さらに table_session_id / order_id。
+     *
+     * @param  array<string, mixed>  $a
+     * @param  array<string, mixed>  $b
      */
-    private static function columnFifoSortToken(array $col): string
+    private static function compareKdsColumnsByFifo(array $a, array $b): int
     {
-        /** @var list<OrderLine> $tickets */
-        $tickets = $col['tickets'] ?? [];
-        $first = $tickets[0] ?? null;
-        $batchId = $first?->kds_ticket_batch_id;
-        if (is_string($batchId) && trim($batchId) !== '') {
-            return 'b:'.trim($batchId);
+        [$minCreatedA, $minIdA] = self::columnFifoEarliestTicketMeta($a);
+        [$minCreatedB, $minIdB] = self::columnFifoEarliestTicketMeta($b);
+
+        if ($minCreatedA !== null && $minCreatedB !== null) {
+            $cmp = $minCreatedA <=> $minCreatedB;
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+        } elseif ($minCreatedA !== null xor $minCreatedB !== null) {
+            return $minCreatedA === null ? 1 : -1;
         }
 
-        return 'o:'.((int) ($col['orderId'] ?? 0));
+        if ($minIdA !== $minIdB) {
+            return $minIdA <=> $minIdB;
+        }
+
+        $sessionA = (int) ($a['tableSessionId'] ?? 0);
+        $sessionB = (int) ($b['tableSessionId'] ?? 0);
+        if ($sessionA !== $sessionB) {
+            return $sessionA <=> $sessionB;
+        }
+
+        return ((int) ($a['orderId'] ?? 0)) <=> ((int) ($b['orderId'] ?? 0));
+    }
+
+    /**
+     * @param  array<string, mixed>  $col
+     * @return array{CarbonInterface|null, int}
+     */
+    private static function columnFifoEarliestTicketMeta(array $col): array
+    {
+        $minCreated = null;
+        $minId = PHP_INT_MAX;
+        foreach ($col['tickets'] ?? [] as $line) {
+            if (! $line instanceof OrderLine) {
+                continue;
+            }
+            $minId = min($minId, (int) $line->id);
+            $created = $line->created_at;
+            if ($created === null) {
+                continue;
+            }
+            if ($minCreated === null || $created->lt($minCreated)) {
+                $minCreated = $created;
+            }
+        }
+
+        return [$minCreated, $minId];
     }
 
     public function toggleHistory(): void

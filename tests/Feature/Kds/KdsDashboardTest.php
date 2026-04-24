@@ -317,7 +317,7 @@ class KdsDashboardTest extends TestCase
             ->assertSee('T-S');
     }
 
-    public function test_kds_column_sort_orders_by_batch_id_then_session_then_order(): void
+    public function test_kds_column_sort_orders_by_earliest_line_time_then_session_then_order(): void
     {
         $shop = Shop::query()->create([
             'name' => 'KDS sort shop',
@@ -415,7 +415,8 @@ class KdsDashboardTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Confirmed,
             'line_revision' => 1,
-            'kds_ticket_batch_id' => '10000000-0000-4000-8000-000000000001',
+            // Lex largest: UUID ソートなら最後尾になるが、先に投入された列が左に来るべき
+            'kds_ticket_batch_id' => 'fffffff0-ffff-4fff-bfff-ffffffffffff',
         ]);
         OrderLine::query()->create([
             'order_id' => $staffOrder->id,
@@ -428,7 +429,7 @@ class KdsDashboardTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Confirmed,
             'line_revision' => 1,
-            'kds_ticket_batch_id' => '10000000-0000-4000-8000-000000000002',
+            'kds_ticket_batch_id' => 'a0000000-0000-4000-8000-000000000002',
         ]);
         OrderLine::query()->create([
             'order_id' => $takeawayOrder->id,
@@ -441,7 +442,7 @@ class KdsDashboardTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Confirmed,
             'line_revision' => 1,
-            'kds_ticket_batch_id' => '10000000-0000-4000-8000-000000000003',
+            'kds_ticket_batch_id' => '00000000-0000-4000-8000-000000000003',
         ]);
 
         $this->withSession(['kds.active_shop_id' => (int) $shop->id]);
@@ -1299,5 +1300,140 @@ class KdsDashboardTest extends TestCase
         $board = $c->instance()->kdsBoard;
         $this->assertSame(1, $board['totalBatchCount']);
         $this->assertCount(2, $board['visibleColumns'][0]['tickets']);
+    }
+
+    /**
+     * @param  int  $count  4 または 5（同一店で卓を分け、UUID 辞書順が投入順とずれる）
+     * @return array{shop: Shop, tables: list<RestaurantTable>, lines: list<OrderLine>}
+     */
+    private function seedFifoIndependentTableColumnsWithContrastUuids(int $count): array
+    {
+        $this->assertContains($count, [4, 5], 'count must be 4 or 5');
+
+        $uuidsByInsertIndex = [
+            1 => 'fffffff0-0000-4000-8000-000000000001',
+            2 => 'a0000000-0000-4000-8000-000000000002',
+            3 => '20000000-0000-4000-8000-000000000003',
+            4 => '00000000-0000-4000-8000-000000000004',
+            5 => '0aaaaaaa-0000-4000-8000-000000000005',
+        ];
+
+        $shop = Shop::query()->create([
+            'name' => 'KDS fifo uuid contrast',
+            'slug' => 'kds-fifo-uuid-'.bin2hex(random_bytes(3)),
+            'is_active' => true,
+        ]);
+        $cat = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'M',
+            'slug' => 'm-fifo-uuid-'.bin2hex(random_bytes(3)),
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $item = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $cat->id,
+            'name' => 'X',
+            'kitchen_name' => 'X',
+            'slug' => 'x-fifo-uuid-'.bin2hex(random_bytes(3)),
+            'from_price_minor' => 1000,
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+
+        $tables = [];
+        $lines = [];
+        for ($i = 1; $i <= $count; $i++) {
+            $table = RestaurantTable::query()->create([
+                'shop_id' => $shop->id,
+                'name' => 'MID-'.$i,
+                'qr_token' => 'kds-fifo-uuid-'.$i.'-'.bin2hex(random_bytes(6)),
+                'sort_order' => $i,
+                'is_active' => true,
+            ]);
+            $tables[] = $table;
+            $session = $this->createActiveTableSession($shop, $table);
+            $order = PosOrder::query()->create([
+                'shop_id' => $shop->id,
+                'table_session_id' => $session->id,
+                'status' => OrderStatus::Confirmed,
+                'total_price_minor' => 1000,
+                'placed_at' => now(),
+            ]);
+            $lines[] = OrderLine::query()->create([
+                'order_id' => $order->id,
+                'menu_item_id' => $item->id,
+                'qty' => 1,
+                'unit_price_minor' => 1000,
+                'line_total_minor' => 1000,
+                'snapshot_name' => 'L'.$i,
+                'snapshot_kitchen_name' => 'L'.$i,
+                'snapshot_options_payload' => [],
+                'status' => OrderLineStatus::Confirmed,
+                'line_revision' => 1,
+                'kds_ticket_batch_id' => $uuidsByInsertIndex[$i],
+            ]);
+        }
+
+        return ['shop' => $shop, 'tables' => $tables, 'lines' => $lines];
+    }
+
+    public function test_column_order_stays_fifo_when_middle_column_served(): void
+    {
+        $s = $this->seedFifoIndependentTableColumnsWithContrastUuids(4);
+        $this->withSession(['kds.active_shop_id' => (int) $s['shop']->id]);
+        $c = Livewire::test(KdsDashboard::class);
+        $before = $c->instance()->tableColumns;
+        $this->assertCount(3, $before);
+        $this->assertSame(
+            [(int) $s['tables'][0]->id, (int) $s['tables'][1]->id, (int) $s['tables'][2]->id],
+            array_map(static fn (array $col): int => (int) $col['tableId'], $before)
+        );
+
+        $c->call('markServed', (int) $s['lines'][1]->id, 1);
+
+        $after = $c->instance()->tableColumns;
+        $this->assertCount(3, $after);
+        $this->assertSame(
+            [(int) $s['tables'][0]->id, (int) $s['tables'][2]->id, (int) $s['tables'][3]->id],
+            array_map(static fn (array $col): int => (int) $col['tableId'], $after)
+        );
+    }
+
+    public function test_column_order_stays_fifo_when_first_column_served(): void
+    {
+        $s = $this->seedFifoIndependentTableColumnsWithContrastUuids(4);
+        $this->withSession(['kds.active_shop_id' => (int) $s['shop']->id]);
+        $c = Livewire::test(KdsDashboard::class);
+        $c->call('markServed', (int) $s['lines'][0]->id, 1);
+
+        $after = $c->instance()->tableColumns;
+        $this->assertCount(3, $after);
+        $this->assertSame(
+            [(int) $s['tables'][1]->id, (int) $s['tables'][2]->id, (int) $s['tables'][3]->id],
+            array_map(static fn (array $col): int => (int) $col['tableId'], $after)
+        );
+    }
+
+    public function test_new_column_always_appears_at_rightmost(): void
+    {
+        $s = $this->seedFifoIndependentTableColumnsWithContrastUuids(5);
+        $this->withSession(['kds.active_shop_id' => (int) $s['shop']->id]);
+        $c = Livewire::test(KdsDashboard::class);
+        $this->assertSame(2, $c->instance()->queuedBatchCount);
+        $before = $c->instance()->tableColumns;
+        $this->assertSame(
+            [(int) $s['tables'][0]->id, (int) $s['tables'][1]->id, (int) $s['tables'][2]->id],
+            array_map(static fn (array $col): int => (int) $col['tableId'], $before)
+        );
+
+        $c->call('markServed', (int) $s['lines'][1]->id, 1);
+
+        $after = $c->instance()->tableColumns;
+        $this->assertSame(1, $c->instance()->queuedBatchCount);
+        $this->assertSame(
+            [(int) $s['tables'][0]->id, (int) $s['tables'][2]->id, (int) $s['tables'][3]->id],
+            array_map(static fn (array $col): int => (int) $col['tableId'], $after)
+        );
     }
 }
