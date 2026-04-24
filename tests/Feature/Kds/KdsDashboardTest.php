@@ -15,6 +15,7 @@ use App\Models\RestaurantTable;
 use App\Models\Shop;
 use App\Models\TableSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\Support\CreatesActiveTableSessions;
@@ -317,7 +318,7 @@ class KdsDashboardTest extends TestCase
             ->assertSee('T-S');
     }
 
-    public function test_kds_column_sort_orders_by_earliest_line_time_then_session_then_order(): void
+    public function test_kds_column_sort_orders_by_order_placed_at_then_session_then_order(): void
     {
         $shop = Shop::query()->create([
             'name' => 'KDS sort shop',
@@ -415,7 +416,7 @@ class KdsDashboardTest extends TestCase
             'snapshot_options_payload' => [],
             'status' => OrderLineStatus::Confirmed,
             'line_revision' => 1,
-            // Lex largest: UUID ソートなら最後尾になるが、先に投入された列が左に来るべき
+            // Lex largest: UUID 辞書順では最後だが、placed_at 順（C→S→T）で左に並ぶべき
             'kds_ticket_batch_id' => 'fffffff0-ffff-4fff-bfff-ffffffffffff',
         ]);
         OrderLine::query()->create([
@@ -453,6 +454,104 @@ class KdsDashboardTest extends TestCase
         $this->assertSame(10, $ids[0]);
         $this->assertSame(100, $ids[1]);
         $this->assertSame(200, $ids[2]);
+    }
+
+    public function test_kds_column_fifo_sorts_by_confirm_line_updated_at_not_placed_at_nor_line_created_order(): void
+    {
+        $shop = Shop::query()->create([
+            'name' => 'KDS kitchen-at fifo',
+            'slug' => 'kds-kitchen-fifo-'.bin2hex(random_bytes(3)),
+            'is_active' => true,
+        ]);
+        $cat = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'M',
+            'slug' => 'm-kf-'.bin2hex(random_bytes(3)),
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $item = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $cat->id,
+            'name' => 'X',
+            'kitchen_name' => 'X',
+            'slug' => 'x-kf-'.bin2hex(random_bytes(3)),
+            'from_price_minor' => 1000,
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+
+        $tableLateKitchen = RestaurantTable::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'T-LateKitchen',
+            'qr_token' => 'kds-kf-late-'.bin2hex(random_bytes(6)),
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+        $tableEarlyKitchen = RestaurantTable::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'T-EarlyKitchen',
+            'qr_token' => 'kds-kf-early-'.bin2hex(random_bytes(6)),
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+
+        $sessionLate = $this->createActiveTableSession($shop, $tableLateKitchen);
+        $sessionEarly = $this->createActiveTableSession($shop, $tableEarlyKitchen);
+
+        // placed_at は「カートに載せた時刻」に近く、Recu 後も更新されない想定のため逆転させる
+        $orderLateKitchen = PosOrder::query()->create([
+            'shop_id' => $shop->id,
+            'table_session_id' => $sessionLate->id,
+            'status' => OrderStatus::Confirmed,
+            'total_price_minor' => 1000,
+            'placed_at' => Carbon::parse('2026-04-24 12:00:00'),
+        ]);
+        $orderEarlyKitchen = PosOrder::query()->create([
+            'shop_id' => $shop->id,
+            'table_session_id' => $sessionEarly->id,
+            'status' => OrderStatus::Confirmed,
+            'total_price_minor' => 1000,
+            'placed_at' => Carbon::parse('2026-04-24 12:10:00'),
+        ]);
+
+        $lineLate = OrderLine::query()->create([
+            'order_id' => $orderLateKitchen->id,
+            'menu_item_id' => $item->id,
+            'qty' => 1,
+            'unit_price_minor' => 1000,
+            'line_total_minor' => 1000,
+            'snapshot_name' => 'Late kitchen',
+            'snapshot_kitchen_name' => 'Late kitchen',
+            'snapshot_options_payload' => [],
+            'status' => OrderLineStatus::Confirmed,
+            'line_revision' => 1,
+            'kds_ticket_batch_id' => '72000000-0000-4000-8000-000000000001',
+        ]);
+        $lineEarly = OrderLine::query()->create([
+            'order_id' => $orderEarlyKitchen->id,
+            'menu_item_id' => $item->id,
+            'qty' => 1,
+            'unit_price_minor' => 1000,
+            'line_total_minor' => 1000,
+            'snapshot_name' => 'Early kitchen',
+            'snapshot_kitchen_name' => 'Early kitchen',
+            'snapshot_options_payload' => [],
+            'status' => OrderLineStatus::Confirmed,
+            'line_revision' => 1,
+            'kds_ticket_batch_id' => '72000000-0000-4000-8000-000000000002',
+        ]);
+
+        $tLate = Carbon::parse('2026-04-24 12:05:00');
+        $tEarly = Carbon::parse('2026-04-24 12:03:00');
+        DB::table('order_lines')->where('id', $lineLate->id)->update(['updated_at' => $tLate]);
+        DB::table('order_lines')->where('id', $lineEarly->id)->update(['updated_at' => $tEarly]);
+
+        $this->withSession(['kds.active_shop_id' => (int) $shop->id]);
+        $columns = Livewire::test(KdsDashboard::class)->instance()->tableColumns;
+        $this->assertCount(2, $columns);
+        $this->assertSame((int) $tableEarlyKitchen->id, (int) $columns[0]['tableId']);
+        $this->assertSame((int) $tableLateKitchen->id, (int) $columns[1]['tableId']);
     }
 
     public function test_realtime_state_switches_poll_interval_between_60_and_2_seconds(): void

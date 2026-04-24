@@ -200,24 +200,26 @@ class KdsDashboard extends Component
     }
 
     /**
-     * 列間 FIFO: UUID の辞書順は投入順と一致しないため、kds_ticket_batch_id は使わない。
-     * 列内の最古 OrderLine の created_at、同値なら最小 id、さらに table_session_id / order_id。
+     * 列間 FIFO: UUID の辞書順は使わない。カート投入の created_at も使わない。
+     * PosOrder.placed_at は「注文レコード作成時」に立つため Recu 確定時刻と一致しないことがある。
+     * 厨房に赤で出た順 ≒ Recu で Placed→Confirmed になった瞬間の OrderLine.updated_at を、
+     * 列内の Confirmed/Cooking 行について最小を第1キーとする（該当行が無い列のみ placed_at / updated_at にフォールバック）。
      *
      * @param  array<string, mixed>  $a
      * @param  array<string, mixed>  $b
      */
     private static function compareKdsColumnsByFifo(array $a, array $b): int
     {
-        [$minCreatedA, $minIdA] = self::columnFifoEarliestTicketMeta($a);
-        [$minCreatedB, $minIdB] = self::columnFifoEarliestTicketMeta($b);
+        [$kitchenA, $minIdA] = self::columnFifoKitchenSendMeta($a);
+        [$kitchenB, $minIdB] = self::columnFifoKitchenSendMeta($b);
 
-        if ($minCreatedA !== null && $minCreatedB !== null) {
-            $cmp = $minCreatedA <=> $minCreatedB;
+        if ($kitchenA !== null && $kitchenB !== null) {
+            $cmp = $kitchenA <=> $kitchenB;
             if ($cmp !== 0) {
                 return $cmp;
             }
-        } elseif ($minCreatedA !== null xor $minCreatedB !== null) {
-            return $minCreatedA === null ? 1 : -1;
+        } elseif ($kitchenA !== null xor $kitchenB !== null) {
+            return $kitchenA === null ? 1 : -1;
         }
 
         if ($minIdA !== $minIdB) {
@@ -234,28 +236,41 @@ class KdsDashboard extends Component
     }
 
     /**
+     * 列の「厨房に出た最古の瞬間」: 原則は未提供行の updated_at（Recu 確定で一括更新される）の最小。
+     * 未提供行が無い列は order.placed_at ?? line.updated_at の最小にフォールバック。
+     *
      * @param  array<string, mixed>  $col
      * @return array{CarbonInterface|null, int}
      */
-    private static function columnFifoEarliestTicketMeta(array $col): array
+    private static function columnFifoKitchenSendMeta(array $col): array
     {
-        $minCreated = null;
         $minId = PHP_INT_MAX;
+        $minActionableAt = null;
+        $minFallbackAt = null;
+
         foreach ($col['tickets'] ?? [] as $line) {
             if (! $line instanceof OrderLine) {
                 continue;
             }
             $minId = min($minId, (int) $line->id);
-            $created = $line->created_at;
-            if ($created === null) {
-                continue;
+
+            if (in_array($line->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true)) {
+                $u = $line->updated_at;
+                if ($u !== null && ($minActionableAt === null || $u->lt($minActionableAt))) {
+                    $minActionableAt = $u;
+                }
             }
-            if ($minCreated === null || $created->lt($minCreated)) {
-                $minCreated = $created;
+
+            $placed = $line->order?->placed_at;
+            $fb = $placed ?? $line->updated_at;
+            if ($fb !== null && ($minFallbackAt === null || $fb->lt($minFallbackAt))) {
+                $minFallbackAt = $fb;
             }
         }
 
-        return [$minCreated, $minId];
+        $minAt = $minActionableAt ?? $minFallbackAt;
+
+        return [$minAt, $minId];
     }
 
     public function toggleHistory(): void
