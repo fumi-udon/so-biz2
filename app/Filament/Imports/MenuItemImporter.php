@@ -5,6 +5,7 @@ namespace App\Filament\Imports;
 use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\DietaryBadge;
 use App\Models\MenuItem;
+use Filament\Actions\Imports\Exceptions\RowImportFailedException;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
 use Filament\Actions\Imports\Models\Import;
@@ -78,7 +79,7 @@ class MenuItemImporter extends Importer
                     // モデル属性には載せず saveRecord() で pivot 同期
                 }),
             ImportColumn::make('options_payload')
-            ->rules(['nullable'])
+                ->rules(['nullable'])
                 ->castStateUsing(function (mixed $state): ?array {
                     if ($state === null || $state === '') {
                         return null;
@@ -100,7 +101,20 @@ class MenuItemImporter extends Importer
             return new MenuItem;
         }
 
-        return MenuItem::query()->find($id) ?? new MenuItem;
+        // RowImportFailedException: filament/actions の ImportCsv が専用捕捉し、
+        // logFailedRow($row, $exception->getMessage()) で失敗理由を failed_rows に残す。
+        // ValidationException でも可だが、行単位の「ビジネス拒否」には本例外が意図された API（v3.3.49）。
+        $record = MenuItem::query()->find($id);
+        if (! $record) {
+            throw new RowImportFailedException(
+                sprintf(
+                    '指定された id = %s の商品が存在しません。新規作成する場合は id 列を空にしてください。',
+                    $id
+                )
+            );
+        }
+
+        return $record;
     }
 
     public function saveRecord(): void

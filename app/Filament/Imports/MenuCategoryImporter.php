@@ -4,6 +4,7 @@ namespace App\Filament\Imports;
 
 use App\Filament\Concerns\RunsFilamentCsvJobsOnSyncQueueInLocal;
 use App\Models\MenuCategory;
+use Filament\Actions\Imports\Exceptions\RowImportFailedException;
 use Filament\Actions\Imports\ImportColumn;
 use Filament\Actions\Imports\Importer;
 use Filament\Actions\Imports\Models\Import;
@@ -57,7 +58,20 @@ class MenuCategoryImporter extends Importer
             return new MenuCategory;
         }
 
-        return MenuCategory::query()->find($id) ?? new MenuCategory;
+        // RowImportFailedException: filament/actions の ImportCsv が専用捕捉し、
+        // logFailedRow($row, $exception->getMessage()) で失敗理由を failed_rows に残す。
+        // ValidationException でも可だが、行単位の「ビジネス拒否」には本例外が意図された API（v3.3.49）。
+        $record = MenuCategory::query()->find($id);
+        if (! $record) {
+            throw new RowImportFailedException(
+                sprintf(
+                    '指定された id = %s のカテゴリが存在しません。新規作成する場合は id 列を空にしてください。',
+                    $id
+                )
+            );
+        }
+
+        return $record;
     }
 
     public function validateData(): void
