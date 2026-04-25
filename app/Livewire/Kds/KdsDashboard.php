@@ -46,6 +46,10 @@ class KdsDashboard extends Component
 
     public ?string $lastRealtimeEventAt = null;
 
+    public bool $clientShowKitchen = true;
+
+    public bool $clientShowHall = true;
+
     public function mount(): void
     {
         $id = (int) session('kds.active_shop_id', 0);
@@ -162,6 +166,49 @@ class KdsDashboard extends Component
 
         $cols = array_values($byBatch);
         usort($cols, static fn (array $a, array $b): int => self::compareKdsColumnsByFifo($a, $b));
+
+        $configured = KdsFilterSetting::isCategoryFilterConfigured($this->shopId);
+        $kitchenIds = KdsFilterSetting::kitchenCategoryIds($this->shopId);
+        $hallIds = KdsFilterSetting::hallCategoryIds($this->shopId);
+        $filteredCols = [];
+        foreach ($cols as $col) {
+            $visibleTickets = [];
+            foreach (($col['tickets'] ?? []) as $ticket) {
+                if (! $ticket instanceof OrderLine) {
+                    continue;
+                }
+                if (! in_array($ticket->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true)) {
+                    continue;
+                }
+
+                $isVisible = true;
+                if ($configured) {
+                    $cat = $ticket->menuItem?->menu_category_id;
+                    if ($cat === null) {
+                        $isVisible = false;
+                    } else {
+                        $catId = (int) $cat;
+                        $inK = in_array($catId, $kitchenIds, true);
+                        $inH = in_array($catId, $hallIds, true);
+                        if (! $this->clientShowKitchen && ! $this->clientShowHall) {
+                            $isVisible = false;
+                        } else {
+                            $isVisible = ($this->clientShowKitchen && $inK)
+                                || ($this->clientShowHall && $inH);
+                        }
+                    }
+                }
+
+                if ($isVisible) {
+                    $visibleTickets[] = $ticket;
+                }
+            }
+            if ($visibleTickets !== []) {
+                $col['tickets'] = $visibleTickets;
+                $filteredCols[] = $col;
+            }
+        }
+        $cols = $filteredCols;
 
         $out = [];
         $tableBatchOrdinal = [];
@@ -429,6 +476,12 @@ class KdsDashboard extends Component
     public function refreshTickets(): void
     {
         // no-op: Livewire の標準再レンダリングのみで十分。
+    }
+
+    public function updateClientFilters(bool $kitchen, bool $hall): void
+    {
+        $this->clientShowKitchen = $kitchen;
+        $this->clientShowHall = $hall;
     }
 
     public function syncRealtimeState(string $state): void

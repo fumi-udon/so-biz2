@@ -350,127 +350,6 @@ final class KdsBroadcastService
 }
 </file>
 
-<file path="app/Support/KdsFilterSetting.php">
-<?php
-
-declare(strict_types=1);
-
-namespace App\Support;
-
-use App\Models\Setting;
-
-/**
- * KDS Kitchen/Hall 向けメニューカテゴリ ID（店舗スコープの Setting キー）。
- */
-final class KdsFilterSetting
-{
-    public static function kitchenKey(int $shopId): string
-    {
-        return 'kds_'.$shopId.'_kitchen_categories';
-    }
-
-    public static function hallKey(int $shopId): string
-    {
-        return 'kds_'.$shopId.'_hall_categories';
-    }
-
-    /**
-     * Kitchen または Hall のいずれかに 1 件以上のカテゴリが登録されている。
-     */
-    public static function isCategoryFilterConfigured(int $shopId): bool
-    {
-        if ($shopId < 1) {
-            return false;
-        }
-
-        return self::kitchenCategoryIds($shopId) !== []
-            || self::hallCategoryIds($shopId) !== [];
-    }
-
-    /**
-     * @return list<int>
-     */
-    public static function kitchenCategoryIds(int $shopId): array
-    {
-        if ($shopId < 1) {
-            return [];
-        }
-
-        return self::normalizeIdList(Setting::getValue(self::kitchenKey($shopId), []));
-    }
-
-    /**
-     * @return list<int>
-     */
-    public static function hallCategoryIds(int $shopId): array
-    {
-        if ($shopId < 1) {
-            return [];
-        }
-
-        return self::normalizeIdList(Setting::getValue(self::hallKey($shopId), []));
-    }
-
-    /**
-     * @param  list<int|string>  $ids
-     */
-    public static function saveKitchenCategoryIds(int $shopId, array $ids): void
-    {
-        if ($shopId < 1) {
-            return;
-        }
-
-        $normalized = self::normalizeIdList($ids);
-        Setting::query()->updateOrCreate(
-            ['key' => self::kitchenKey($shopId)],
-            [
-                'value' => $normalized,
-                'description' => 'KDS Kitchen 向けメニューカテゴリ ID（店舗 '.$shopId.'）',
-            ]
-        );
-    }
-
-    /**
-     * @param  list<int|string>  $ids
-     */
-    public static function saveHallCategoryIds(int $shopId, array $ids): void
-    {
-        if ($shopId < 1) {
-            return;
-        }
-
-        $normalized = self::normalizeIdList($ids);
-        Setting::query()->updateOrCreate(
-            ['key' => self::hallKey($shopId)],
-            [
-                'value' => $normalized,
-                'description' => 'KDS Hall 向けメニューカテゴリ ID（店舗 '.$shopId.'）',
-            ]
-        );
-    }
-
-    /**
-     * @return list<int>
-     */
-    private static function normalizeIdList(mixed $raw): array
-    {
-        if (! is_array($raw)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($raw as $v) {
-            $i = (int) $v;
-            if ($i > 0) {
-                $out[$i] = $i;
-            }
-        }
-
-        return array_values($out);
-    }
-}
-</file>
-
 <file path="resources/js/echo.js">
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
@@ -512,6 +391,138 @@ if (pusherKey) {
 } else {
     console.warn('[echo] VITE_PUSHER_APP_KEY is not set; Echo skipped.');
     window.Echo = undefined;
+}
+</file>
+
+<file path="app/Support/KdsFilterSetting.php">
+<?php
+
+declare(strict_types=1);
+
+namespace App\Support;
+
+use App\Models\Setting;
+use Illuminate\Support\Facades\Cache;
+
+/**
+ * KDS Kitchen/Hall 向けメニューカテゴリ ID（店舗スコープの Setting キー）。
+ */
+final class KdsFilterSetting
+{
+    public static function kitchenKey(int $shopId): string
+    {
+        return 'kds_'.$shopId.'_kitchen_categories';
+    }
+
+    public static function hallKey(int $shopId): string
+    {
+        return 'kds_'.$shopId.'_hall_categories';
+    }
+
+    /**
+     * Kitchen または Hall のいずれかに 1 件以上のカテゴリが登録されている。
+     */
+    public static function isCategoryFilterConfigured(int $shopId): bool
+    {
+        if ($shopId < 1) {
+            return false;
+        }
+
+        return self::kitchenCategoryIds($shopId) !== []
+            || self::hallCategoryIds($shopId) !== [];
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function kitchenCategoryIds(int $shopId): array
+    {
+        if ($shopId < 1) {
+            return [];
+        }
+
+        return Cache::remember(
+            'kds_filter_'.$shopId.'_kitchen',
+            60,
+            fn (): array => self::normalizeIdList(Setting::getValue(self::kitchenKey($shopId), []))
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function hallCategoryIds(int $shopId): array
+    {
+        if ($shopId < 1) {
+            return [];
+        }
+
+        return Cache::remember(
+            'kds_filter_'.$shopId.'_hall',
+            60,
+            fn (): array => self::normalizeIdList(Setting::getValue(self::hallKey($shopId), []))
+        );
+    }
+
+    /**
+     * @param  list<int|string>  $ids
+     */
+    public static function saveKitchenCategoryIds(int $shopId, array $ids): void
+    {
+        if ($shopId < 1) {
+            return;
+        }
+
+        $normalized = self::normalizeIdList($ids);
+        Setting::query()->updateOrCreate(
+            ['key' => self::kitchenKey($shopId)],
+            [
+                'value' => $normalized,
+                'description' => 'KDS Kitchen 向けメニューカテゴリ ID（店舗 '.$shopId.'）',
+            ]
+        );
+        Cache::forget('kds_filter_'.$shopId.'_kitchen');
+    }
+
+    /**
+     * @param  list<int|string>  $ids
+     */
+    public static function saveHallCategoryIds(int $shopId, array $ids): void
+    {
+        if ($shopId < 1) {
+            return;
+        }
+
+        $normalized = self::normalizeIdList($ids);
+        Setting::query()->updateOrCreate(
+            ['key' => self::hallKey($shopId)],
+            [
+                'value' => $normalized,
+                'description' => 'KDS Hall 向けメニューカテゴリ ID（店舗 '.$shopId.'）',
+            ]
+        );
+        Cache::forget('kds_filter_'.$shopId.'_hall');
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function normalizeIdList(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $v) {
+            $i = (int) $v;
+            if ($i > 0) {
+                $out[$i] = $i;
+            }
+        }
+
+        return array_values($out);
+    }
 }
 </file>
 
@@ -1486,68 +1497,6 @@ Broadcast::channel('rt.shop.{shopId}.orders', function (?User $user, int|string 
 
     return $user->can('view', $shop);
 });
-</file>
-
-<file path="app/Events/Kds/OrderConfirmedBroadcast.php">
-<?php
-
-namespace App\Events\Kds;
-
-use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
-
-/**
- * Bistro 最適化: KDS への「即時更新ベル」イベント。
- *
- * - ペイロードは shop_id と action のみ（エンティティ詳細は載せない）。
- * - 真実の源泉は KDS 側の `wire:poll.10s` による DB プル。
- * - `ShouldBroadcastNow` で sync キューを介さずに直接ブロードキャストする
- *   （送信は `KdsBroadcastService` 内の `dispatch()->afterResponse()` で
- *   FPM 応答後に行う前提）。
- */
-class OrderConfirmedBroadcast implements ShouldBroadcast
-{
-    use Dispatchable;
-    use InteractsWithSockets;
-    use SerializesModels;
-
-    public function __construct(
-        public int $shopId,
-    ) {}
-
-    public function broadcastAs(): string
-    {
-        return 'kds.orders.confirmed';
-    }
-
-    /**
-     * 公開チャンネル（auth 不要）。
-     * Echo クライアントは PIN セッションの KDS 端末から
-     * `Echo.channel('pos.shop.{shopId}')` で購読する。
-     *
-     * @return array<int, Channel>
-     */
-    public function broadcastOn(): array
-    {
-        return [
-            new Channel('pos.shop.'.$this->shopId),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function broadcastWith(): array
-    {
-        return [
-            'shop_id' => $this->shopId,
-            'action' => 'order_confirmed',
-        ];
-    }
-}
 </file>
 
 <file path="resources/js/pos/printer/print-controller.js">
@@ -2627,6 +2576,68 @@ window.addEventListener('pageshow', (ev) => {
 });
 </file>
 
+<file path="app/Events/Kds/OrderConfirmedBroadcast.php">
+<?php
+
+namespace App\Events\Kds;
+
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Queue\SerializesModels;
+
+/**
+ * Bistro 最適化: KDS への「即時更新ベル」イベント。
+ *
+ * - ペイロードは shop_id と action のみ（エンティティ詳細は載せない）。
+ * - 真実の源泉は KDS 側の `wire:poll.10s` による DB プル。
+ * - `ShouldBroadcastNow` で sync キューを介さずに直接ブロードキャストする
+ *   （送信は `KdsBroadcastService` 内の `dispatch()->afterResponse()` で
+ *   FPM 応答後に行う前提）。
+ */
+class OrderConfirmedBroadcast implements ShouldBroadcast
+{
+    use Dispatchable;
+    use InteractsWithSockets;
+    use SerializesModels;
+
+    public function __construct(
+        public int $shopId,
+    ) {}
+
+    public function broadcastAs(): string
+    {
+        return 'kds.orders.confirmed';
+    }
+
+    /**
+     * 公開チャンネル（auth 不要）。
+     * Echo クライアントは PIN セッションの KDS 端末から
+     * `Echo.channel('pos.shop.{shopId}')` で購読する。
+     *
+     * @return array<int, Channel>
+     */
+    public function broadcastOn(): array
+    {
+        return [
+            new Channel('pos.shop.'.$this->shopId),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function broadcastWith(): array
+    {
+        return [
+            'shop_id' => $this->shopId,
+            'action' => 'order_confirmed',
+        ];
+    }
+}
+</file>
+
 <file path="resources/views/layouts/kds.blade.php">
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full dark">
@@ -2733,7 +2744,7 @@ window.addEventListener('pageshow', (ev) => {
                         return true;
                     }
                     if (!this.showKitchen && !this.showHall) {
-                        return true;
+                        return false;
                     }
                     return (this.showKitchen && inK) || (this.showHall && inH);
                 },
@@ -2966,10 +2977,6 @@ final class KdsQueryService
      */
     public function pullActiveSessionTicketsForDashboard(int $shopId): Collection
     {
-        $kitchenIds = \App\Support\KdsFilterSetting::kitchenCategoryIds($shopId);
-        $hallIds = \App\Support\KdsFilterSetting::hallCategoryIds($shopId);
-        $hallOnly = array_diff($hallIds, $kitchenIds);
-
         $q = OrderLine::query()
             ->where('order_lines.shop_id', $shopId)
             ->whereNot('order_lines.status', OrderLineStatus::Cancelled)
@@ -3007,14 +3014,6 @@ final class KdsQueryService
                 'order.tableSession:id,restaurant_table_id,shop_id,staff_name,customer_name',
                 'order.tableSession.restaurantTable:id,shop_id,name,sort_order',
             ]);
-
-        if (! empty($hallOnly)) {
-            $q->where(function ($q) use ($hallOnly) {
-                $q
-                    ->whereDoesntHave('menuItem')
-                    ->orWhereHas('menuItem', fn ($m) => $m->whereNotIn('menu_category_id', $hallOnly));
-            });
-        }
 
         return $q
             ->orderBy('id')
@@ -3068,7 +3067,7 @@ final class KdsQueryService
     wire:poll.{{ max(2, min(60, (int) $pollSeconds)) }}s
     data-kds-bootstrap="@json($kdsClientBootstrap)"
     x-data="kdsEchoBridge(@js($kdsClientBootstrap))"
-    x-init="$store.kdsFilters.syncFromDom($el, $data); initEcho(); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
+    x-init="$store.kdsFilters.syncFromDom($el, $data); initEcho(); $wire.updateClientFilters($store.kdsFilters.showKitchen, $store.kdsFilters.showHall); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
 >
     <header class="z-10 shrink-0 border-b border-slate-800 bg-slate-900/90 backdrop-blur">
         <div class="flex min-w-0 items-center justify-between gap-1.5 px-1 py-1 sm:px-1.5">
@@ -3103,6 +3102,7 @@ final class KdsQueryService
                                 type="checkbox"
                                 class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
                                 x-model="$store.kdsFilters.showKitchen"
+                                @change="$wire.updateClientFilters($store.kdsFilters.showKitchen, $store.kdsFilters.showHall)"
                             />
                             <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_kitchen') }}</span>
                         </label>
@@ -3111,6 +3111,7 @@ final class KdsQueryService
                                 type="checkbox"
                                 class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
                                 x-model="$store.kdsFilters.showHall"
+                                @change="$wire.updateClientFilters($store.kdsFilters.showKitchen, $store.kdsFilters.showHall)"
                             />
                             <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_hall') }}</span>
                         </label>
@@ -3506,6 +3507,10 @@ class KdsDashboard extends Component
 
     public ?string $lastRealtimeEventAt = null;
 
+    public bool $clientShowKitchen = true;
+
+    public bool $clientShowHall = true;
+
     public function mount(): void
     {
         $id = (int) session('kds.active_shop_id', 0);
@@ -3622,6 +3627,49 @@ class KdsDashboard extends Component
 
         $cols = array_values($byBatch);
         usort($cols, static fn (array $a, array $b): int => self::compareKdsColumnsByFifo($a, $b));
+
+        $configured = KdsFilterSetting::isCategoryFilterConfigured($this->shopId);
+        $kitchenIds = KdsFilterSetting::kitchenCategoryIds($this->shopId);
+        $hallIds = KdsFilterSetting::hallCategoryIds($this->shopId);
+        $filteredCols = [];
+        foreach ($cols as $col) {
+            $hasPendingVisible = false;
+            foreach (($col['tickets'] ?? []) as $ticket) {
+                if (! $ticket instanceof OrderLine) {
+                    continue;
+                }
+                if (! in_array($ticket->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true)) {
+                    continue;
+                }
+
+                $isVisible = true;
+                if ($configured) {
+                    $cat = $ticket->menuItem?->menu_category_id;
+                    if ($cat !== null) {
+                        $catId = (int) $cat;
+                        $inK = in_array($catId, $kitchenIds, true);
+                        $inH = in_array($catId, $hallIds, true);
+                        if (! $inK && ! $inH) {
+                            $isVisible = true;
+                        } elseif (! $this->clientShowKitchen && ! $this->clientShowHall) {
+                            $isVisible = false;
+                        } else {
+                            $isVisible = ($this->clientShowKitchen && $inK)
+                                || ($this->clientShowHall && $inH);
+                        }
+                    }
+                }
+
+                if ($isVisible) {
+                    $hasPendingVisible = true;
+                    break;
+                }
+            }
+            if ($hasPendingVisible) {
+                $filteredCols[] = $col;
+            }
+        }
+        $cols = $filteredCols;
 
         $out = [];
         $tableBatchOrdinal = [];
@@ -3889,6 +3937,12 @@ class KdsDashboard extends Component
     public function refreshTickets(): void
     {
         // no-op: Livewire の標準再レンダリングのみで十分。
+    }
+
+    public function updateClientFilters(bool $kitchen, bool $hall): void
+    {
+        $this->clientShowKitchen = $kitchen;
+        $this->clientShowHall = $hall;
     }
 
     public function syncRealtimeState(string $state): void

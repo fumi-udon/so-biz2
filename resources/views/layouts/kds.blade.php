@@ -91,19 +91,16 @@
                         return true;
                     }
                     if (cat === null || cat === undefined) {
-                        return true;
+                        return false;
                     }
                     const c = Number(cat);
                     if (Number.isNaN(c)) {
-                        return true;
+                        return false;
                     }
                     const inK = this.kitchenIds.includes(c);
                     const inH = this.hallIds.includes(c);
-                    if (!inK && !inH) {
-                        return true;
-                    }
                     if (!this.showKitchen && !this.showHall) {
-                        return true;
+                        return false;
                     }
                     return (this.showKitchen && inK) || (this.showHall && inH);
                 },

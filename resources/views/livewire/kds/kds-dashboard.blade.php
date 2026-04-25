@@ -11,7 +11,7 @@
     wire:poll.{{ max(2, min(60, (int) $pollSeconds)) }}s
     data-kds-bootstrap="@json($kdsClientBootstrap)"
     x-data="kdsEchoBridge(@js($kdsClientBootstrap))"
-    x-init="$store.kdsFilters.syncFromDom($el, $data); initEcho(); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
+    x-init="$store.kdsFilters.syncFromDom($el, $data); initEcho(); $wire.updateClientFilters($store.kdsFilters.showKitchen, $store.kdsFilters.showHall); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
 >
     <header class="z-10 shrink-0 border-b border-slate-800 bg-slate-900/90 backdrop-blur">
         <div class="flex min-w-0 items-center justify-between gap-1.5 px-1 py-1 sm:px-1.5">
@@ -46,6 +46,7 @@
                                 type="checkbox"
                                 class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
                                 x-model="$store.kdsFilters.showKitchen"
+                                @change="$wire.updateClientFilters($store.kdsFilters.showKitchen, $store.kdsFilters.showHall)"
                             />
                             <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_kitchen') }}</span>
                         </label>
@@ -54,6 +55,7 @@
                                 type="checkbox"
                                 class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
                                 x-model="$store.kdsFilters.showHall"
+                                @change="$wire.updateClientFilters($store.kdsFilters.showKitchen, $store.kdsFilters.showHall)"
                             />
                             <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_hall') }}</span>
                         </label>

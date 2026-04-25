@@ -71,10 +71,6 @@ final class KdsQueryService
      */
     public function pullActiveSessionTicketsForDashboard(int $shopId): Collection
     {
-        $kitchenIds = \App\Support\KdsFilterSetting::kitchenCategoryIds($shopId);
-        $hallIds = \App\Support\KdsFilterSetting::hallCategoryIds($shopId);
-        $hallOnly = array_diff($hallIds, $kitchenIds);
-
         $q = OrderLine::query()
             ->where('order_lines.shop_id', $shopId)
             ->whereNot('order_lines.status', OrderLineStatus::Cancelled)
@@ -112,14 +108,6 @@ final class KdsQueryService
                 'order.tableSession:id,restaurant_table_id,shop_id,staff_name,customer_name',
                 'order.tableSession.restaurantTable:id,shop_id,name,sort_order',
             ]);
-
-        if (! empty($hallOnly)) {
-            $q->where(function ($q) use ($hallOnly) {
-                $q
-                    ->whereDoesntHave('menuItem')
-                    ->orWhereHas('menuItem', fn ($m) => $m->whereNotIn('menu_category_id', $hallOnly));
-            });
-        }
 
         return $q
             ->orderBy('id')
