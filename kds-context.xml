@@ -2732,17 +2732,14 @@ class OrderConfirmedBroadcast implements ShouldBroadcast
                         return true;
                     }
                     if (cat === null || cat === undefined) {
-                        return true;
+                        return false;
                     }
                     const c = Number(cat);
                     if (Number.isNaN(c)) {
-                        return true;
+                        return false;
                     }
                     const inK = this.kitchenIds.includes(c);
                     const inH = this.hallIds.includes(c);
-                    if (!inK && !inH) {
-                        return true;
-                    }
                     if (!this.showKitchen && !this.showHall) {
                         return false;
                     }
@@ -3633,7 +3630,7 @@ class KdsDashboard extends Component
         $hallIds = KdsFilterSetting::hallCategoryIds($this->shopId);
         $filteredCols = [];
         foreach ($cols as $col) {
-            $hasPendingVisible = false;
+            $visibleTickets = [];
             foreach (($col['tickets'] ?? []) as $ticket) {
                 if (! $ticket instanceof OrderLine) {
                     continue;
@@ -3645,13 +3642,13 @@ class KdsDashboard extends Component
                 $isVisible = true;
                 if ($configured) {
                     $cat = $ticket->menuItem?->menu_category_id;
-                    if ($cat !== null) {
+                    if ($cat === null) {
+                        $isVisible = false;
+                    } else {
                         $catId = (int) $cat;
                         $inK = in_array($catId, $kitchenIds, true);
                         $inH = in_array($catId, $hallIds, true);
-                        if (! $inK && ! $inH) {
-                            $isVisible = true;
-                        } elseif (! $this->clientShowKitchen && ! $this->clientShowHall) {
+                        if (! $this->clientShowKitchen && ! $this->clientShowHall) {
                             $isVisible = false;
                         } else {
                             $isVisible = ($this->clientShowKitchen && $inK)
@@ -3661,11 +3658,11 @@ class KdsDashboard extends Component
                 }
 
                 if ($isVisible) {
-                    $hasPendingVisible = true;
-                    break;
+                    $visibleTickets[] = $ticket;
                 }
             }
-            if ($hasPendingVisible) {
+            if ($visibleTickets !== []) {
+                $col['tickets'] = $visibleTickets;
                 $filteredCols[] = $col;
             }
         }

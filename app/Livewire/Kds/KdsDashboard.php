@@ -173,37 +173,40 @@ class KdsDashboard extends Component
         $filteredCols = [];
         foreach ($cols as $col) {
             $visibleTickets = [];
+            $hasPendingVisible = false;
             foreach (($col['tickets'] ?? []) as $ticket) {
                 if (! $ticket instanceof OrderLine) {
                     continue;
                 }
-                if (! in_array($ticket->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true)) {
-                    continue;
-                }
 
-                $isVisible = true;
+                $isVisibleCategory = true;
                 if ($configured) {
                     $cat = $ticket->menuItem?->menu_category_id;
                     if ($cat === null) {
-                        $isVisible = false;
+                        $isVisibleCategory = false;
                     } else {
                         $catId = (int) $cat;
                         $inK = in_array($catId, $kitchenIds, true);
                         $inH = in_array($catId, $hallIds, true);
                         if (! $this->clientShowKitchen && ! $this->clientShowHall) {
-                            $isVisible = false;
+                            $isVisibleCategory = false;
                         } else {
-                            $isVisible = ($this->clientShowKitchen && $inK)
+                            $isVisibleCategory = ($this->clientShowKitchen && $inK)
                                 || ($this->clientShowHall && $inH);
                         }
                     }
                 }
 
-                if ($isVisible) {
-                    $visibleTickets[] = $ticket;
+                if (! $isVisibleCategory) {
+                    continue;
+                }
+
+                $visibleTickets[] = $ticket;
+                if (in_array($ticket->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true)) {
+                    $hasPendingVisible = true;
                 }
             }
-            if ($visibleTickets !== []) {
+            if ($hasPendingVisible) {
                 $col['tickets'] = $visibleTickets;
                 $filteredCols[] = $col;
             }
