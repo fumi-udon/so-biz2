@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use App\Models\Setting;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * KDS Kitchen/Hall 向けメニューカテゴリ ID（店舗スコープの Setting キー）。
@@ -43,7 +44,11 @@ final class KdsFilterSetting
             return [];
         }
 
-        return self::normalizeIdList(Setting::getValue(self::kitchenKey($shopId), []));
+        return Cache::remember(
+            'kds_filter_'.$shopId.'_kitchen',
+            60,
+            fn (): array => self::normalizeIdList(Setting::getValue(self::kitchenKey($shopId), []))
+        );
     }
 
     /**
@@ -55,7 +60,11 @@ final class KdsFilterSetting
             return [];
         }
 
-        return self::normalizeIdList(Setting::getValue(self::hallKey($shopId), []));
+        return Cache::remember(
+            'kds_filter_'.$shopId.'_hall',
+            60,
+            fn (): array => self::normalizeIdList(Setting::getValue(self::hallKey($shopId), []))
+        );
     }
 
     /**
@@ -75,6 +84,7 @@ final class KdsFilterSetting
                 'description' => 'KDS Kitchen 向けメニューカテゴリ ID（店舗 '.$shopId.'）',
             ]
         );
+        Cache::forget('kds_filter_'.$shopId.'_kitchen');
     }
 
     /**
@@ -94,6 +104,7 @@ final class KdsFilterSetting
                 'description' => 'KDS Hall 向けメニューカテゴリ ID（店舗 '.$shopId.'）',
             ]
         );
+        Cache::forget('kds_filter_'.$shopId.'_hall');
     }
 
     /**
