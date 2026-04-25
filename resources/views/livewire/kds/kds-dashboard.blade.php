@@ -9,8 +9,9 @@
     id="kds-dashboard-root"
     class="flex h-[100dvh] max-h-[100dvh] w-screen min-w-0 flex-col overflow-hidden bg-slate-950 text-slate-100"
     wire:poll.{{ max(2, min(60, (int) $pollSeconds)) }}s
+    data-kds-bootstrap="@json($kdsClientBootstrap)"
     x-data="kdsEchoBridge(@js($kdsClientBootstrap))"
-    x-init="initEcho(); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
+    x-init="$store.kdsFilters.syncFromDom($el, $data); initEcho(); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
 >
     <header class="z-10 shrink-0 border-b border-slate-800 bg-slate-900/90 backdrop-blur">
         <div class="flex min-w-0 items-center justify-between gap-1.5 px-1 py-1 sm:px-1.5">
@@ -44,8 +45,7 @@
                             <input
                                 type="checkbox"
                                 class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
-                                x-model="showKitchen"
-                                @change="persistKdsFilterToggles()"
+                                x-model="$store.kdsFilters.showKitchen"
                             />
                             <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_kitchen') }}</span>
                         </label>
@@ -53,8 +53,7 @@
                             <input
                                 type="checkbox"
                                 class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
-                                x-model="showHall"
-                                @change="persistKdsFilterToggles()"
+                                x-model="$store.kdsFilters.showHall"
                             />
                             <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_hall') }}</span>
                         </label>
@@ -98,11 +97,11 @@
         </div>
     </header>
 
-    <main class="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden px-1 py-1">
+    <main class="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto px-1 py-1">
         @if ($hasShop)
             <div
                 x-cloak
-                x-show="showFilterConfigWarning"
+                x-show="$store.kdsFilters.showFilterConfigWarning"
                 class="mb-1.5 shrink-0 rounded border border-amber-500/70 bg-amber-950/50 px-2 py-1.5 text-[10px] font-medium text-amber-100 sm:text-xs"
                 role="status"
             >
@@ -140,14 +139,14 @@
                 <p class="mt-1 text-xs text-slate-400">{{ __('kds.empty_subtitle') }}</p>
             </div>
         @else
-            <div class="grid min-h-0 min-w-0 flex-1 grid-cols-3 gap-1.5 overflow-hidden pb-1 sm:gap-2">
+            <div class="grid min-h-0 min-w-0 flex-1 grid-cols-3 gap-1.5 pb-1 sm:gap-2">
                 @foreach ($columns as $colIndex => $col)
                     @php
                         $isBacklog = in_array($col['category'] ?? '', ['staff', 'takeaway'], true);
                     @endphp
                     <section
                         wire:key="kds-batch-{{ $col['batchKey'] }}"
-                        class="flex h-full max-h-full min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-lg border shadow-lg {{ $isBacklog ? 'border-slate-700 bg-slate-800/80' : 'border-slate-800 bg-slate-900/70' }}"
+                        class="flex min-h-0 min-w-0 w-full flex-col rounded-lg border shadow-lg {{ $isBacklog ? 'border-slate-700 bg-slate-800/80' : 'border-slate-800 bg-slate-900/70' }}"
                     >
                         <header class="flex min-h-14 items-center justify-between border-b px-4 py-3 {{ $isBacklog ? 'border-slate-700 bg-slate-800' : 'border-slate-800 bg-slate-900' }}">
                             <h2 class="text-lg font-bold tracking-wide {{ $isBacklog ? 'text-slate-200' : 'text-slate-100' }}">
@@ -160,22 +159,17 @@
                                     </span>
                                 @endif
                                 <span class="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">
-                                    <span x-text="visibleTicketCountForColumn({{ (int) $colIndex }})">{{ count($col['tickets']) }}</span>
+                                    <span x-text="$store.kdsFilters.visibleTicketCountForColumn({{ (int) $colIndex }})">{{ count($col['tickets']) }}</span>
                                 </span>
                             </div>
                         </header>
 
-                        <ul class="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain p-2 sm:gap-2 sm:p-2.5">
+                        <ul class="flex min-h-0 flex-1 flex-col gap-1.5 p-2 sm:gap-2 sm:p-2.5">
                             @foreach ($col['tickets'] as $ticket)
                                 @php
                                     $isServed = $ticket->status?->value === 'served';
                                     $isCooking = $ticket->status?->value === 'cooking';
                                     $base = 'group relative flex min-h-14 items-start justify-between gap-3 rounded-lg border px-2 py-2 text-left text-base font-semibold transition select-none';
-                                    $palette = $isServed
-                                        ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80'
-                                        : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70';
-                                    $disabled = 'wire:loading.attr=disabled wire:target=markServed,revertToConfirmed,toggleHistory';
-                                    $loadingClass = 'wire:loading.class=opacity-50 wire:target=markServed,revertToConfirmed,toggleHistory';
                                     $name = $ticket->snapshot_kitchen_name !== null && trim((string) $ticket->snapshot_kitchen_name) !== ''
                                         ? (string) $ticket->snapshot_kitchen_name
                                         : (string) ($ticket->snapshot_name ?? ($ticket->menuItem?->kitchen_name ?? $ticket->menuItem?->name ?? ''));
@@ -196,17 +190,31 @@
                                         }
                                     }
                                     $qtyPrefix = ($ticket->qty ?? 1) > 1 ? '×'.$ticket->qty.' ' : '';
-                                    $titleColor = $isServed ? 'text-slate-200' : 'text-rose-50';
-                                    $modColor = $isServed ? 'text-slate-400 line-through decoration-2' : 'text-rose-200/90';
                                 @endphp
                                 <li
                                     wire:key="kds-line-{{ $ticket->id }}-r{{ $ticket->line_revision }}"
                                     x-data="{
-                                        key: 'kds-line-{{ (int) $ticket->id }}-r{{ (int) $ticket->line_revision }}',
+                                        key: 'kds-line-{{ (int)$ticket->id }}-r{{ (int)$ticket->line_revision }}',
                                         isNew: {{ ($ticket->kds_is_new_arrival ?? false) ? 'true' : 'false' }},
                                         animate: false,
+                                        optimistic: null,
+                                        pending: false,
+                                        isServedUi() { return this.optimistic !== null ? this.optimistic : {{ $isServed ? 'true' : 'false' }}; },
+                                        async markServedTap(id, rev) {
+                                            this.pending = true;
+                                            this.optimistic = true;
+                                            await $wire.markServed(id, rev);
+                                            this.pending = false;
+                                        },
+                                        async revertTap(id, rev) {
+                                            this.pending = true;
+                                            this.optimistic = false;
+                                            await $wire.revertToConfirmed(id, rev);
+                                            this.pending = false;
+                                        },
                                     }"
-                                    x-show="$root.ticketVisible(@js($ticket->menuItem?->menu_category_id))"
+                                    x-show="$store.kdsFilters.ticketVisible(@js($ticket->menuItem?->menu_category_id))"
+                                    @kds-wire-fail.window="if (pending) { optimistic = null; pending = false; }"
                                     x-init="
                                         window.__kdsSeenKeys = window.__kdsSeenKeys || {};
                                         if (!window.__kdsSeenKeys[key] && isNew) {
@@ -219,51 +227,47 @@
                                     x-transition:enter-end="translate-y-0 opacity-100"
                                     :class="animate ? 'ring-2 ring-amber-300/90 ring-offset-1 ring-offset-slate-900' : ''"
                                 >
-                                    @if ($isServed)
-                                        <button
-                                            type="button"
-                                            class="{{ $base }} {{ $palette }} w-full cursor-pointer"
-                                            wire:click="revertToConfirmed({{ (int) $ticket->id }}, {{ (int) $ticket->line_revision }})"
-                                            {!! $disabled !!}
-                                            {!! $loadingClass !!}
-                                            title="{{ __('kds.revert_hint') }}"
-                                        >
-                                            <span class="flex min-w-0 flex-col gap-1">
-                                                <span class="text-lg leading-tight {{ $titleColor }}">
-                                                    {{ $qtyPrefix }}{{ $name }}@if ($styleName !== '') <span class="font-bold">[{{ $styleName }}]</span>@endif
+                                    <button
+                                        type="button"
+                                        x-show="isServedUi()"
+                                        class="{{ $base }} w-full cursor-pointer"
+                                        :class="isServedUi() ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80' : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70'"
+                                        @click="revertTap({{ (int)$ticket->id }}, {{ (int)$ticket->line_revision }})"
+                                        title="{{ __('kds.revert_hint') }}"
+                                    >
+                                        <span class="flex min-w-0 flex-col gap-1">
+                                            <span class="text-lg leading-tight text-slate-200">
+                                                {{ $qtyPrefix }}{{ $name }}@if ($styleName !== '') <span class="font-bold">[{{ $styleName }}]</span>@endif
+                                            </span>
+                                            @if (! empty($toppingNames))
+                                                <span class="text-xs font-normal leading-snug text-slate-400 line-through decoration-2">+ {{ implode(', ', $toppingNames) }}</span>
+                                            @endif
+                                        </span>
+                                        <span class="shrink-0 rounded-full bg-emerald-700/60 px-2 py-1 text-xs text-emerald-50">
+                                            ✓
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        x-show="!isServedUi()"
+                                        class="{{ $base }} w-full cursor-pointer"
+                                        :class="isServedUi() ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80' : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70'"
+                                        @click="markServedTap({{ (int)$ticket->id }}, {{ (int)$ticket->line_revision }})"
+                                    >
+                                        <span class="flex min-w-0 flex-col gap-1">
+                                            @if ($isCooking)
+                                                <span class="text-xs font-medium uppercase tracking-wider text-rose-200/90">
+                                                    {{ __('kds.status_cooking') }}
                                                 </span>
-                                                @if (! empty($toppingNames))
-                                                    <span class="text-xs font-normal leading-snug {{ $modColor }}">+ {{ implode(', ', $toppingNames) }}</span>
-                                                @endif
+                                            @endif
+                                            <span class="text-lg leading-tight text-rose-50">
+                                                {{ $qtyPrefix }}{{ $name }}@if ($styleName !== '') <span class="font-bold">[{{ $styleName }}]</span>@endif
                                             </span>
-                                            <span class="shrink-0 rounded-full bg-emerald-700/60 px-2 py-1 text-xs text-emerald-50">
-                                                ✓
-                                            </span>
-                                        </button>
-                                    @else
-                                        <button
-                                            type="button"
-                                            class="{{ $base }} {{ $palette }} w-full cursor-pointer"
-                                            wire:click="markServed({{ (int) $ticket->id }}, {{ (int) $ticket->line_revision }})"
-                                            {!! $disabled !!}
-                                            {!! $loadingClass !!}
-                                        >
-                                            <span class="flex min-w-0 flex-col gap-1">
-                                                @if ($isCooking)
-                                                    <span class="text-xs font-medium uppercase tracking-wider {{ $modColor }}">
-                                                        {{ __('kds.status_cooking') }}
-                                                    </span>
-                                                @endif
-                                                <span class="text-lg leading-tight {{ $titleColor }}">
-                                                    {{ $qtyPrefix }}{{ $name }}@if ($styleName !== '') <span class="font-bold">[{{ $styleName }}]</span>@endif
-                                                </span>
-                                                @if (! empty($toppingNames))
-                                                    <span class="text-xs font-normal leading-snug {{ $modColor }}">+ {{ implode(', ', $toppingNames) }}</span>
-                                                @endif
-                                            </span>
-
-                                        </button>
-                                    @endif
+                                            @if (! empty($toppingNames))
+                                                <span class="text-xs font-normal leading-snug text-rose-200/90">+ {{ implode(', ', $toppingNames) }}</span>
+                                            @endif
+                                        </span>
+                                    </button>
                                 </li>
                             @endforeach
                         </ul>

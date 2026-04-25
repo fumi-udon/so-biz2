@@ -32,7 +32,7 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Only files matching these patterns are included: app/Livewire/Kds/**/*.php, resources/views/livewire/kds/**/*.blade.php, resources/views/layouts/kds*.blade.php, app/Services/Kds/**/*.php, resources/js/kds/**/*.js
+- Only files matching these patterns are included: app/Livewire/Kds/**/*.php, resources/views/livewire/kds/**/*.blade.php, resources/views/layouts/kds*.blade.php, app/Services/Kds/**/*.php, app/Events/Kds/**/*.php, app/Filament/Pages/*Kds*.php, app/Support/*Kds*.php, resources/js/**/*.js, routes/channels.php
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -42,6 +42,12 @@ The content is organized as follows:
 
 <directory_structure>
 app/
+  Events/
+    Kds/
+      OrderConfirmedBroadcast.php
+  Filament/
+    Pages/
+      ManageKdsFilterSettings.php
   Livewire/
     Kds/
       KdsDashboard.php
@@ -49,17 +55,208 @@ app/
     Kds/
       KdsBroadcastService.php
       KdsQueryService.php
+  Support/
+    KdsFilterSetting.php
 resources/
+  js/
+    pos/
+      printer/
+        epos-device-print-engine.js
+        epson-printer.js
+        index.js
+        mock-printer.js
+        pos-printer-staff-messages.js
+        print-controller.js
+        printer-factory.js
+        printer-interface.js
+    app.js
+    bootstrap.js
+    echo.js
+    order-store.js
   views/
     layouts/
       kds.blade.php
     livewire/
       kds/
         kds-dashboard.blade.php
+routes/
+  channels.php
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="resources/js/bootstrap.js">
+import axios from 'axios';
+window.axios = axios;
+
+window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+
+/**
+ * Echo exposes an expressive API for subscribing to channels and listening
+ * for events that are broadcast by Laravel.
+ */
+import './echo';
+</file>
+
+<file path="app/Filament/Pages/ManageKdsFilterSettings.php">
+<?php
+
+declare(strict_types=1);
+
+namespace App\Filament\Pages;
+
+use App\Models\MenuCategory;
+use App\Models\Shop;
+use App\Support\KdsFilterSetting;
+use Filament\Facades\Filament;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Form;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
+use Filament\Notifications\Notification;
+use Filament\Pages\Page;
+
+final class ManageKdsFilterSettings extends Page
+{
+    protected static ?string $navigationIcon = 'heroicon-o-funnel';
+
+    protected static string $view = 'filament.pages.manage-kds-filter-settings';
+
+    protected static ?string $navigationLabel = 'KDS フィルター';
+
+    protected static ?string $title = 'KDS フィルター設定';
+
+    protected static ?string $navigationGroup = 'システム設定';
+
+    protected static ?int $navigationSort = 22;
+
+    /**
+     * @var array<string, mixed>|null
+     */
+    public ?array $data = [];
+
+    public function mount(): void
+    {
+        $sid = (int) Shop::query()->where('is_active', true)->orderBy('id')->value('id');
+        if ($sid < 1) {
+            $this->form->fill([
+                'shop_id' => null,
+                'kitchen_category_ids' => [],
+                'hall_category_ids' => [],
+            ]);
+
+            return;
+        }
+
+        $this->form->fill([
+            'shop_id' => $sid,
+            'kitchen_category_ids' => KdsFilterSetting::kitchenCategoryIds($sid),
+            'hall_category_ids' => KdsFilterSetting::hallCategoryIds($sid),
+        ]);
+    }
+
+    public function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Section::make(__('filament.kds_filter.section_title'))
+                    ->description(__('filament.kds_filter.section_description'))
+                    ->schema([
+                        Select::make('shop_id')
+                            ->label(__('filament.kds_filter.shop'))
+                            ->options(fn (): array => Shop::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id')->all())
+                            ->required()
+                            ->live()
+                            ->afterStateUpdated(function (mixed $state, Set $set): void {
+                                $sid = (int) $state;
+                                if ($sid < 1) {
+                                    return;
+                                }
+                                $set('kitchen_category_ids', KdsFilterSetting::kitchenCategoryIds($sid));
+                                $set('hall_category_ids', KdsFilterSetting::hallCategoryIds($sid));
+                            }),
+                        CheckboxList::make('kitchen_category_ids')
+                            ->label(__('filament.kds_filter.kitchen_categories'))
+                            ->options(fn (Get $get): array => $this->categoryOptionsForShop((int) $get('shop_id')))
+                            ->bulkToggleable()
+                            ->columns(2),
+                        CheckboxList::make('hall_category_ids')
+                            ->label(__('filament.kds_filter.hall_categories'))
+                            ->options(fn (Get $get): array => $this->categoryOptionsForShop((int) $get('shop_id')))
+                            ->bulkToggleable()
+                            ->columns(2),
+                    ]),
+            ])
+            ->statePath('data');
+    }
+
+    /**
+     * @return array<int|string, string>
+     */
+    private function categoryOptionsForShop(int $shopId): array
+    {
+        if ($shopId < 1) {
+            return [];
+        }
+
+        return MenuCategory::query()
+            ->where('shop_id', $shopId)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (MenuCategory $c): array => [$c->id => $c->name])
+            ->all();
+    }
+
+    public function save(): void
+    {
+        $state = $this->form->getState();
+        $sid = (int) ($state['shop_id'] ?? 0);
+        if ($sid < 1) {
+            Notification::make()
+                ->title(__('filament.kds_filter.missing_shop'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+        $kitchen = $state['kitchen_category_ids'] ?? [];
+        $hall = $state['hall_category_ids'] ?? [];
+        if (! is_array($kitchen)) {
+            $kitchen = [];
+        }
+        if (! is_array($hall)) {
+            $hall = [];
+        }
+        KdsFilterSetting::saveKitchenCategoryIds($sid, $kitchen);
+        KdsFilterSetting::saveHallCategoryIds($sid, $hall);
+        Notification::make()
+            ->title(__('filament.kds_filter.saved'))
+            ->success()
+            ->send();
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+        if ($user === null || ! $user->canAccessPanel(Filament::getCurrentPanel())) {
+            return false;
+        }
+        $superAdmin = config('filament-shield.super_admin.name', 'super_admin');
+
+        return $user->hasRole($superAdmin) || $user->hasRole('manager');
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return self::canAccess();
+    }
+}
+</file>
 
 <file path="app/Services/Kds/KdsBroadcastService.php">
 <?php
@@ -153,6 +350,2283 @@ final class KdsBroadcastService
 }
 </file>
 
+<file path="app/Support/KdsFilterSetting.php">
+<?php
+
+declare(strict_types=1);
+
+namespace App\Support;
+
+use App\Models\Setting;
+
+/**
+ * KDS Kitchen/Hall 向けメニューカテゴリ ID（店舗スコープの Setting キー）。
+ */
+final class KdsFilterSetting
+{
+    public static function kitchenKey(int $shopId): string
+    {
+        return 'kds_'.$shopId.'_kitchen_categories';
+    }
+
+    public static function hallKey(int $shopId): string
+    {
+        return 'kds_'.$shopId.'_hall_categories';
+    }
+
+    /**
+     * Kitchen または Hall のいずれかに 1 件以上のカテゴリが登録されている。
+     */
+    public static function isCategoryFilterConfigured(int $shopId): bool
+    {
+        if ($shopId < 1) {
+            return false;
+        }
+
+        return self::kitchenCategoryIds($shopId) !== []
+            || self::hallCategoryIds($shopId) !== [];
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function kitchenCategoryIds(int $shopId): array
+    {
+        if ($shopId < 1) {
+            return [];
+        }
+
+        return self::normalizeIdList(Setting::getValue(self::kitchenKey($shopId), []));
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function hallCategoryIds(int $shopId): array
+    {
+        if ($shopId < 1) {
+            return [];
+        }
+
+        return self::normalizeIdList(Setting::getValue(self::hallKey($shopId), []));
+    }
+
+    /**
+     * @param  list<int|string>  $ids
+     */
+    public static function saveKitchenCategoryIds(int $shopId, array $ids): void
+    {
+        if ($shopId < 1) {
+            return;
+        }
+
+        $normalized = self::normalizeIdList($ids);
+        Setting::query()->updateOrCreate(
+            ['key' => self::kitchenKey($shopId)],
+            [
+                'value' => $normalized,
+                'description' => 'KDS Kitchen 向けメニューカテゴリ ID（店舗 '.$shopId.'）',
+            ]
+        );
+    }
+
+    /**
+     * @param  list<int|string>  $ids
+     */
+    public static function saveHallCategoryIds(int $shopId, array $ids): void
+    {
+        if ($shopId < 1) {
+            return;
+        }
+
+        $normalized = self::normalizeIdList($ids);
+        Setting::query()->updateOrCreate(
+            ['key' => self::hallKey($shopId)],
+            [
+                'value' => $normalized,
+                'description' => 'KDS Hall 向けメニューカテゴリ ID（店舗 '.$shopId.'）',
+            ]
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function normalizeIdList(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $v) {
+            $i = (int) $v;
+            if ($i > 0) {
+                $out[$i] = $i;
+            }
+        }
+
+        return array_values($out);
+    }
+}
+</file>
+
+<file path="resources/js/echo.js">
+import Echo from 'laravel-echo';
+import Pusher from 'pusher-js';
+
+window.Pusher = Pusher;
+
+const shouldLogToConsole = (() => {
+    try {
+        const byEnv = String(import.meta.env.VITE_PUSHER_LOG_TO_CONSOLE || '').toLowerCase() === 'true';
+        const byQuery = new URL(window.location.href).searchParams.get('pusherDebug') === '1';
+
+        return byEnv || byQuery;
+    } catch {
+        return String(import.meta.env.VITE_PUSHER_LOG_TO_CONSOLE || '').toLowerCase() === 'true';
+    }
+})();
+
+if (shouldLogToConsole && window.Pusher) {
+    window.Pusher.logToConsole = true;
+}
+
+// パブリックチャンネルのみ（Echo.channel）。private / presence は使わず /broadcasting/auth を呼ばない。
+// ローカル等で VITE_PUSHER_APP_KEY が無い場合や初期化例外時も後続バンドル（order-store 等）を読み込めるようにする。
+const pusherKey = import.meta.env.VITE_PUSHER_APP_KEY;
+
+if (pusherKey) {
+    try {
+        window.Echo = new Echo({
+            broadcaster: 'pusher',
+            key: pusherKey,
+            cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER,
+            forceTLS: true,
+        });
+        window.dispatchEvent(new Event('EchoLoaded'));
+    } catch (err) {
+        console.warn('[echo] Echo initialization failed; realtime disabled.', err);
+        window.Echo = undefined;
+    }
+} else {
+    console.warn('[echo] VITE_PUSHER_APP_KEY is not set; Echo skipped.');
+    window.Echo = undefined;
+}
+</file>
+
+<file path="resources/js/pos/printer/epos-device-print-engine.js">
+/**
+ * Söya smart singleton — ePOSDevice 印刷エンジン（公式サンプル準拠 + JIT 接続 + アイドル切断 + FIFO）。
+ *
+ * 現場向け: 切断完了前に次ジョブが走ると ERROR_TIMEOUT / 不整合が起きやすいため、
+ * deleteDevice / disconnect は必ず Promise で直列化する。
+ *
+ * @see storage/ePOS_SDK_Sample_JavaScript/ReceiptDesigner/js/editor-print.js (setXmlString + send)
+ * @see storage/ePOS_SDK_Sample_JavaScript/sample/PrinterObject.js (DEVICE_IN_USE リトライ)
+ */
+
+import { DEFAULT_TIMEOUT_MS } from './printer-interface.js';
+
+/** @type {Array<QueuedJob>} */
+let _queue = [];
+
+/** @type {boolean} */
+let _draining = false;
+
+/** @type {object|null} */
+let _ePosDev = null;
+
+/** @type {object|null} */
+let _printer = null;
+
+/** @type {ReturnType<typeof setTimeout>|null} */
+let _idleTimer = null;
+
+/** @type {Promise<void>|null} */
+let _pendingDisconnect = null;
+
+/**
+ * @typedef {object} QueuedJob
+ * @property {string} jobKey
+ * @property {string} xml
+ * @property {Record<string, unknown>} opts
+ * @property {number} printJobId
+ * @property {(() => void)|undefined} onDispatched
+ * @property {(value: object) => void} resolve
+ */
+
+/**
+ * @param {string} xml
+ * @returns {string}
+ */
+function stripEposPrintInner(xml) {
+    const m = String(xml).match(/<epos-print[^>]*>([\s\S]*)<\/epos-print>/i);
+    return m ? m[1].trim() : String(xml);
+}
+
+/**
+ * @returns {null|{
+ *   ip:string,
+ *   port:number,
+ *   deviceId:string,
+ *   crypto:boolean,
+ *   buffer:boolean,
+ *   connectTimeoutMs:number,
+ *   printTimeoutMs:number,
+ *   idleDisconnectMs:number,
+ *   deviceInUseRetryMax:number,
+ *   deviceInUseRetryDelayMs:number,
+ * }}
+ */
+function readMergedConfig() {
+    const p = window.PosConfig;
+    if (!p || !p.ip) {
+        const f = window.posPrinterConfig;
+        if (!f || !f.url) {
+            return null;
+        }
+        try {
+            const u = new URL(f.url);
+            const portFromUrl = u.port ? parseInt(u.port, 10) : 8043;
+            return {
+                ip: u.hostname,
+                port: Number.isFinite(portFromUrl) && portFromUrl > 0 ? portFromUrl : 8043,
+                deviceId: 'local_printer',
+                crypto: u.protocol === 'https:',
+                buffer: false,
+                connectTimeoutMs: 20000,
+                printTimeoutMs: Math.max(1000, Number(f.timeoutMs ?? DEFAULT_TIMEOUT_MS)),
+                idleDisconnectMs: 60000,
+                deviceInUseRetryMax: 5,
+                deviceInUseRetryDelayMs: 3000,
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    return {
+        ip: String(p.ip),
+        port: parseInt(String(p.port), 10),
+        deviceId: String(p.deviceId ?? p.device_id ?? 'local_printer'),
+        crypto: p.crypto !== false,
+        buffer: !!p.buffer,
+        connectTimeoutMs: Math.max(3000, Number(p.connectTimeoutMs ?? p.connect_timeout_ms ?? 20000)),
+        printTimeoutMs: Math.max(1000, Number(p.printTimeoutMs ?? p.print_timeout_ms ?? DEFAULT_TIMEOUT_MS)),
+        idleDisconnectMs: Math.max(5000, Number(p.idleDisconnectMs ?? p.idle_disconnect_ms ?? 60000)),
+        deviceInUseRetryMax: Math.max(1, Number(p.deviceInUseRetryMax ?? p.device_in_use_retry_max ?? 5)),
+        deviceInUseRetryDelayMs: Math.max(500, Number(p.deviceInUseRetryDelayMs ?? p.device_in_use_retry_delay_ms ?? 3000)),
+    };
+}
+
+function clearIdleTimer() {
+    if (_idleTimer != null) {
+        clearTimeout(_idleTimer);
+        _idleTimer = null;
+    }
+}
+
+/**
+ * アイドル時にポート解放（他端末・メンテ用）。非同期で完全切断まで待つ。
+ */
+function scheduleIdleDisconnect(cfg) {
+    clearIdleTimer();
+    const ms = cfg.idleDisconnectMs;
+    _idleTimer = setTimeout(() => {
+        void disconnectNow();
+    }, ms);
+}
+
+/**
+ * 進行中の切断があれば完了まで待つ（次ジョブとの競合防止）。
+ */
+async function waitForPendingDisconnect() {
+    if (_pendingDisconnect) {
+        try {
+            await _pendingDisconnect;
+        } catch {
+            /* ignore */
+        }
+    }
+}
+
+/**
+ * deleteDevice → disconnect まで含めた完全切断。Promise で直列化。
+ */
+function disconnectNow() {
+    if (_pendingDisconnect) {
+        return _pendingDisconnect;
+    }
+
+    clearIdleTimer();
+
+    const dev = _ePosDev;
+    const pr = _printer;
+    _printer = null;
+
+    if (!dev) {
+        _ePosDev = null;
+        return Promise.resolve();
+    }
+
+    _pendingDisconnect = new Promise((resolve) => {
+        let settled = false;
+        const finish = () => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            _ePosDev = null;
+            _pendingDisconnect = null;
+            resolve();
+        };
+
+        const safety = setTimeout(finish, 12_000);
+
+        try {
+            if (pr) {
+                dev.deleteDevice(pr, () => {
+                    try {
+                        dev.disconnect();
+                    } catch {
+                        /* ignore */
+                    }
+                    clearTimeout(safety);
+                    finish();
+                });
+            } else {
+                try {
+                    dev.disconnect();
+                } catch {
+                    /* ignore */
+                }
+                clearTimeout(safety);
+                finish();
+            }
+        } catch {
+            try {
+                dev.disconnect();
+            } catch {
+                /* ignore */
+            }
+            clearTimeout(safety);
+            finish();
+        }
+    });
+
+    return _pendingDisconnect;
+}
+
+/**
+ * @param {number} ms
+ */
+function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * @param {string} code
+ */
+function isConnectRetryable(code) {
+    const c = String(code ?? '').toUpperCase();
+    return (
+        c === 'ERROR_TIMEOUT' ||
+        c.includes('TIMEOUT') ||
+        c === 'DEVICE_IN_USE' ||
+        c === 'SSL_CONNECT_FAIL' ||
+        c === 'ERROR_SYSTEM'
+    );
+}
+
+/**
+ * @param {string|null|undefined} code
+ * @param {string|null|undefined} message
+ */
+function isSendRetryable(code, message) {
+    const c = String(code ?? '').toUpperCase();
+    const m = String(message ?? '');
+    if (c === 'EX_TIMEOUT' || c === 'ERROR_TIMEOUT' || c.includes('TIMEOUT')) {
+        return true;
+    }
+    if (c === 'EPOS_FAIL' || c === 'EPOS_ERR' || c === '') {
+        return /timeout|time.?out|応答|response/i.test(m);
+    }
+    return false;
+}
+
+/**
+ * @param {object} dev
+ * @param {NonNullable<ReturnType<typeof readMergedConfig>>} cfg
+ */
+function connectAsync(dev, cfg) {
+    return new Promise((resolve) => {
+        dev.connect(cfg.ip, cfg.port, (result) => {
+            if (result === 'OK' || result === 'SSL_CONNECT_OK') {
+                resolve({ ok: true });
+            } else {
+                resolve({ ok: false, code: String(result ?? 'CONNECT_FAIL'), message: 'ePOSDevice.connect failed' });
+            }
+        });
+    });
+}
+
+/**
+ * @param {object} dev
+ * @param {NonNullable<ReturnType<typeof readMergedConfig>>} cfg
+ */
+async function connectWithRetry(dev, cfg) {
+    const max = 4;
+    for (let attempt = 1; attempt <= max; attempt++) {
+        const conn = await connectAsync(dev, cfg);
+        if (conn.ok) {
+            return conn;
+        }
+        const code = String(conn.code ?? '');
+        if (attempt < max && isConnectRetryable(code)) {
+            await disconnectNow();
+            await sleep(600 * attempt);
+            continue;
+        }
+        return conn;
+    }
+    return { ok: false, code: 'CONNECT_FAIL', message: 'connect retries exhausted' };
+}
+
+/**
+ * @param {object} dev
+ * @param {NonNullable<ReturnType<typeof readMergedConfig>>} cfg
+ */
+async function createPrinterWithRetry(dev, cfg) {
+    const max = cfg.deviceInUseRetryMax;
+    const delay = cfg.deviceInUseRetryDelayMs;
+
+    for (let attempt = 1; attempt <= max; attempt++) {
+        /** @type {{ printer: object|null, code: string }} */
+        const result = await new Promise((resolve) => {
+            dev.createDevice(
+                cfg.deviceId,
+                dev.DEVICE_TYPE_PRINTER,
+                { crypto: cfg.crypto, buffer: cfg.buffer },
+                (printer, code) => {
+                    resolve({ printer, code: String(code ?? '') });
+                },
+            );
+        });
+
+        if (result.code === 'OK' && result.printer) {
+            return result.printer;
+        }
+
+        const code = result.code;
+        const retryable = code === 'DEVICE_IN_USE' || code === 'ERROR_TIMEOUT';
+        if (retryable && attempt < max) {
+            await sleep(delay);
+            continue;
+        }
+
+        return null;
+    }
+
+    return null;
+}
+
+/**
+ * @param {object} printer
+ * @param {string} xmlFull
+ * @param {number} printTimeoutMs
+ * @returns {Promise<{ ok: boolean, code?: string|null, message?: string|null, status?: string|null }>}
+ */
+function sendXmlAndWait(printer, xmlFull, printTimeoutMs) {
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            clearTimeout(timer);
+            resolve(value);
+        };
+
+        const timer = setTimeout(() => {
+            finish({ ok: false, code: 'EX_TIMEOUT', message: 'print response timeout' });
+        }, printTimeoutMs + 5000);
+
+        printer.timeout = printTimeoutMs;
+        printer.onreceive = (res /* , _sq */) => {
+            const ok = !!(res && res.success);
+            const codeStr = res && res.code != null ? String(res.code) : '';
+            const statusStr = res && res.status != null ? String(res.status) : '';
+            finish(
+                ok
+                    ? { ok: true, code: codeStr || null, status: statusStr || null }
+                    : {
+                          ok: false,
+                          code: codeStr || 'EPOS_FAIL',
+                          message: statusStr ? `status=${statusStr}` : 'printer rejected',
+                      },
+            );
+        };
+
+        printer.onerror = (err /* , _sq */) => {
+            const st = err && err.status != null ? String(err.status) : '';
+            const txt = err && err.responseText ? String(err.responseText).slice(0, 400) : '';
+            const sslLike =
+                st === 'SSL' ||
+                /ssl|certificate|tls/i.test(txt) ||
+                /ssl|certificate/i.test(String(st));
+            finish({
+                ok: false,
+                code: sslLike ? 'SSL_ERROR' : st ? `EPOS_${st}` : 'EPOS_ERR',
+                message: txt || 'transport error',
+            });
+        };
+
+        try {
+            const inner = stripEposPrintInner(xmlFull);
+            printer.setXmlString(inner);
+            printer.send();
+        } catch (e) {
+            finish({
+                ok: false,
+                code: 'EPOS_THROW',
+                message: e && e.message ? e.message : String(e),
+            });
+        }
+    });
+}
+
+/**
+ * @param {QueuedJob} job
+ * @param {NonNullable<ReturnType<typeof readMergedConfig>>} cfg
+ */
+async function runOneJob(job, cfg) {
+    await waitForPendingDisconnect();
+
+    const printTimeoutMs = Math.max(
+        Number(job.opts?.timeoutMs ?? 0),
+        Number(cfg.printTimeoutMs ?? DEFAULT_TIMEOUT_MS),
+        DEFAULT_TIMEOUT_MS,
+    );
+
+    if (typeof job.onDispatched === 'function') {
+        try {
+            job.onDispatched();
+        } catch {
+            /* ignore */
+        }
+    }
+
+    clearIdleTimer();
+
+    if (!window.epson || typeof window.epson.ePOSDevice !== 'function') {
+        return { ok: false, code: 'EPOS_SDK_MISSING', message: 'Epson ePOS SDK (ePOSDevice) not loaded' };
+    }
+
+    const maxJobAttempts = 3;
+
+    for (let jobAttempt = 1; jobAttempt <= maxJobAttempts; jobAttempt++) {
+        try {
+            await waitForPendingDisconnect();
+
+            if (!_ePosDev) {
+                _ePosDev = new window.epson.ePOSDevice();
+                _ePosDev.CONNECT_TIMEOUT = cfg.connectTimeoutMs;
+                _ePosDev.ondisconnect = () => {
+                    _printer = null;
+                    clearIdleTimer();
+                };
+            }
+
+            const dev = _ePosDev;
+
+            if (typeof dev.isConnected !== 'function' || !dev.isConnected()) {
+                const conn = await connectWithRetry(dev, cfg);
+                if (!conn.ok) {
+                    await disconnectNow();
+                    if (jobAttempt < maxJobAttempts && isConnectRetryable(String(conn.code))) {
+                        await sleep(900 * jobAttempt);
+                        continue;
+                    }
+                    return conn;
+                }
+            }
+
+            if (!_printer) {
+                const p = await createPrinterWithRetry(dev, cfg);
+                if (!p) {
+                    await disconnectNow();
+                    if (jobAttempt < maxJobAttempts) {
+                        await sleep(900 * jobAttempt);
+                        continue;
+                    }
+                    return { ok: false, code: 'DEVICE_OPEN_FAIL', message: 'createDevice failed after retries' };
+                }
+                _printer = p;
+            }
+
+            const sendRes = await sendXmlAndWait(_printer, job.xml, printTimeoutMs);
+
+            if (sendRes.ok) {
+                scheduleIdleDisconnect(cfg);
+                return sendRes;
+            }
+
+            await disconnectNow();
+
+            if (jobAttempt < maxJobAttempts && isSendRetryable(sendRes.code, sendRes.message)) {
+                await sleep(1200 * jobAttempt);
+                continue;
+            }
+
+            return sendRes;
+        } catch (e) {
+            await disconnectNow();
+            if (jobAttempt < maxJobAttempts) {
+                await sleep(1200 * jobAttempt);
+                continue;
+            }
+            return {
+                ok: false,
+                code: 'EPOS_THROW',
+                message: e && e.message ? e.message : String(e),
+            };
+        }
+    }
+
+    return { ok: false, code: 'EPOS_ABORT', message: 'print attempts exhausted' };
+}
+
+async function drainQueue() {
+    if (_draining) {
+        return;
+    }
+    _draining = true;
+
+    try {
+        while (_queue.length > 0) {
+            const job = _queue.shift();
+            if (!job) {
+                continue;
+            }
+
+            const cfg = readMergedConfig();
+            if (!cfg) {
+                job.resolve({ ok: false, code: 'POS_CONFIG_MISSING', message: 'window.PosConfig / printer IP missing' });
+                continue;
+            }
+
+            const res = await runOneJob(job, cfg);
+            job.resolve(res);
+        }
+    } finally {
+        _draining = false;
+        if (_queue.length > 0) {
+            void drainQueue();
+        }
+    }
+}
+
+/**
+ * @param {object} payload
+ * @param {string} payload.jobKey
+ * @param {string} payload.xml
+ * @param {Record<string, unknown>} [payload.opts]
+ * @param {number} payload.printJobId
+ * @param {(() => void)} [payload.onDispatched]
+ * @returns {Promise<{ ok: boolean, code?: string|null, message?: string|null, status?: string|null }>}
+ */
+export function enqueueEposPrint(payload) {
+    const { jobKey, xml, opts = {}, printJobId, onDispatched } = payload;
+
+    return new Promise((resolve) => {
+        _queue.push({
+            jobKey,
+            xml,
+            opts,
+            printJobId: Number(printJobId) || 0,
+            onDispatched,
+            resolve,
+        });
+        void drainQueue();
+    });
+}
+
+/**
+ * @returns {{ queueLength: number }}
+ */
+export function getEposPrintEngineStatus() {
+    return { queueLength: _queue.length + (_draining ? 1 : 0) };
+}
+</file>
+
+<file path="resources/js/pos/printer/epson-printer.js">
+import { PrinterInterface } from './printer-interface.js';
+import { enqueueEposPrint } from './epos-device-print-engine.js';
+
+/**
+ * Epson TM 系 — {@link enqueueEposPrint} への薄いラッパ（PrinterFactory 互換）。
+ */
+export class EpsonDevicePrinter extends PrinterInterface {
+    constructor(config = {}) {
+        super();
+        this._config = config;
+    }
+
+    /**
+     * @param {string} jobKey
+     * @param {string} xmlPayload
+     * @param {Record<string, unknown>} opts
+     */
+    async send(jobKey, xmlPayload, opts = {}) {
+        return enqueueEposPrint({
+            jobKey,
+            xml: xmlPayload,
+            opts,
+            printJobId: Number(opts.printJobId ?? 0),
+            onDispatched: typeof opts.onDispatched === 'function' ? opts.onDispatched : undefined,
+        });
+    }
+}
+
+/** @deprecated Use {@link EpsonDevicePrinter} — kept for grep / re-exports */
+export const EpsonHttpPrinter = EpsonDevicePrinter;
+</file>
+
+<file path="resources/js/pos/printer/index.js">
+export { PrinterInterface, DEFAULT_TIMEOUT_MS } from './printer-interface.js';
+export { MockPrinter } from './mock-printer.js';
+export { EpsonDevicePrinter, EpsonHttpPrinter } from './epson-printer.js';
+export { enqueueEposPrint, getEposPrintEngineStatus } from './epos-device-print-engine.js';
+export { PrinterFactory } from './printer-factory.js';
+export { default as PosPrintController } from './print-controller.js';
+</file>
+
+<file path="resources/js/pos/printer/mock-printer.js">
+import { DEFAULT_TIMEOUT_MS, PrinterInterface } from './printer-interface.js';
+
+/**
+ * MockPrinter — renders the XML into a DOM preview pane and resolves after
+ * a deterministic short delay. Used whenever the real hardware is not
+ * reachable (dev / tests / pre-router deployment). Behaviour is driven by
+ * a few URL-level opt-ins so QA can simulate failures without changing
+ * the driver factory:
+ *
+ *   ?mockPrinter=fail   → resolves with {ok:false, code:'MOCK_FAIL'}
+ *   ?mockPrinter=slow   → waits slightly longer to exercise UI spinners
+ *
+ * The preview pane is an off-by-default absolutely-positioned panel that
+ * appears on first send; repeated sends push new entries on top.
+ */
+export class MockPrinter extends PrinterInterface {
+    constructor({ container = null, simulateLatencyMs = 250 } = {}) {
+        super();
+        this._container = container;
+        this._simulateLatencyMs = simulateLatencyMs;
+        this._inflight = new Map();
+    }
+
+    async send(jobKey, xmlPayload, opts = {}) {
+        if (typeof jobKey !== 'string' || jobKey === '') {
+            return { ok: false, code: 'MOCK_BAD_JOB_KEY', message: 'jobKey is required' };
+        }
+        if (this._inflight.has(jobKey)) {
+            return this._inflight.get(jobKey);
+        }
+
+        const timeoutMs = Number(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+        const mode = this._readMockMode();
+        const latency = mode === 'slow' ? Math.min(timeoutMs - 100, 3_000) : this._simulateLatencyMs;
+
+        if (typeof opts.onDispatched === 'function') {
+            try {
+                opts.onDispatched();
+            } catch {
+                /* ignore */
+            }
+        }
+
+        const promise = new Promise((resolve) => {
+            const start = Date.now();
+            const timer = setTimeout(() => {
+                if (mode === 'fail') {
+                    this._renderEntry(jobKey, xmlPayload, { ok: false, code: 'MOCK_FAIL', message: 'simulated failure' });
+                    resolve({ ok: false, code: 'MOCK_FAIL', message: 'simulated failure' });
+                    return;
+                }
+                this._renderEntry(jobKey, xmlPayload, { ok: true });
+                resolve({ ok: true, elapsedMs: Date.now() - start });
+            }, latency);
+
+            // Hard timeout guard so a runaway mock can't wedge UI either.
+            setTimeout(() => {
+                clearTimeout(timer);
+                resolve({ ok: false, code: 'MOCK_TIMEOUT', message: 'mock printer timeout' });
+            }, timeoutMs);
+        });
+
+        this._inflight.set(jobKey, promise);
+        try {
+            return await promise;
+        } finally {
+            this._inflight.delete(jobKey);
+        }
+    }
+
+    _readMockMode() {
+        try {
+            const url = new URL(window.location.href);
+            return (url.searchParams.get('mockPrinter') ?? '').toLowerCase();
+        } catch {
+            return '';
+        }
+    }
+
+    _renderEntry(jobKey, xml, result) {
+        const target = this._container ?? this._ensureDomPane();
+        if (!target) return;
+
+        // eslint-disable-next-line no-console
+        console.groupCollapsed(`[MockPrinter] ${result.ok ? '✅' : '❌'} ${jobKey.slice(0, 10)}`);
+        // eslint-disable-next-line no-console
+        console.log(xml);
+        // eslint-disable-next-line no-console
+        console.groupEnd();
+
+        const entry = document.createElement('pre');
+        entry.className = 'pos-mock-printer__entry';
+        entry.setAttribute('data-job-key', jobKey);
+        entry.setAttribute('data-ok', String(result.ok));
+        entry.style.cssText = 'margin:4px;padding:6px;border:1px solid #ddd;background:#fafafa;font-size:11px;white-space:pre-wrap;word-break:break-all;';
+        entry.textContent = `[${new Date().toISOString()}] ${result.ok ? 'OK' : `ERR ${result.code}`}\n${this._stripXmlTags(xml)}`;
+        target.prepend(entry);
+    }
+
+    _stripXmlTags(xml) {
+        return xml
+            .replace(/<\?xml[^>]*>/g, '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&#10;/g, '\n')
+            .replace(/&#233;/g, 'é')
+            .trim();
+    }
+
+    _ensureDomPane() {
+        if (typeof document === 'undefined') return null;
+        let pane = document.getElementById('pos-mock-printer-pane');
+        if (pane) return pane;
+        pane = document.createElement('div');
+        pane.id = 'pos-mock-printer-pane';
+        pane.style.cssText = 'position:fixed;bottom:8px;right:8px;width:280px;max-height:42vh;overflow:auto;background:#fff;border:1px solid #ccc;box-shadow:0 6px 16px rgba(0,0,0,.2);z-index:99999;font-family:monospace;';
+        const title = document.createElement('div');
+        title.textContent = 'Mock Printer Preview';
+        title.style.cssText = 'padding:6px;background:#222;color:#fff;font-size:11px;font-weight:bold;';
+        pane.appendChild(title);
+        document.body.appendChild(pane);
+        return pane;
+    }
+}
+</file>
+
+<file path="resources/js/pos/printer/pos-printer-staff-messages.js">
+/**
+ * Maps Epson / transport codes to staff-facing Japanese guidance (kitchen counter).
+ *
+ * @param {string|null|undefined} code
+ * @param {string|null|undefined} rawMessage
+ * @returns {{ displayCode: string, staffMessage: string }}
+ */
+export function resolvePosPrinterStaffMessage(code, rawMessage) {
+    const c = String(code ?? '').trim();
+    const upper = c.toUpperCase();
+    const raw = String(rawMessage ?? '');
+
+    if (upper === 'DEVICE_OPEN_FAIL' || upper === 'CONNECT_FAIL') {
+        return {
+            displayCode: upper,
+            staffMessage:
+                '【プリンター接続失敗】電源・LANケーブル・IP(192.168.1.101)を確認し、他の端末の印刷画面を閉じてから再試行してください。',
+        };
+    }
+
+    if (upper === 'POS_CONFIG_MISSING') {
+        return {
+            displayCode: 'POS_CONFIG_MISSING',
+            staffMessage:
+                '【設定エラー】プリンター設定が読み込めません。画面を再読み込みするか、管理者に連絡してください。',
+        };
+    }
+
+    if (upper === 'EX_TIMEOUT' || upper.includes('EX_ENPC_TIMEOUT')) {
+        return {
+            displayCode: 'EX_TIMEOUT',
+            staffMessage:
+                '【印刷タイムアウト】他のPCやタブレットで印刷画面を開きっぱなしにしていませんか？一度すべてのタブを閉じて、プリンターの電源を入れ直してください。',
+        };
+    }
+
+    if (upper === 'ERROR_TIMEOUT') {
+        if (raw.includes('SSL') || raw.includes('certificate')) {
+            return resolveSslMessage();
+        }
+        return {
+            displayCode: 'ERROR_TIMEOUT',
+            staffMessage:
+                '【接続エラー】プリンターと通信できません。IPアドレスが正しいか、Wi-Fiが切れていないか確認してください。',
+        };
+    }
+
+    if (upper === 'PAPER_OUT' || upper.includes('EPTR_REC') || (upper.includes('PAPER') && upper.includes('END'))) {
+        return {
+            displayCode: upper.includes('EPTR') ? upper : 'PAPER_OUT',
+            staffMessage: '【用紙切れ】プリンターの紙がなくなっています。新しいロール紙を補充してください。',
+        };
+    }
+
+    if (
+        upper === 'COVER_OPEN' ||
+        upper.includes('COVER') ||
+        upper.includes('EPTR_COVER') ||
+        upper.includes('MECR')
+    ) {
+        return {
+            displayCode: upper.includes('EPTR') ? upper : 'COVER_OPEN',
+            staffMessage:
+                '【カバーが開いています】プリンターの蓋がしっかり閉まっているか確認してください。',
+        };
+    }
+
+    if (
+        upper === 'SSL_ERROR' ||
+        upper.includes('SSL') ||
+        raw.includes('SSL') ||
+        raw.includes('certificate') ||
+        raw.includes('Certificate')
+    ) {
+        return resolveSslMessage();
+    }
+
+    const displayCode = c || 'UNKNOWN';
+    return {
+        displayCode,
+        staffMessage: `【不明なエラー】エラーコード: ${displayCode} を管理者に報告してください。`,
+    };
+}
+
+function resolveSslMessage() {
+    return {
+        displayCode: 'SSL_ERROR',
+        staffMessage:
+            '【セキュリティ許可不足】ブラウザでプリンターへの通信が許可されていません。一度管理画面(https://192.168.1.101:8043)を直接開いて、アクセスを許可してください。',
+    };
+}
+</file>
+
+<file path="resources/js/pos/printer/printer-factory.js">
+import { EpsonDevicePrinter } from './epson-printer.js';
+import { MockPrinter } from './mock-printer.js';
+
+/**
+ * PrinterFactory — single source of truth for choosing a driver.
+ *
+ * Resolution order:
+ *   1. window.posPrinterConfig.driver (set by server: 'mock' | 'epson').
+ *   2. ?posPrinter=<driver> query parameter (for on-the-fly QA override).
+ *   3. Default: 'mock' (safe until real printer config exists).
+ *
+ * Production Epson path uses {@link window.PosConfig} (ePOSDevice / 8043).
+ * Legacy SOAP URL on posPrinterConfig is still accepted as a fallback for IP/port.
+ */
+export class PrinterFactory {
+    static resolveDriver(config = window.posPrinterConfig) {
+        const fromQuery = (() => {
+            try {
+                return new URL(window.location.href).searchParams.get('posPrinter') || null;
+            } catch {
+                return null;
+            }
+        })();
+
+        const requested = (fromQuery || (config && config.driver) || 'mock').toLowerCase();
+
+        if (requested === 'epson') {
+            const hasPos = window.PosConfig && window.PosConfig.ip;
+            const hasLegacyUrl = config && config.url;
+            if (!hasPos && !hasLegacyUrl) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                    '[PrinterFactory] Epson driver selected but window.PosConfig (ip) / url missing; falling back to MockPrinter.',
+                );
+                return new MockPrinter({
+                    simulateLatencyMs: (config && config.mockLatencyMs) || 250,
+                });
+            }
+            return new EpsonDevicePrinter({
+                timeoutMs: (config && config.timeoutMs) || 10_000,
+            });
+        }
+
+        return new MockPrinter({
+            simulateLatencyMs: (config && config.mockLatencyMs) || 250,
+        });
+    }
+}
+</file>
+
+<file path="resources/js/pos/printer/printer-interface.js">
+/**
+ * PrinterInterface — minimal contract every printer driver must implement.
+ *
+ * Implementations are intentionally small so the Livewire bridge doesn't
+ * have to know whether the currently-selected driver is the real ePOSDevice
+ * WebSocket printer (production) or the Mock (no hardware / dev env).
+ *
+ *   send(jobKey, xmlPayload, opts?) → Promise<{ ok: true }>
+ *                                   | Promise<{ ok: false, code, message }>
+ *
+ *   - jobKey is the backend's sha256(session_id:revision:intent). Drivers
+ *     may (and should) dedupe in-flight requests by jobKey to protect
+ *     against accidental double-fires from UI.
+ *   - xmlPayload is the ePOS-Print XML produced by
+ *     App\Support\Pos\EpsonReceiptXmlBuilder.
+ *   - opts.timeoutMs: hard timeout (default 10_000ms). Chosen to prevent
+ *     cashier lockout if printer/network hangs.
+ */
+// eslint-disable-next-line no-unused-vars
+export class PrinterInterface {
+    async send(/* jobKey, xmlPayload, opts */) {
+        throw new Error('PrinterInterface.send must be implemented by driver');
+    }
+}
+
+export const DEFAULT_TIMEOUT_MS = 10_000;
+</file>
+
+<file path="resources/js/app.js">
+import './bootstrap';
+import './echo';
+import './order-store';
+import { PosPrintController } from './pos/printer/index.js';
+
+// Install the POS print controller once Alpine/Livewire are present.
+// Defer to next tick so window.Livewire is guaranteed to exist when
+// PrinterBridge dispatches its first event.
+queueMicrotask(() => {
+    try {
+        PosPrintController.install();
+    } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[PosPrintController] install failed', e);
+    }
+});
+</file>
+
+<file path="routes/channels.php">
+<?php
+
+use App\Models\Shop;
+use App\Models\User;
+use Illuminate\Support\Facades\Broadcast;
+
+// test-channel は public（Channel）のため、Broadcast::channel() で定義しないこと。
+// private / presence 用の認証のみここに書く。誤って test-channel を登録すると private 扱いになり 403 の原因になる。
+
+// Filament DatabaseNotifications が接続するユーザー専用 Private チャンネルの認可
+Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
+    return (int) $user->id === (int) $id;
+});
+
+// V4: `docs/technical_contract_v4.md` §3.3 — 店舗スコープの Pos 通知（`App\Events\Pos\PosOrderPlaced`）
+Broadcast::channel('pos.shop.{shopId}', function (?User $user, int|string $shopId) {
+    if (! $user instanceof User) {
+        return false;
+    }
+    $id = (int) $shopId;
+    if ($id < 1) {
+        return false;
+    }
+
+    if ((bool) config('pos.enforce_realtime_shop_scope', true)) {
+        $scopeShopId = (int) config('pos.default_shop_id', 3);
+        if ($scopeShopId > 0 && $id !== $scopeShopId) {
+            return false;
+        }
+    }
+
+    $shop = Shop::query()->find($id);
+    if ($shop === null) {
+        return false;
+    }
+
+    return $user->can('view', $shop);
+});
+
+Broadcast::channel('rt.shop.{shopId}.orders', function (?User $user, int|string $shopId) {
+    if (! $user instanceof User) {
+        return false;
+    }
+
+    $id = (int) $shopId;
+    if ($id < 1) {
+        return false;
+    }
+
+    if ((bool) config('pos.enforce_realtime_shop_scope', true)) {
+        $scopeShopId = (int) config('pos.default_shop_id', 3);
+        if ($scopeShopId > 0 && $id !== $scopeShopId) {
+            return false;
+        }
+    }
+
+    $shop = Shop::query()->find($id);
+    if ($shop === null) {
+        return false;
+    }
+
+    return $user->can('view', $shop);
+});
+</file>
+
+<file path="app/Events/Kds/OrderConfirmedBroadcast.php">
+<?php
+
+namespace App\Events\Kds;
+
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Queue\SerializesModels;
+
+/**
+ * Bistro 最適化: KDS への「即時更新ベル」イベント。
+ *
+ * - ペイロードは shop_id と action のみ（エンティティ詳細は載せない）。
+ * - 真実の源泉は KDS 側の `wire:poll.10s` による DB プル。
+ * - `ShouldBroadcastNow` で sync キューを介さずに直接ブロードキャストする
+ *   （送信は `KdsBroadcastService` 内の `dispatch()->afterResponse()` で
+ *   FPM 応答後に行う前提）。
+ */
+class OrderConfirmedBroadcast implements ShouldBroadcast
+{
+    use Dispatchable;
+    use InteractsWithSockets;
+    use SerializesModels;
+
+    public function __construct(
+        public int $shopId,
+    ) {}
+
+    public function broadcastAs(): string
+    {
+        return 'kds.orders.confirmed';
+    }
+
+    /**
+     * 公開チャンネル（auth 不要）。
+     * Echo クライアントは PIN セッションの KDS 端末から
+     * `Echo.channel('pos.shop.{shopId}')` で購読する。
+     *
+     * @return array<int, Channel>
+     */
+    public function broadcastOn(): array
+    {
+        return [
+            new Channel('pos.shop.'.$this->shopId),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function broadcastWith(): array
+    {
+        return [
+            'shop_id' => $this->shopId,
+            'action' => 'order_confirmed',
+        ];
+    }
+}
+</file>
+
+<file path="resources/js/pos/printer/print-controller.js">
+import { PrinterFactory } from './printer-factory.js';
+import { resolvePosPrinterStaffMessage } from './pos-printer-staff-messages.js';
+
+/**
+ * PrintController — binds Livewire's browser-dispatched print events to
+ * the active Printer driver and dispatches the result back. Only one
+ * instance should exist per page. Installed from resources/js/app.js.
+ *
+ * Wire event contract (from Livewire PrinterBridge):
+ *   in  → 'pos-trigger-print'   { printJobId, jobKey, xml, opts? }
+ *   out → 'pos-print-ack'       { printJobId, ok, code?, message?, staffMessage?, displayCode? }
+ *         'pos-print-dispatched'{ printJobId }
+ */
+class PrintControllerImpl {
+    constructor() {
+        this._driver = null;
+        this._installed = false;
+    }
+
+    install() {
+        if (this._installed) return;
+        this._installed = true;
+        this._driver = PrinterFactory.resolveDriver();
+
+        // Livewire 3 dispatches from the component root element with bubbling.
+        // Bubbling reaches `document` but not `window`, so listening on `window`
+        // never fires for PHP `$this->dispatch('pos-trigger-print', ...)`.
+        document.addEventListener('pos-trigger-print', (e) => this._onTrigger(e));
+    }
+
+    async _onTrigger(event) {
+        const detail = this._extractDetail(event);
+        if (!detail) return;
+        const { printJobId, jobKey, xml, opts } = detail;
+        if (!printJobId || !jobKey || typeof xml !== 'string') {
+            this._dispatchAck(printJobId ?? 0, { ok: false, code: 'BAD_EVENT', message: 'missing fields' });
+            return;
+        }
+
+        this._emitLifecycle('start', printJobId);
+        try {
+            const res = await this._driver.send(jobKey, xml, {
+                ...(opts ?? {}),
+                printJobId,
+                onDispatched: () => this._dispatchLivewire('pos-print-dispatched', { printJobId }),
+            });
+            if (res.ok) {
+                this._dispatchAck(printJobId, { ...res, staffMessage: null, displayCode: null });
+            } else {
+                const mapped = resolvePosPrinterStaffMessage(res.code, res.message);
+                // eslint-disable-next-line no-console
+                console.warn('[POS印刷失敗]', mapped.displayCode ?? res.code ?? '', mapped.staffMessage ?? res.message ?? '');
+                this._dispatchAck(printJobId, {
+                    ...res,
+                    staffMessage: mapped.staffMessage,
+                    displayCode: mapped.displayCode,
+                });
+            }
+        } catch (e) {
+            const mapped = resolvePosPrinterStaffMessage('JS_THROW', e && e.message ? e.message : String(e));
+            // eslint-disable-next-line no-console
+            console.warn(
+                '[POS印刷失敗]',
+                mapped.displayCode ?? 'JS_THROW',
+                mapped.staffMessage ?? ((e && e.message) ? e.message : String(e)),
+            );
+            this._dispatchAck(printJobId, {
+                ok: false,
+                code: 'JS_THROW',
+                message: (e && e.message) ? e.message : String(e),
+                staffMessage: mapped.staffMessage,
+                displayCode: mapped.displayCode,
+            });
+        } finally {
+            this._emitLifecycle('end', printJobId);
+        }
+    }
+
+    /**
+     * @param {'start'|'end'} phase
+     * @param {number} printJobId
+     */
+    _emitLifecycle(phase, printJobId) {
+        try {
+            window.dispatchEvent(
+                new CustomEvent('pos-print-lifecycle', {
+                    detail: { phase, printJobId },
+                    bubbles: true,
+                }),
+            );
+        } catch {
+            /* ignore */
+        }
+    }
+
+    _extractDetail(event) {
+        if (!event) return null;
+        // Livewire 3 dispatches browser events wrapped in { detail: [payload] }
+        const raw = event.detail;
+        if (raw == null) return null;
+        if (Array.isArray(raw)) return raw[0] ?? null;
+        return raw;
+    }
+
+    _dispatchAck(printJobId, res) {
+        this._dispatchLivewire('pos-print-ack', {
+            printJobId,
+            ok: !!res.ok,
+            code: res.code ?? null,
+            message: res.message ?? null,
+            staffMessage: res.staffMessage ?? null,
+            displayCode: res.displayCode ?? null,
+        });
+    }
+
+    _dispatchLivewire(name, payload) {
+        if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
+            window.Livewire.dispatch(name, payload);
+        }
+    }
+}
+
+const PosPrintController = new PrintControllerImpl();
+window.PosPrintController = PosPrintController;
+export default PosPrintController;
+</file>
+
+<file path="resources/js/order-store.js">
+/**
+ * Alpine.store('cart') — Guest Order UI
+ *
+ * Responsibilities:
+ *   - Catalog data (read-only, injected once via #guest-order-data JSON)
+ *   - Translations (i18n dictionary, same payload)
+ *   - Cart state (lines[], qty, totals) — Alpine SSOT, zero server round-trips
+ *   - Modal (Bottom-sheet open/close, selected style/toppings)
+ *   - Cart panel (full-screen drawer: review, qty, remove, duplicate, clear)
+ *   - Scroll-spy (IntersectionObserver + near-bottom fallback)
+ *   - Transmission draft builder (Ver2: POST to table POS; never push directly to KDS)
+ *
+ * Hydration Standard:
+ *   - Do NOT import alpinejs from npm — Livewire bundles Alpine on window.Alpine.
+ *   - Register this store inside document.addEventListener('alpine:init', ...).
+ *
+ * Kitchen / KDS pipeline (operational contract — see docs/order-system-ver1.md):
+ *   Guest device -> (HTTP, non-RT) -> Table POS -> staff "Recu staff" -> confirmed ->
+ *   (RT) -> Kitchen KDS. buildTransmissionDraft() shapes the guest-side payload only;
+ *   server must attach immutability snapshots and route to KDS only after confirmation.
+ */
+
+const GUEST_ORDER_CLIENT_SESSION_KEY = 'guest_order_client_session_v1';
+
+/**
+ * When the page is restored from bfcache, or a stale in-memory cart lingers,
+ * `lines[].itemId` can reference another shop's `menu_items.id` (ids are
+ * unique rows; server enforces by `shop_id` → "Unknown menu item.").
+ * We drop any line not in the current #guest-order-data catalog.
+ */
+
+/**
+ * Read and parse the JSON payload embedded in #guest-order-data.
+ *
+ * @returns {{ catalog: object, translations: Record<string, string>, categoryIds: string[], context: object }}
+ */
+function readGuestOrderPayload() {
+    const el = document.getElementById('guest-order-data');
+    if (!el || el.textContent === null || el.textContent.trim() === '') {
+        return {
+            catalog:       { meta: {}, categories: [] },
+            translations: {},
+            categoryIds:   [],
+            context:       { tenantSlug: '', tableToken: '' },
+        };
+    }
+    try {
+        return JSON.parse(el.textContent);
+    } catch {
+        return {
+            catalog:        { meta: {}, categories: [] },
+            translations:   {},
+            categoryIds:    [],
+            context:        { tenantSlug: '', tableToken: '' },
+        };
+    }
+}
+
+/**
+ * @param {unknown} line
+ * @returns {boolean}
+ */
+function isCartLine(line) {
+    return (
+        line !== null
+        && typeof line === 'object'
+        && typeof line.lineId === 'string'
+        && typeof line.mergeKey === 'string'
+    );
+}
+
+/**
+ * Toast banner without Blade changes (JS-only DOM).
+ *
+ * @param {string} message
+ * @param {boolean} [isError]
+ */
+function showGuestOrderFlash(message, isError = false) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pointer-events-none fixed inset-x-0 top-20 z-[90] flex justify-center px-4';
+    const span = document.createElement('span');
+    span.className = isError
+        ? 'rounded-full bg-red-700 px-3 py-1.5 text-[11px] font-bold text-white shadow'
+        : 'rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white shadow';
+    span.textContent = message;
+    wrap.appendChild(span);
+    document.body.appendChild(wrap);
+    window.setTimeout(() => wrap.remove(), 2800);
+}
+
+/**
+ * @returns {object | null}
+ */
+function findGuestMenuLivewireComponent() {
+    const root = document.getElementById('guest-order-root');
+    if (!root || typeof window.Livewire === 'undefined' || typeof window.Livewire.find !== 'function') {
+        return null;
+    }
+    const wireId = root.getAttribute('wire:id');
+    if (!wireId) {
+        return null;
+    }
+    return window.Livewire.find(wireId);
+}
+
+let guestOrderLivewireListenersBound = false;
+
+/**
+ * Livewire dispatches server params as CustomEvent.detail (object or single-element array).
+ *
+ * @param {unknown} detail
+ * @returns {Record<string, unknown>}
+ */
+function normalizeLivewireEventDetail(detail) {
+    if (detail === null || detail === undefined) {
+        return {};
+    }
+    if (typeof detail === 'object' && !Array.isArray(detail)) {
+        return /** @type {Record<string, unknown>} */ (detail);
+    }
+    if (Array.isArray(detail) && detail.length === 1 && typeof detail[0] === 'object' && detail[0] !== null && !Array.isArray(detail[0])) {
+        return /** @type {Record<string, unknown>} */ (detail[0]);
+    }
+    return {};
+}
+
+function registerGuestOrderLivewireListeners() {
+    const Lw = window.Livewire;
+    if (!Lw || typeof Lw.on !== 'function' || guestOrderLivewireListenersBound) {
+        return;
+    }
+
+    guestOrderLivewireListenersBound = true;
+
+    Lw.on('guest-order-saved', () => {
+        const Alpine = window.Alpine;
+        if (!Alpine || typeof Alpine.store !== 'function') {
+            return;
+        }
+        try {
+            const cart = Alpine.store('cart');
+            cart.lines = [];
+            // Must use closeCartPanel (not only cartPanelOpen=false): openCartPanel()
+            // acquires a body scroll lock; releasing it restores scrolling after success.
+            if (typeof cart.closeCartPanel === 'function') {
+                cart.closeCartPanel({ restoreScroll: true });
+            } else {
+                cart.cartPanelOpen = false;
+                cart.dismissToast();
+            }
+            if (typeof cart.clearSubmitIdempotencyKey === 'function') {
+                cart.clearSubmitIdempotencyKey();
+            }
+            const msg = typeof cart.t === 'function' ? cart.t('order_sent') : 'OK';
+            showGuestOrderFlash(msg, false);
+        } catch {
+            showGuestOrderFlash('OK', false);
+        }
+    });
+
+    Lw.on('guest-order-error', (detail) => {
+        const bag = normalizeLivewireEventDetail(detail);
+        const raw = typeof detail === 'string'
+            ? detail
+            : (bag.message ?? 'Error');
+        showGuestOrderFlash(String(raw), true);
+    });
+}
+
+document.addEventListener('livewire:init', registerGuestOrderLivewireListeners);
+
+document.addEventListener('alpine:init', () => {
+    registerGuestOrderLivewireListeners();
+
+    const Alpine = window.Alpine;
+
+    Alpine.store('cart', {
+
+        // ─── Data from #guest-order-data (bootstrapFromDom) ───────────────────
+        catalog: { meta: {}, categories: [] },
+        translations: {},
+        categoryIds: [],
+        contextTenantSlug: '',
+        contextTableToken: '',
+
+        // ─── Ver2: stable per-tab id for correlating multi-device / retries ─────
+        clientSessionId: '',
+
+        /** Per-submit intent: reused on retry until success or cart mutation (Phase 2 idempotency). */
+        _submitIdempotencyKey: null,
+
+        // ─── Scroll-spy ───────────────────────────────────────────────────────────
+        activeCategoryId: null,
+        _nearBottomLocked: false,
+        _cartGlowTimeoutId: null,
+
+        // ─── Body scroll lock (sheet + cart panel, refcount) ───────────────────────
+        _bodyScrollLockCount: 0,
+
+        // ─── Cart ─────────────────────────────────────────────────────────────────
+        lines: [],
+        flyEffects: [],
+        cartGlow: false,
+
+        // ─── Cart panel (Uber/Glovo-style drawer) ─────────────────────────────────
+        cartPanelOpen: false,
+        _menuScrollY: 0,
+        panelPulseTotal: false,
+        _clearCartStep: 0,
+        _clearCartResetTimerId: null,
+
+        // ─── Toast / undo ──────────────────────────────────────────────────────────
+        toast: null, // { type: 'removed', line: CartLine } | null
+        _toastTimerId: null,
+        clipboardBanner: false,
+
+        // ─── Bottom-sheet modal ───────────────────────────────────────────────────
+        sheetOpen: false,
+        editingItem: null,
+        /** Sheet line qty (reserved; add-to-cart currently uses 1 per tap). */
+        quantity: 1,
+        selectedStyleId: null,
+        selectedToppingIds: [],
+        _scrollPos: 0,
+
+        // ─── Hydration bootstrap ─────────────────────────────────────────────────
+
+        itemIdExistsInCatalog(itemId) {
+            const k = String(itemId);
+            for (const cat of this.catalog?.categories ?? []) {
+                for (const it of cat.items ?? []) {
+                    if (String(it.id) === k) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        },
+
+        /**
+         * Remove cart lines that are not in the current embedded catalog
+         * (e.g. tenant was switched, or bfcache restored a stale in-memory cart).
+         */
+        pruneCartToCatalog() {
+            if (!Array.isArray(this.lines) || this.lines.length === 0) {
+                return;
+            }
+            const before = this.lines.length;
+            this.lines = this.lines.filter((l) => this.itemIdExistsInCatalog(l?.itemId));
+            if (this.lines.length === before) {
+                return;
+            }
+            this.clearSubmitIdempotencyKey();
+            if (typeof this.dismissToast === 'function') {
+                this.dismissToast();
+            }
+        },
+
+        bootstrapFromDom() {
+            const payload = readGuestOrderPayload();
+            this.catalog         = payload.catalog ?? { meta: {}, categories: [] };
+            this.translations     = payload.translations ?? {};
+            this.categoryIds      = Array.isArray(payload.categoryIds) ? payload.categoryIds : [];
+            const ctx             = payload.context ?? {};
+            this.contextTenantSlug = String(ctx.tenantSlug ?? '');
+            this.contextTableToken = String(ctx.tableToken ?? '');
+            this.clientSessionId   = this.ensureClientSessionId();
+            this.clearSubmitIdempotencyKey();
+
+            this.pruneCartToCatalog();
+
+            queueMicrotask(() => {
+                this.initScrollSpyWithEndSnap(this.categoryIds);
+            });
+        },
+
+        clearSubmitIdempotencyKey() {
+            this._submitIdempotencyKey = null;
+        },
+
+        // ─── Body scroll lock ─────────────────────────────────────────────────────
+
+        acquireBodyScrollLock() {
+            this._bodyScrollLockCount += 1;
+            if (this._bodyScrollLockCount === 1) {
+                document.documentElement.classList.add('overflow-hidden');
+            }
+        },
+
+        releaseBodyScrollLock() {
+            this._bodyScrollLockCount = Math.max(0, this._bodyScrollLockCount - 1);
+            if (this._bodyScrollLockCount === 0) {
+                document.documentElement.classList.remove('overflow-hidden');
+            }
+        },
+
+        // ─── Client session (sessionStorage) ─────────────────────────────────────
+
+        ensureClientSessionId() {
+            try {
+                const existing = window.sessionStorage?.getItem(GUEST_ORDER_CLIENT_SESSION_KEY);
+                if (existing && existing.length > 8) {
+                    return existing;
+                }
+                const id = crypto.randomUUID();
+                window.sessionStorage?.setItem(GUEST_ORDER_CLIENT_SESSION_KEY, id);
+                return id;
+            } catch {
+                return crypto.randomUUID();
+            }
+        },
+
+        // ─── i18n ─────────────────────────────────────────────────────────────────
+
+        t(key, params = {}) {
+            let text = Object.prototype.hasOwnProperty.call(this.translations, key)
+                ? String(this.translations[key])
+                : key;
+            for (const [k, v] of Object.entries(params)) {
+                text = text.replaceAll(':' + k, String(v));
+            }
+            return text;
+        },
+
+        formatMinorToDisplay(minor) {
+            const n = Number(minor);
+            const safe = Number.isFinite(n) ? Math.max(0, n) : 0;
+            const divisor = Number(this.catalog?.meta?.price_divisor) > 0
+                ? Number(this.catalog.meta.price_divisor)
+                : 1000;
+            const snapped = Math.round(safe / 500) * 500;
+            if (snapped % 1000 === 0) {
+                return String(snapped / divisor) + ' DT';
+            }
+            const whole = Math.floor(snapped / 1000);
+            return `${whole}.5 DT`;
+        },
+
+        // ─── Cart getters ─────────────────────────────────────────────────────────
+
+        lineCount() {
+            return this.lines.reduce((sum, l) => sum + l.qty, 0);
+        },
+
+        cartTotalMinor() {
+            return this.lines.reduce((sum, l) => sum + l.lineTotalMinor, 0);
+        },
+
+        sheetUnitTotalMinor() {
+            const item = this.editingItem;
+            if (!item) return 0;
+
+            const style = Array.isArray(item.styles)
+                ? item.styles.find(s => s.id === this.selectedStyleId) ?? null
+                : null;
+
+            const base = style
+                ? Number(style.price_minor)
+                : Number(item.from_price_minor ?? 0);
+
+            const toppingDelta = this.selectedToppingIds.reduce((sum, id) => {
+                const t = Array.isArray(item.toppings)
+                    ? item.toppings.find(tp => tp.id === id)
+                    : null;
+                return sum + (t ? Number(t.price_delta_minor) : 0);
+            }, 0);
+
+            return base + toppingDelta;
+        },
+
+        canAddToCart() {
+            if (!this.editingItem) return false;
+            if (this.editingItem.rules?.style_required && !this.selectedStyleId) return false;
+            return true;
+        },
+
+        // ─── Cart panel ───────────────────────────────────────────────────────────
+
+        openCartPanel() {
+            if (this.sheetOpen) {
+                this.closeSheet();
+            }
+            this._clearCartStep = 0;
+            this._menuScrollY = window.scrollY;
+            this.acquireBodyScrollLock();
+            this.cartPanelOpen = true;
+        },
+
+        /**
+         * @param {{ restoreScroll?: boolean }} [opts]
+         */
+        closeCartPanel(opts = {}) {
+            const restoreScroll = opts.restoreScroll !== false;
+            this.cartPanelOpen = false;
+            this._clearCartStep = 0;
+            this.dismissToast();
+            this.releaseBodyScrollLock();
+            if (restoreScroll) {
+                window.scrollTo(0, this._menuScrollY);
+            }
+        },
+
+        continueShopping() {
+            this.closeCartPanel({ restoreScroll: true });
+        },
+
+        pulseTotalRow() {
+            this.panelPulseTotal = true;
+            window.setTimeout(() => {
+                this.panelPulseTotal = false;
+            }, 450);
+        },
+
+        // ─── Bottom-sheet ─────────────────────────────────────────────────────────
+
+        openSheet(itemId) {
+            if (this.cartPanelOpen) {
+                this.closeCartPanel({ restoreScroll: false });
+            }
+
+            const flat = Array.isArray(window.sharedMenuData) ? window.sharedMenuData : [];
+            let item = flat.find((i) => i != null && String(i.id) === String(itemId)) ?? null;
+
+            if (!item) {
+                for (const cat of (this.catalog.categories ?? [])) {
+                    item = (cat.items ?? []).find((i) => String(i.id) === String(itemId)) ?? null;
+                    if (item) break;
+                }
+            }
+            if (!item) return;
+
+            this.editingItem = JSON.parse(JSON.stringify(item));
+            this.quantity = 1;
+            this.selectedStyleId = null;
+            this.selectedToppingIds = [];
+            this._scrollPos = window.scrollY;
+            this.acquireBodyScrollLock();
+            this.sheetOpen = true;
+        },
+
+        closeSheet() {
+            this.sheetOpen = false;
+            this.editingItem = null;
+            this.quantity = 1;
+            this.selectedStyleId = null;
+            this.selectedToppingIds = [];
+            this.releaseBodyScrollLock();
+            window.scrollTo(0, this._scrollPos);
+        },
+
+        toggleTopping(id) {
+            if (this.selectedToppingIds.includes(id)) {
+                this.selectedToppingIds = this.selectedToppingIds.filter(t => t !== id);
+            } else {
+                this.selectedToppingIds = [...this.selectedToppingIds, id];
+            }
+        },
+
+        // ─── Cart mutation ────────────────────────────────────────────────────────
+
+        buildCartLineFromModal() {
+            const item   = this.editingItem;
+            const style  = Array.isArray(item.styles)
+                ? item.styles.find(s => s.id === this.selectedStyleId) ?? null
+                : null;
+
+            const toppingSnapshots = this.selectedToppingIds.map(id => {
+                const src = Array.isArray(item.toppings)
+                    ? item.toppings.find(t => t.id === id)
+                    : null;
+                return {
+                    id:              String(src?.id ?? id),
+                    name:            String(src?.name ?? ''),
+                    priceDeltaMinor: Number(src?.price_delta_minor ?? 0),
+                };
+            });
+
+            const sortedToppingIds  = [...this.selectedToppingIds].sort();
+            const mergeKey          = `${String(item.id)}|${this.selectedStyleId ?? '__none__'}|${sortedToppingIds.join(',')}`;
+            const stylePriceMinor   = style ? Number(style.price_minor) : Number(item.from_price_minor ?? 0);
+            const toppingDeltaMinor = toppingSnapshots.reduce((s, t) => s + t.priceDeltaMinor, 0);
+            const unitLineTotalMinor = stylePriceMinor + toppingDeltaMinor;
+
+            return {
+                lineId:              crypto.randomUUID(),
+                mergeKey,
+                itemId:              String(item.id),
+                titleSnapshot:       String(item.name),
+                kitchenNameSnapshot: String(item.kitchen_name || item.name),
+                styleId:             this.selectedStyleId ? String(this.selectedStyleId) : null,
+                styleNameSnapshot:   style ? String(style.name) : null,
+                stylePriceMinor,
+                toppingSnapshots,
+                unitLineTotalMinor,
+                lineTotalMinor:      unitLineTotalMinor,
+                qty:                 1,
+                note:                '',
+            };
+        },
+
+        addToCart(clickEvent = null) {
+            if (!this.canAddToCart()) return;
+
+            const newLine = this.buildCartLineFromModal();
+            let added = false;
+
+            const mergingEnabled =
+                this.catalog.meta?.merge_identical_lines !== false
+                && this.editingItem?.rules?.merge_identical_lines !== false;
+
+            if (mergingEnabled) {
+                const existing = this.lines.find(l => l.mergeKey === newLine.mergeKey);
+                if (existing) {
+                    existing.qty += 1;
+                    existing.lineTotalMinor = existing.unitLineTotalMinor * existing.qty;
+                    this.lines = [...this.lines];
+                    added = true;
+                }
+            }
+
+            if (!added) {
+                this.lines = [...this.lines, newLine];
+            }
+
+            this.clearSubmitIdempotencyKey();
+
+            const origin = this.resolveFxOrigin(clickEvent);
+            this.playCartFx(origin);
+            if (this.cartPanelOpen) {
+                this.pulseTotalRow();
+            }
+            this.closeSheet();
+        },
+
+        playCartFx(origin = null) {
+            this.triggerCartGlow();
+            this.spawnFlyEffect(origin);
+        },
+
+        triggerCartGlow() {
+            this.cartGlow = true;
+            if (this._cartGlowTimeoutId !== null) {
+                clearTimeout(this._cartGlowTimeoutId);
+            }
+            this._cartGlowTimeoutId = window.setTimeout(() => {
+                this.cartGlow = false;
+                this._cartGlowTimeoutId = null;
+            }, 750);
+        },
+
+        resolveFxOrigin(clickEvent) {
+            const target = clickEvent?.currentTarget;
+            if (target instanceof Element) {
+                const rect = target.getBoundingClientRect();
+                return {
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                };
+            }
+
+            return {
+                x: window.innerWidth / 2,
+                y: window.innerHeight * 0.8,
+            };
+        },
+
+        spawnFlyEffect(origin = null) {
+            const startX = origin?.x ?? window.innerWidth / 2;
+            const startY = origin?.y ?? window.innerHeight * 0.8;
+
+            requestAnimationFrame(() => {
+                const cart = document.getElementById('guest-cart-cta')
+                    ?? document.getElementById('guest-cart-fx-target');
+                if (!cart) return;
+
+                const cartRect = cart.getBoundingClientRect();
+                if (cartRect.width < 2 || cartRect.height < 2) return;
+
+                const targetX = cartRect.left + Math.min(36, cartRect.width * 0.12);
+                const targetY = cartRect.top + cartRect.height / 2;
+
+                const particles = 3;
+                for (let i = 0; i < particles; i += 1) {
+                    const fxId = crypto.randomUUID();
+                    const spread = (i - 1) * 14;
+                    const duration = 840 + i * 80;
+                    const fx = {
+                        id: fxId,
+                        startX: startX + spread,
+                        startY: startY - Math.abs(spread) * 0.35,
+                        dx: targetX - (startX + spread),
+                        dy: targetY - (startY - Math.abs(spread) * 0.35),
+                        rotate: Math.floor(Math.random() * 120) - 60,
+                        size: 10 + i * 2,
+                        glow: 10 + i * 3,
+                        duration,
+                        active: false,
+                    };
+
+                    this.flyEffects = [...this.flyEffects, fx];
+
+                    requestAnimationFrame(() => {
+                        this.flyEffects = this.flyEffects.map(item =>
+                            item.id === fxId ? { ...item, active: true } : item
+                        );
+                    });
+
+                    window.setTimeout(() => {
+                        this.flyEffects = this.flyEffects.filter(item => item.id !== fxId);
+                    }, duration + 120);
+                }
+            });
+        },
+
+        _recalcLineTotal(line) {
+            if (!isCartLine(line)) return;
+            line.lineTotalMinor = Number(line.unitLineTotalMinor) * Number(line.qty);
+        },
+
+        incrementLineQty(lineId) {
+            const line = this.lines.find(l => l.lineId === lineId);
+            if (!line) return;
+            line.qty += 1;
+            this._recalcLineTotal(line);
+            this.lines = [...this.lines];
+            this.clearSubmitIdempotencyKey();
+            this.pulseTotalRow();
+        },
+
+        decrementLineQty(lineId) {
+            const line = this.lines.find(l => l.lineId === lineId);
+            if (!line) return;
+            line.qty -= 1;
+            if (line.qty <= 0) {
+                this.removeLine(lineId, { silent: true });
+                return;
+            }
+            this._recalcLineTotal(line);
+            this.lines = [...this.lines];
+            this.clearSubmitIdempotencyKey();
+            this.pulseTotalRow();
+        },
+
+        /**
+         * @param {string} lineId
+         * @param {{ silent?: boolean }} [opts]
+         */
+        removeLine(lineId, opts = {}) {
+            const line = this.lines.find(l => l.lineId === lineId);
+            if (!line) return;
+            this.lines = this.lines.filter(l => l.lineId !== lineId);
+            if (!opts.silent) {
+                this.showRemovedToast(line);
+            }
+            if (this.lines.length === 0) {
+                this._clearCartStep = 0;
+                this.dismissToast();
+            }
+            this.clearSubmitIdempotencyKey();
+            this.pulseTotalRow();
+        },
+
+        /**
+         * One-line summary for compact cart rows (style + toppings).
+         *
+         * @param {object} line
+         * @returns {string}
+         */
+        lineModifiersSummary(line) {
+            if (!line || typeof line !== 'object') return '';
+            const parts = [];
+            if (line.styleNameSnapshot) {
+                parts.push(String(line.styleNameSnapshot));
+            }
+            if (Array.isArray(line.toppingSnapshots)) {
+                for (const t of line.toppingSnapshots) {
+                    if (t?.name) parts.push(String(t.name));
+                }
+            }
+            return parts.join(' · ');
+        },
+
+        clearCartTap() {
+            if (this.lines.length === 0) return;
+
+            if (this._clearCartResetTimerId !== null) {
+                clearTimeout(this._clearCartResetTimerId);
+                this._clearCartResetTimerId = null;
+            }
+
+            if (this._clearCartStep === 0) {
+                this._clearCartStep = 1;
+                this._clearCartResetTimerId = window.setTimeout(() => {
+                    this._clearCartStep = 0;
+                    this._clearCartResetTimerId = null;
+                }, 2200);
+                return;
+            }
+
+            this.lines = [];
+            this._clearCartStep = 0;
+            this.dismissToast();
+            this.clearSubmitIdempotencyKey();
+            this.closeCartPanel({ restoreScroll: true });
+        },
+
+        showRemovedToast(line) {
+            if (this._toastTimerId !== null) {
+                clearTimeout(this._toastTimerId);
+                this._toastTimerId = null;
+            }
+            let snapshot;
+            try {
+                snapshot = structuredClone(line);
+            } catch {
+                snapshot = JSON.parse(JSON.stringify(line));
+            }
+            this.toast = { type: 'removed', line: snapshot };
+            this._toastTimerId = window.setTimeout(() => {
+                this.dismissToast();
+            }, 5200);
+        },
+
+        dismissToast() {
+            if (this._toastTimerId !== null) {
+                clearTimeout(this._toastTimerId);
+                this._toastTimerId = null;
+            }
+            this.toast = null;
+        },
+
+        undoRemoveLine() {
+            if (!this.toast || this.toast.type !== 'removed' || !isCartLine(this.toast.line)) {
+                this.dismissToast();
+                return;
+            }
+            const line = this.toast.line;
+            const existing = this.lines.find(l => l.mergeKey === line.mergeKey);
+            if (existing) {
+                existing.qty += line.qty;
+                this._recalcLineTotal(existing);
+                this.lines = [...this.lines];
+            } else {
+                this.lines = [...this.lines, line];
+            }
+            this.dismissToast();
+            this.clearSubmitIdempotencyKey();
+            this.pulseTotalRow();
+        },
+
+        setLineNote(lineId, note) {
+            const line = this.lines.find(l => l.lineId === lineId);
+            if (!line) return;
+            line.note = String(note).slice(0, 280);
+            this.lines = [...this.lines];
+            this.clearSubmitIdempotencyKey();
+        },
+
+        /**
+         * Serializable draft for Ver2 HTTP submission to **table POS** (never straight to KDS).
+         * Server must enforce: persist as `placed`, staff confirmation -> `confirmed`, then KDS RT.
+         *
+         * @returns {object}
+         */
+        buildTransmissionDraft() {
+            const currency = String(this.catalog?.meta?.currency ?? 'TND');
+            const priceDivisor = Number(this.catalog?.meta?.price_divisor) > 0
+                ? Number(this.catalog.meta.price_divisor)
+                : 1000;
+
+            const lines = this.lines.map(l => ({
+                lineId: l.lineId,
+                mergeKey: l.mergeKey,
+                itemId: l.itemId,
+                titleSnapshot: l.titleSnapshot,
+                kitchenNameSnapshot: String(l.kitchenNameSnapshot ?? l.titleSnapshot ?? ''),
+                styleId: l.styleId,
+                styleNameSnapshot: l.styleNameSnapshot,
+                stylePriceMinor: Number(l.stylePriceMinor),
+                toppingSnapshots: Array.isArray(l.toppingSnapshots)
+                    ? l.toppingSnapshots.map(t => ({
+                        id: t.id,
+                        name: t.name,
+                        priceDeltaMinor: Number(t.priceDeltaMinor),
+                    }))
+                    : [],
+                unitLineTotalMinor: Number(l.unitLineTotalMinor),
+                qty: Number(l.qty),
+                lineTotalMinor: Number(l.lineTotalMinor),
+                note: String(l.note ?? ''),
+            }));
+
+            return {
+                schemaVersion: 1,
+                intent: 'submit_to_table_pos',
+                clientSessionId: this.clientSessionId,
+                context: {
+                    tenantSlug: this.contextTenantSlug,
+                    tableToken: this.contextTableToken,
+                    locale: document.documentElement.lang || '',
+                },
+                catalogFingerprint: {
+                    currency,
+                    priceDivisor,
+                },
+                lines,
+                totals: {
+                    currency,
+                    priceDivisor,
+                    subtotalMinor: this.cartTotalMinor(),
+                },
+                generatedAt: new Date().toISOString(),
+            };
+        },
+
+        /** Submit cart to Livewire (Zero Trust pricing on server). */
+        async submitOrderDraft() {
+            const draft = this.buildTransmissionDraft();
+            if (draft.lines.length === 0) return;
+
+            if (!this._submitIdempotencyKey) {
+                this._submitIdempotencyKey = crypto.randomUUID();
+            }
+            draft.idempotencyKey = this._submitIdempotencyKey;
+
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate(14);
+            }
+
+            const component = findGuestMenuLivewireComponent();
+            if (!component) {
+                showGuestOrderFlash('Service unavailable', true);
+                return;
+            }
+
+            try {
+                await component.call('submitOrder', draft);
+            } catch (err) {
+                console.error(err);
+                showGuestOrderFlash('Network error', true);
+            }
+
+            if (import.meta.env?.DEV) {
+                window.dispatchEvent(new CustomEvent('guest-order:draft-ready', {
+                    detail: draft,
+                    bubbles: true,
+                }));
+                // eslint-disable-next-line no-console
+                console.info('[guest-order] transmission draft', draft);
+            }
+        },
+
+        // ─── Scroll-spy ───────────────────────────────────────────────────────────
+
+        initScrollSpyWithEndSnap(categoryIds) {
+            if (!categoryIds.length) return;
+
+            const SNAP_THRESHOLD = 24;
+            const store          = this;
+
+            store.activeCategoryId = categoryIds[0];
+
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    if (store._nearBottomLocked) return;
+
+                    const candidates = entries
+                        .filter(e => e.isIntersecting && e.boundingClientRect.top >= 0)
+                        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+
+                    if (candidates.length > 0) {
+                        const rawId = candidates[0].target.id.replace(/^cat-/, '');
+                        store.activeCategoryId = rawId;
+                    }
+                },
+                {
+                    rootMargin: '-56px 0px -80% 0px',
+                    threshold:  0,
+                }
+            );
+
+            categoryIds.forEach(id => {
+                const el = document.getElementById('cat-' + id);
+                if (el) observer.observe(el);
+            });
+
+            const onScroll = () => {
+                const scrolled = document.documentElement.scrollTop + window.innerHeight;
+                const total    = document.documentElement.scrollHeight;
+
+                if (scrolled >= total - SNAP_THRESHOLD) {
+                    store._nearBottomLocked = true;
+                    store.activeCategoryId  = categoryIds[categoryIds.length - 1];
+                } else {
+                    store._nearBottomLocked = false;
+                }
+            };
+
+            window.addEventListener('scroll', onScroll, { passive: true });
+        },
+
+        scrollToCategory(id) {
+            const el = document.getElementById('cat-' + id);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        },
+
+        /** @param {string} itemId @returns {string|null} */
+        resolveItemImage(itemId) {
+            for (const cat of (this.catalog.categories ?? [])) {
+                const it = (cat.items ?? []).find(i => String(i.id) === String(itemId));
+                if (it?.image) {
+                    return String(it.image);
+                }
+            }
+            return null;
+        },
+
+        async copyTransmissionDraftToClipboard() {
+            const text = JSON.stringify(this.buildTransmissionDraft(), null, 2);
+            try {
+                await navigator.clipboard.writeText(text);
+                this.clipboardBanner = true;
+                window.setTimeout(() => { this.clipboardBanner = false; }, 2000);
+            } catch {
+                // ignore — insecure context or denied
+            }
+        },
+    });
+});
+
+// bfcache: re-read #guest-order-data and prune lines that are not in this page's menu
+window.addEventListener('pageshow', (ev) => {
+    if (!ev.persisted) {
+        return;
+    }
+    if (typeof window.Alpine === 'undefined' || typeof window.Alpine.store !== 'function') {
+        return;
+    }
+    try {
+        window.Alpine.store('cart').bootstrapFromDom();
+    } catch {
+        // ignore
+    }
+});
+</file>
+
 <file path="resources/views/layouts/kds.blade.php">
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full dark">
@@ -167,6 +2641,7 @@ final class KdsBroadcastService
 
     <style>
         html, body { background-color: #0b1120; }
+        [x-cloak] { display: none !important; }
     </style>
 </head>
 <body class="h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none bg-slate-950 text-slate-100 antialiased">
@@ -186,8 +2661,37 @@ final class KdsBroadcastService
                             preventDefault();
                         }
                         window.location.reload();
+                        return;
                     }
+                    // 楽観的UIのサイレント崩れを防ぐ: 通信失敗時に各行へロールバック通知
+                    window.dispatchEvent(new CustomEvent('kds-wire-fail'));
                 });
+            });
+
+            /*
+             * 【KDS Bootstrap同期 検証手順】
+             * 1. ブラウザコンソールで window.__KDS_DEBUG_BOOTSTRAP_SYNC__ = true を実行
+             * 2. KDS画面を開く（/kds）
+             * 3. 別タブで /admin/manage-kds-filter-settings を開き、Kitchenカテゴリを変更して保存
+             * 4. KDS画面のコンソールで "[KDS sync]" ログを確認
+             * 5. kitchenIds が新しい値になっていれば修正成功
+             * 確認後: window.__KDS_DEBUG_BOOTSTRAP_SYNC__ は削除不要（falseのままノイズなし）
+             */
+            // wire:poll morph後にAlpine状態をサーバー値で同期
+            Livewire.hook('morph.updated', ({ el, component }) => {
+                const root =
+                    el?.id === 'kds-dashboard-root'
+                        ? el
+                        : component?.el?.id === 'kds-dashboard-root'
+                          ? component.el
+                          : null;
+                if (!root) {
+                    return;
+                }
+                const bridge = window.Alpine?.$data?.(root);
+                if (bridge && window.Alpine?.store) {
+                    window.Alpine.store('kdsFilters').syncFromDom(root, bridge);
+                }
             });
         });
 
@@ -202,11 +2706,101 @@ final class KdsBroadcastService
          * - Pusher 障害時は何も起こらず、wire:poll.10s が 10 秒以内に追従する。
          */
         document.addEventListener('alpine:init', () => {
-            window.Alpine.data('kdsEchoBridge', ({ shopId }) => ({
-                shopId: Number(shopId) || 0,
+            window.Alpine.store('kdsFilters', {
+                shopId: 0,
+                kitchenIds: [],
+                hallIds: [],
+                filterStrict: false,
+                showFilterConfigWarning: false,
+                columnFilterMetas: [],
+                showKitchen: true,
+                showHall: true,
+
+                ticketVisible(cat) {
+                    if (!this.filterStrict) {
+                        return true;
+                    }
+                    if (cat === null || cat === undefined) {
+                        return true;
+                    }
+                    const c = Number(cat);
+                    if (Number.isNaN(c)) {
+                        return true;
+                    }
+                    const inK = this.kitchenIds.includes(c);
+                    const inH = this.hallIds.includes(c);
+                    if (!inK && !inH) {
+                        return true;
+                    }
+                    if (!this.showKitchen && !this.showHall) {
+                        return true;
+                    }
+                    return (this.showKitchen && inK) || (this.showHall && inH);
+                },
+
+                visibleTicketCountForColumn(idx) {
+                    const meta = this.columnFilterMetas[idx] || [];
+                    let n = 0;
+                    for (let i = 0; i < meta.length; i++) {
+                        if (this.ticketVisible(meta[i].c)) {
+                            n++;
+                        }
+                    }
+                    return n;
+                },
+
+                syncFromDom(rootEl, bridge) {
+                    const raw = rootEl?.dataset?.kdsBootstrap;
+                    if (!raw) {
+                        return;
+                    }
+                    let fresh;
+                    try {
+                        fresh = JSON.parse(raw);
+                    } catch (e) {
+                        return;
+                    }
+                    const prevStoreShopId = this.shopId;
+                    if (Array.isArray(fresh.kitchenIds)) {
+                        this.kitchenIds = fresh.kitchenIds.map((n) => Number(n));
+                    }
+                    if (Array.isArray(fresh.hallIds)) {
+                        this.hallIds = fresh.hallIds.map((n) => Number(n));
+                    }
+                    if (typeof fresh.filterStrict === 'boolean') {
+                        this.filterStrict = fresh.filterStrict;
+                    }
+                    if (typeof fresh.showFilterConfigWarning === 'boolean') {
+                        this.showFilterConfigWarning = fresh.showFilterConfigWarning;
+                    }
+                    if (Array.isArray(fresh.columnFilterMetas)) {
+                        this.columnFilterMetas = fresh.columnFilterMetas;
+                    }
+                    const newSid = typeof fresh.shopId === 'number' ? fresh.shopId : Number(fresh.shopId) || 0;
+                    if (newSid !== prevStoreShopId) {
+                        this.shopId = newSid;
+                    }
+                    if (bridge && typeof fresh.shopId === 'number') {
+                        const sid = fresh.shopId;
+                        if (sid !== bridge.shopId) {
+                            bridge.shopId = sid;
+                            bridge.initEcho();
+                        }
+                    }
+                    if (window.__KDS_DEBUG_BOOTSTRAP_SYNC__) {
+                        console.log('[KDS sync]', {
+                            kitchenIds: this.kitchenIds,
+                            hallIds: this.hallIds,
+                            filterStrict: this.filterStrict,
+                        });
+                    }
+                },
+            });
+
+            window.Alpine.data('kdsEchoBridge', (opts = {}) => ({
+                shopId: Number(opts.shopId) || 0,
                 pendingEchoReload: null,
                 channel: null,
-                privateChannel: null,
                 status: 'connecting',
                 pusherBound: false,
 
@@ -237,9 +2831,6 @@ final class KdsBroadcastService
                             };
                         this.channel = window.Echo
                             .channel('pos.shop.' + this.shopId)
-                            .listen('.kds.orders.confirmed', onConfirmed);
-                        this.privateChannel = window.Echo
-                            .private('rt.shop.' + this.shopId + '.orders')
                             .listen('.kds.orders.confirmed', onConfirmed);
                         this.bindPusherState();
                     } catch (e) {
@@ -290,7 +2881,6 @@ final class KdsBroadcastService
                     try {
                         if (this.shopId && window.Echo) {
                             window.Echo.leave('pos.shop.' + this.shopId);
-                            window.Echo.leave('private-rt.shop.' + this.shopId + '.orders');
                         }
                     } catch (e) { /* noop */ }
                     this.pushStatus('disconnected');
@@ -302,19 +2892,183 @@ final class KdsBroadcastService
 </html>
 </file>
 
+<file path="app/Services/Kds/KdsQueryService.php">
+<?php
+
+namespace App\Services\Kds;
+
+use App\Domains\Pos\Tables\TableCategory;
+use App\Enums\OrderLineStatus;
+use App\Enums\TableSessionStatus;
+use App\Models\OrderLine;
+use App\Models\TableSession;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
+
+final class KdsQueryService
+{
+    public function tableCategoryForTableId(int $tableId): ?TableCategory
+    {
+        return TableCategory::tryResolveFromId($tableId);
+    }
+
+    public function tableCategoryPriorityForKds(int $tableId): int
+    {
+        return match ($this->tableCategoryForTableId($tableId)) {
+            TableCategory::Customer => 0,
+            TableCategory::Staff, TableCategory::Takeaway => 1,
+            default => 2,
+        };
+    }
+
+    /**
+     * Keyset Pull（§10）: `OFFSET` は使用しない。
+     *
+     * @return Collection<int, OrderLine>
+     */
+    public function pullActiveTickets(
+        int $shopId,
+        ?string $cursorUpdatedAt = null,
+        ?int $cursorId = null,
+        int $limit = 200,
+    ): Collection {
+        $limit = max(1, min(500, $limit));
+
+        $q = OrderLine::query()
+            ->where('shop_id', $shopId)
+            ->whereIn('status', [
+                OrderLineStatus::Confirmed,
+                OrderLineStatus::Cooking,
+            ])
+            ->with(['menuItem'])
+            ->orderBy('updated_at')
+            ->orderBy('id');
+
+        if ($cursorUpdatedAt !== null && $cursorId !== null) {
+            $t = Carbon::parse($cursorUpdatedAt);
+            $q->whereRaw(
+                '(updated_at > ?) OR (updated_at = ? AND id > ?)',
+                [$t, $t, $cursorId]
+            );
+        }
+
+        return $q->limit($limit)->get();
+    }
+
+    /**
+     * KDS ダッシュボード用: Active セッションのうち、仮想バッチキー
+     *（COALESCE(TRIM(kds_ticket_batch_id), CONCAT('o:', order_id))）単位で
+     * Confirmed / Cooking が 1 件でも残っているバッチに属する行を返す。
+     * そのバッチでは Served 行も含め（Cancelled は除外）、
+     * バッチ内がすべて Served 等で未完了がなくなったバッチは結果に含まれない。
+     *
+     * @return Collection<int, OrderLine>
+     */
+    public function pullActiveSessionTicketsForDashboard(int $shopId): Collection
+    {
+        $kitchenIds = \App\Support\KdsFilterSetting::kitchenCategoryIds($shopId);
+        $hallIds = \App\Support\KdsFilterSetting::hallCategoryIds($shopId);
+        $hallOnly = array_diff($hallIds, $kitchenIds);
+
+        $q = OrderLine::query()
+            ->where('order_lines.shop_id', $shopId)
+            ->whereNot('order_lines.status', OrderLineStatus::Cancelled)
+            ->whereIn('order_lines.status', [
+                OrderLineStatus::Confirmed,
+                OrderLineStatus::Cooking,
+                OrderLineStatus::Served,
+            ])
+            ->whereHas(
+                'order.tableSession',
+                fn ($q) => $q->where('status', TableSessionStatus::Active)
+            )
+            ->whereExists(function ($query): void {
+                $p = $query->getConnection()->getTablePrefix();
+                $olPending = '`'.$p.'ol_pending`';
+                $olOuter = '`'.$p.'order_lines`';
+                $query->selectRaw('1')
+                    ->from('order_lines as ol_pending')
+                    ->join('orders as po_pending', 'ol_pending.order_id', '=', 'po_pending.id')
+                    ->join('orders as po_self', 'po_self.id', '=', 'order_lines.order_id')
+                    ->whereColumn('po_pending.table_session_id', 'po_self.table_session_id')
+                    ->whereColumn('ol_pending.shop_id', 'order_lines.shop_id')
+                    ->whereRaw(
+                        "COALESCE(NULLIF(TRIM({$olPending}.`kds_ticket_batch_id`), ''), CONCAT('o:', {$olPending}.`order_id`)) = COALESCE(NULLIF(TRIM({$olOuter}.`kds_ticket_batch_id`), ''), CONCAT('o:', {$olOuter}.`order_id`))"
+                    )
+                    ->whereIn('ol_pending.status', [
+                        OrderLineStatus::Confirmed,
+                        OrderLineStatus::Cooking,
+                    ]);
+            })
+            ->with([
+                'menuItem:id,menu_category_id,name,kitchen_name,role_category,sort_order',
+                'menuItem.menuCategory:id,sort_order',
+                'order:id,table_session_id,shop_id,placed_at',
+                'order.tableSession:id,restaurant_table_id,shop_id,staff_name,customer_name',
+                'order.tableSession.restaurantTable:id,shop_id,name,sort_order',
+            ]);
+
+        if (! empty($hallOnly)) {
+            $q->where(function ($q) use ($hallOnly) {
+                $q
+                    ->whereDoesntHave('menuItem')
+                    ->orWhereHas('menuItem', fn ($m) => $m->whereNotIn('menu_category_id', $hallOnly));
+            });
+        }
+
+        return $q
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * 当日開始のセッションのうち、少なくとも 1 件の Served 行を持つものを返す。
+     * Active / Closed の両方を含む（会計済みも当日履歴として参照するため）。
+     *
+     * @return Collection<int, TableSession>
+     */
+    public function pullServedSessionsForToday(int $shopId): Collection
+    {
+        return TableSession::query()
+            ->where('shop_id', $shopId)
+            ->where('opened_at', '>=', now()->startOfDay())
+            ->whereIn('status', [
+                TableSessionStatus::Active,
+                TableSessionStatus::Closed,
+            ])
+            ->whereHas(
+                'posOrders.lines',
+                fn ($q) => $q->where('status', OrderLineStatus::Served)
+            )
+            ->with([
+                'restaurantTable:id,shop_id,name,sort_order',
+                'posOrders.lines' => function ($q): void {
+                    $q->where('status', OrderLineStatus::Served)
+                        ->orderBy('id')
+                        ->with(['menuItem:id,name,kitchen_name']);
+                },
+            ])
+            ->orderByDesc('opened_at')
+            ->get();
+    }
+}
+</file>
+
 <file path="resources/views/livewire/kds/kds-dashboard.blade.php">
 @php
     /** @var list<array<string, mixed>> $columns */
     /** @var int $queuedBatchCount */
     /** @var bool $hasShop */
     /** @var array{offline:bool,last_fail_at:?string,last_fail_hms:?string,last_ok_hms:?string,last_fail_error:?string} $broadcastHealth */
+    /** @var array<string, mixed> $kdsClientBootstrap */
 @endphp
 <div
     id="kds-dashboard-root"
     class="flex h-[100dvh] max-h-[100dvh] w-screen min-w-0 flex-col overflow-hidden bg-slate-950 text-slate-100"
     wire:poll.{{ max(2, min(60, (int) $pollSeconds)) }}s
-    x-data="kdsEchoBridge({ shopId: {{ (int) $shopId }} })"
-    x-init="initEcho(); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
+    data-kds-bootstrap="@json($kdsClientBootstrap)"
+    x-data="kdsEchoBridge(@js($kdsClientBootstrap))"
+    x-init="$store.kdsFilters.syncFromDom($el, $data); initEcho(); window.__kdsSeenKeys = window.__kdsSeenKeys || {};"
 >
     <header class="z-10 shrink-0 border-b border-slate-800 bg-slate-900/90 backdrop-blur">
         <div class="flex min-w-0 items-center justify-between gap-1.5 px-1 py-1 sm:px-1.5">
@@ -343,6 +3097,24 @@ final class KdsBroadcastService
                 </span>
                 <span class="hidden text-[10px] text-slate-500 sm:inline sm:text-xs">{{ now()->format('H:i') }}</span>
                 @if ($hasShop)
+                    <div class="hidden shrink-0 flex-row flex-wrap items-center gap-x-5 gap-y-2 border-l border-slate-700 pl-2 sm:flex md:gap-x-8">
+                        <label class="flex min-h-12 min-w-0 cursor-pointer touch-manipulation select-none items-center gap-3 rounded-lg border border-slate-600/90 bg-slate-800/90 px-3 py-2 sm:min-h-14 sm:gap-3.5 sm:px-4 sm:py-2.5">
+                            <input
+                                type="checkbox"
+                                class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
+                                x-model="$store.kdsFilters.showKitchen"
+                            />
+                            <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_kitchen') }}</span>
+                        </label>
+                        <label class="flex min-h-12 min-w-0 cursor-pointer touch-manipulation select-none items-center gap-3 rounded-lg border border-slate-600/90 bg-slate-800/90 px-3 py-2 sm:min-h-14 sm:gap-3.5 sm:px-4 sm:py-2.5">
+                            <input
+                                type="checkbox"
+                                class="h-5 w-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-900 text-rose-600 sm:h-6 sm:w-6"
+                                x-model="$store.kdsFilters.showHall"
+                            />
+                            <span class="whitespace-nowrap text-xs font-semibold tracking-wide text-slate-100 sm:text-sm">{{ __('kds.filter_hall') }}</span>
+                        </label>
+                    </div>
                     @php
                         $q = max(0, (int) $queuedBatchCount);
                         $queueBadgeClass = $q === 0
@@ -382,7 +3154,17 @@ final class KdsBroadcastService
         </div>
     </header>
 
-    <main class="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden px-1 py-1">
+    <main class="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto px-1 py-1">
+        @if ($hasShop)
+            <div
+                x-cloak
+                x-show="$store.kdsFilters.showFilterConfigWarning"
+                class="mb-1.5 shrink-0 rounded border border-amber-500/70 bg-amber-950/50 px-2 py-1.5 text-[10px] font-medium text-amber-100 sm:text-xs"
+                role="status"
+            >
+                {{ __('kds.filter_config_warning') }}
+            </div>
+        @endif
         @if ($broadcastHealth['offline'])
             <div class="mb-1.5 shrink-0 rounded border border-amber-600/60 bg-amber-900/30 px-2 py-1.5 text-[10px] text-amber-100 sm:text-xs">
                 <p class="font-semibold">{{ __('kds.offline_mode_title') }}</p>
@@ -414,14 +3196,14 @@ final class KdsBroadcastService
                 <p class="mt-1 text-xs text-slate-400">{{ __('kds.empty_subtitle') }}</p>
             </div>
         @else
-            <div class="grid min-h-0 min-w-0 flex-1 grid-cols-3 gap-1.5 overflow-hidden pb-1 sm:gap-2">
-                @foreach ($columns as $col)
+            <div class="grid min-h-0 min-w-0 flex-1 grid-cols-3 gap-1.5 pb-1 sm:gap-2">
+                @foreach ($columns as $colIndex => $col)
                     @php
                         $isBacklog = in_array($col['category'] ?? '', ['staff', 'takeaway'], true);
                     @endphp
                     <section
                         wire:key="kds-batch-{{ $col['batchKey'] }}"
-                        class="flex h-full max-h-full min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-lg border shadow-lg {{ $isBacklog ? 'border-slate-700 bg-slate-800/80' : 'border-slate-800 bg-slate-900/70' }}"
+                        class="flex min-h-0 min-w-0 w-full flex-col rounded-lg border shadow-lg {{ $isBacklog ? 'border-slate-700 bg-slate-800/80' : 'border-slate-800 bg-slate-900/70' }}"
                     >
                         <header class="flex min-h-14 items-center justify-between border-b px-4 py-3 {{ $isBacklog ? 'border-slate-700 bg-slate-800' : 'border-slate-800 bg-slate-900' }}">
                             <h2 class="text-lg font-bold tracking-wide {{ $isBacklog ? 'text-slate-200' : 'text-slate-100' }}">
@@ -434,22 +3216,17 @@ final class KdsBroadcastService
                                     </span>
                                 @endif
                                 <span class="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">
-                                    {{ count($col['tickets']) }}
+                                    <span x-text="$store.kdsFilters.visibleTicketCountForColumn({{ (int) $colIndex }})">{{ count($col['tickets']) }}</span>
                                 </span>
                             </div>
                         </header>
 
-                        <ul class="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-contain p-2 sm:gap-2 sm:p-2.5">
+                        <ul class="flex min-h-0 flex-1 flex-col gap-1.5 p-2 sm:gap-2 sm:p-2.5">
                             @foreach ($col['tickets'] as $ticket)
                                 @php
                                     $isServed = $ticket->status?->value === 'served';
                                     $isCooking = $ticket->status?->value === 'cooking';
                                     $base = 'group relative flex min-h-14 items-start justify-between gap-3 rounded-lg border px-2 py-2 text-left text-base font-semibold transition select-none';
-                                    $palette = $isServed
-                                        ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80'
-                                        : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70';
-                                    $disabled = 'wire:loading.attr=disabled wire:target=markServed,revertToConfirmed,toggleHistory';
-                                    $loadingClass = 'wire:loading.class=opacity-50 wire:target=markServed,revertToConfirmed,toggleHistory';
                                     $name = $ticket->snapshot_kitchen_name !== null && trim((string) $ticket->snapshot_kitchen_name) !== ''
                                         ? (string) $ticket->snapshot_kitchen_name
                                         : (string) ($ticket->snapshot_name ?? ($ticket->menuItem?->kitchen_name ?? $ticket->menuItem?->name ?? ''));
@@ -470,16 +3247,31 @@ final class KdsBroadcastService
                                         }
                                     }
                                     $qtyPrefix = ($ticket->qty ?? 1) > 1 ? '×'.$ticket->qty.' ' : '';
-                                    $titleColor = $isServed ? 'text-slate-200' : 'text-rose-50';
-                                    $modColor = $isServed ? 'text-slate-400 line-through decoration-2' : 'text-rose-200/90';
                                 @endphp
                                 <li
                                     wire:key="kds-line-{{ $ticket->id }}-r{{ $ticket->line_revision }}"
                                     x-data="{
-                                        key: 'kds-line-{{ (int) $ticket->id }}-r{{ (int) $ticket->line_revision }}',
+                                        key: 'kds-line-{{ (int)$ticket->id }}-r{{ (int)$ticket->line_revision }}',
                                         isNew: {{ ($ticket->kds_is_new_arrival ?? false) ? 'true' : 'false' }},
                                         animate: false,
+                                        optimistic: null,
+                                        pending: false,
+                                        isServedUi() { return this.optimistic !== null ? this.optimistic : {{ $isServed ? 'true' : 'false' }}; },
+                                        async markServedTap(id, rev) {
+                                            this.pending = true;
+                                            this.optimistic = true;
+                                            await $wire.markServed(id, rev);
+                                            this.pending = false;
+                                        },
+                                        async revertTap(id, rev) {
+                                            this.pending = true;
+                                            this.optimistic = false;
+                                            await $wire.revertToConfirmed(id, rev);
+                                            this.pending = false;
+                                        },
                                     }"
+                                    x-show="$store.kdsFilters.ticketVisible(@js($ticket->menuItem?->menu_category_id))"
+                                    @kds-wire-fail.window="if (pending) { optimistic = null; pending = false; }"
                                     x-init="
                                         window.__kdsSeenKeys = window.__kdsSeenKeys || {};
                                         if (!window.__kdsSeenKeys[key] && isNew) {
@@ -492,51 +3284,47 @@ final class KdsBroadcastService
                                     x-transition:enter-end="translate-y-0 opacity-100"
                                     :class="animate ? 'ring-2 ring-amber-300/90 ring-offset-1 ring-offset-slate-900' : ''"
                                 >
-                                    @if ($isServed)
-                                        <button
-                                            type="button"
-                                            class="{{ $base }} {{ $palette }} w-full cursor-pointer"
-                                            wire:click="revertToConfirmed({{ (int) $ticket->id }}, {{ (int) $ticket->line_revision }})"
-                                            {!! $disabled !!}
-                                            {!! $loadingClass !!}
-                                            title="{{ __('kds.revert_hint') }}"
-                                        >
-                                            <span class="flex min-w-0 flex-col gap-1">
-                                                <span class="text-lg leading-tight {{ $titleColor }}">
-                                                    {{ $qtyPrefix }}{{ $name }}@if ($styleName !== '') <span class="font-bold">[{{ $styleName }}]</span>@endif
+                                    <button
+                                        type="button"
+                                        x-show="isServedUi()"
+                                        class="{{ $base }} w-full cursor-pointer"
+                                        :class="isServedUi() ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80' : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70'"
+                                        @click="revertTap({{ (int)$ticket->id }}, {{ (int)$ticket->line_revision }})"
+                                        title="{{ __('kds.revert_hint') }}"
+                                    >
+                                        <span class="flex min-w-0 flex-col gap-1">
+                                            <span class="text-lg leading-tight text-slate-200">
+                                                {{ $qtyPrefix }}{{ $name }}@if ($styleName !== '') <span class="font-bold">[{{ $styleName }}]</span>@endif
+                                            </span>
+                                            @if (! empty($toppingNames))
+                                                <span class="text-xs font-normal leading-snug text-slate-400 line-through decoration-2">+ {{ implode(', ', $toppingNames) }}</span>
+                                            @endif
+                                        </span>
+                                        <span class="shrink-0 rounded-full bg-emerald-700/60 px-2 py-1 text-xs text-emerald-50">
+                                            ✓
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        x-show="!isServedUi()"
+                                        class="{{ $base }} w-full cursor-pointer"
+                                        :class="isServedUi() ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80' : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70'"
+                                        @click="markServedTap({{ (int)$ticket->id }}, {{ (int)$ticket->line_revision }})"
+                                    >
+                                        <span class="flex min-w-0 flex-col gap-1">
+                                            @if ($isCooking)
+                                                <span class="text-xs font-medium uppercase tracking-wider text-rose-200/90">
+                                                    {{ __('kds.status_cooking') }}
                                                 </span>
-                                                @if (! empty($toppingNames))
-                                                    <span class="text-xs font-normal leading-snug {{ $modColor }}">+ {{ implode(', ', $toppingNames) }}</span>
-                                                @endif
+                                            @endif
+                                            <span class="text-lg leading-tight text-rose-50">
+                                                {{ $qtyPrefix }}{{ $name }}@if ($styleName !== '') <span class="font-bold">[{{ $styleName }}]</span>@endif
                                             </span>
-                                            <span class="shrink-0 rounded-full bg-emerald-700/60 px-2 py-1 text-xs text-emerald-50">
-                                                ✓
-                                            </span>
-                                        </button>
-                                    @else
-                                        <button
-                                            type="button"
-                                            class="{{ $base }} {{ $palette }} w-full cursor-pointer"
-                                            wire:click="markServed({{ (int) $ticket->id }}, {{ (int) $ticket->line_revision }})"
-                                            {!! $disabled !!}
-                                            {!! $loadingClass !!}
-                                        >
-                                            <span class="flex min-w-0 flex-col gap-1">
-                                                @if ($isCooking)
-                                                    <span class="text-xs font-medium uppercase tracking-wider {{ $modColor }}">
-                                                        {{ __('kds.status_cooking') }}
-                                                    </span>
-                                                @endif
-                                                <span class="text-lg leading-tight {{ $titleColor }}">
-                                                    {{ $qtyPrefix }}{{ $name }}@if ($styleName !== '') <span class="font-bold">[{{ $styleName }}]</span>@endif
-                                                </span>
-                                                @if (! empty($toppingNames))
-                                                    <span class="text-xs font-normal leading-snug {{ $modColor }}">+ {{ implode(', ', $toppingNames) }}</span>
-                                                @endif
-                                            </span>
-
-                                        </button>
-                                    @endif
+                                            @if (! empty($toppingNames))
+                                                <span class="text-xs font-normal leading-snug text-rose-200/90">+ {{ implode(', ', $toppingNames) }}</span>
+                                            @endif
+                                        </span>
+                                    </button>
                                 </li>
                             @endforeach
                         </ul>
@@ -669,154 +3457,6 @@ final class KdsBroadcastService
 </div>
 </file>
 
-<file path="app/Services/Kds/KdsQueryService.php">
-<?php
-
-namespace App\Services\Kds;
-
-use App\Domains\Pos\Tables\TableCategory;
-use App\Enums\OrderLineStatus;
-use App\Enums\TableSessionStatus;
-use App\Models\OrderLine;
-use App\Models\TableSession;
-use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Collection;
-
-final class KdsQueryService
-{
-    public function tableCategoryForTableId(int $tableId): ?TableCategory
-    {
-        return TableCategory::tryResolveFromId($tableId);
-    }
-
-    public function tableCategoryPriorityForKds(int $tableId): int
-    {
-        return match ($this->tableCategoryForTableId($tableId)) {
-            TableCategory::Customer => 0,
-            TableCategory::Staff, TableCategory::Takeaway => 1,
-            default => 2,
-        };
-    }
-
-    /**
-     * Keyset Pull（§10）: `OFFSET` は使用しない。
-     *
-     * @return Collection<int, OrderLine>
-     */
-    public function pullActiveTickets(
-        int $shopId,
-        ?string $cursorUpdatedAt = null,
-        ?int $cursorId = null,
-        int $limit = 200,
-    ): Collection {
-        $limit = max(1, min(500, $limit));
-
-        $q = OrderLine::query()
-            ->where('shop_id', $shopId)
-            ->whereIn('status', [
-                OrderLineStatus::Confirmed,
-                OrderLineStatus::Cooking,
-            ])
-            ->with(['menuItem'])
-            ->orderBy('updated_at')
-            ->orderBy('id');
-
-        if ($cursorUpdatedAt !== null && $cursorId !== null) {
-            $t = Carbon::parse($cursorUpdatedAt);
-            $q->whereRaw(
-                '(updated_at > ?) OR (updated_at = ? AND id > ?)',
-                [$t, $t, $cursorId]
-            );
-        }
-
-        return $q->limit($limit)->get();
-    }
-
-    /**
-     * KDS ダッシュボード用: Active セッションのうち、仮想バッチキー
-     *（COALESCE(TRIM(kds_ticket_batch_id), CONCAT('o:', order_id))）単位で
-     * Confirmed / Cooking が 1 件でも残っているバッチに属する行を返す。
-     * そのバッチでは Served 行も含め（Cancelled は除外）、
-     * バッチ内がすべて Served 等で未完了がなくなったバッチは結果に含まれない。
-     *
-     * @return Collection<int, OrderLine>
-     */
-    public function pullActiveSessionTicketsForDashboard(int $shopId): Collection
-    {
-        return OrderLine::query()
-            ->where('order_lines.shop_id', $shopId)
-            ->whereNot('order_lines.status', OrderLineStatus::Cancelled)
-            ->whereIn('order_lines.status', [
-                OrderLineStatus::Confirmed,
-                OrderLineStatus::Cooking,
-                OrderLineStatus::Served,
-            ])
-            ->whereHas(
-                'order.tableSession',
-                fn ($q) => $q->where('status', TableSessionStatus::Active)
-            )
-            ->whereExists(function ($query): void {
-                $p = $query->getConnection()->getTablePrefix();
-                $olPending = '`'.$p.'ol_pending`';
-                $olOuter = '`'.$p.'order_lines`';
-                $query->selectRaw('1')
-                    ->from('order_lines as ol_pending')
-                    ->join('orders as po_pending', 'ol_pending.order_id', '=', 'po_pending.id')
-                    ->join('orders as po_self', 'po_self.id', '=', 'order_lines.order_id')
-                    ->whereColumn('po_pending.table_session_id', 'po_self.table_session_id')
-                    ->whereColumn('ol_pending.shop_id', 'order_lines.shop_id')
-                    ->whereRaw(
-                        "COALESCE(NULLIF(TRIM({$olPending}.`kds_ticket_batch_id`), ''), CONCAT('o:', {$olPending}.`order_id`)) = COALESCE(NULLIF(TRIM({$olOuter}.`kds_ticket_batch_id`), ''), CONCAT('o:', {$olOuter}.`order_id`))"
-                    )
-                    ->whereIn('ol_pending.status', [
-                        OrderLineStatus::Confirmed,
-                        OrderLineStatus::Cooking,
-                    ]);
-            })
-            ->with([
-                'menuItem:id,menu_category_id,name,kitchen_name,role_category,sort_order',
-                'menuItem.menuCategory:id,sort_order',
-                'order:id,table_session_id,shop_id,placed_at',
-                'order.tableSession:id,restaurant_table_id,shop_id,staff_name,customer_name',
-                'order.tableSession.restaurantTable:id,shop_id,name,sort_order',
-            ])
-            ->orderBy('order_lines.id')
-            ->get();
-    }
-
-    /**
-     * 当日開始のセッションのうち、少なくとも 1 件の Served 行を持つものを返す。
-     * Active / Closed の両方を含む（会計済みも当日履歴として参照するため）。
-     *
-     * @return Collection<int, TableSession>
-     */
-    public function pullServedSessionsForToday(int $shopId): Collection
-    {
-        return TableSession::query()
-            ->where('shop_id', $shopId)
-            ->where('opened_at', '>=', now()->startOfDay())
-            ->whereIn('status', [
-                TableSessionStatus::Active,
-                TableSessionStatus::Closed,
-            ])
-            ->whereHas(
-                'posOrders.lines',
-                fn ($q) => $q->where('status', OrderLineStatus::Served)
-            )
-            ->with([
-                'restaurantTable:id,shop_id,name,sort_order',
-                'posOrders.lines' => function ($q): void {
-                    $q->where('status', OrderLineStatus::Served)
-                        ->orderBy('id')
-                        ->with(['menuItem:id,name,kitchen_name']);
-                },
-            ])
-            ->orderByDesc('opened_at')
-            ->get();
-    }
-}
-</file>
-
 <file path="app/Livewire/Kds/KdsDashboard.php">
 <?php
 
@@ -832,6 +3472,7 @@ use App\Models\Shop;
 use App\Models\TableSession;
 use App\Services\Kds\KdsBroadcastService;
 use App\Services\Kds\KdsQueryService;
+use App\Support\KdsFilterSetting;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -992,6 +3633,11 @@ class KdsDashboard extends Component
             $ordinal = (int) $tableBatchOrdinal[$tid];
             $baseName = (string) ($col['tableName'] !== '' ? $col['tableName'] : '#'.$tid);
             $col['displayLabel'] = $ordinal === 1 ? $baseName : "{$baseName} (Add #{$ordinal})";
+            $col['filterTicketMeta'] = array_values(array_map(static function (OrderLine $t): array {
+                $mid = $t->menuItem?->menu_category_id;
+
+                return ['c' => $mid !== null ? (int) $mid : null];
+            }, $tickets));
             $out[] = $col;
         }
 
@@ -1020,24 +3666,60 @@ class KdsDashboard extends Component
     }
 
     /**
-     * 列間 FIFO: UUID の辞書順は投入順と一致しないため、kds_ticket_batch_id は使わない。
-     * 列内の最古 OrderLine の created_at、同値なら最小 id、さらに table_session_id / order_id。
+     * Alpine `kdsEchoBridge` 向け（wire:poll 後も localStorage でトグルを復元）。
+     *
+     * @return array{shopId: int, kitchenIds: list<int>, hallIds: list<int>, filterStrict: bool, showFilterConfigWarning: bool, columnFilterMetas: list<list<array{c: int|null}>>}
+     */
+    public function getKdsClientBootstrapProperty(): array
+    {
+        if ($this->shopId === 0) {
+            return [
+                'shopId' => 0,
+                'kitchenIds' => [],
+                'hallIds' => [],
+                'filterStrict' => false,
+                'showFilterConfigWarning' => false,
+                'columnFilterMetas' => [],
+            ];
+        }
+
+        $configured = KdsFilterSetting::isCategoryFilterConfigured($this->shopId);
+        $cols = $this->tableColumns;
+
+        return [
+            'shopId' => $this->shopId,
+            'kitchenIds' => KdsFilterSetting::kitchenCategoryIds($this->shopId),
+            'hallIds' => KdsFilterSetting::hallCategoryIds($this->shopId),
+            'filterStrict' => $configured,
+            'showFilterConfigWarning' => ! $configured,
+            'columnFilterMetas' => array_values(array_map(
+                static fn (array $c): array => $c['filterTicketMeta'] ?? [],
+                $cols
+            )),
+        ];
+    }
+
+    /**
+     * 列間 FIFO: UUID の辞書順は使わない。カート投入の created_at も使わない。
+     * PosOrder.placed_at は「注文レコード作成時」に立つため Recu 確定時刻と一致しないことがある。
+     * 厨房に赤で出た順 ≒ Recu で Placed→Confirmed になった瞬間の OrderLine.updated_at を、
+     * 列内の Confirmed/Cooking 行について最小を第1キーとする（該当行が無い列のみ placed_at / updated_at にフォールバック）。
      *
      * @param  array<string, mixed>  $a
      * @param  array<string, mixed>  $b
      */
     private static function compareKdsColumnsByFifo(array $a, array $b): int
     {
-        [$minCreatedA, $minIdA] = self::columnFifoEarliestTicketMeta($a);
-        [$minCreatedB, $minIdB] = self::columnFifoEarliestTicketMeta($b);
+        [$kitchenA, $minIdA] = self::columnFifoKitchenSendMeta($a);
+        [$kitchenB, $minIdB] = self::columnFifoKitchenSendMeta($b);
 
-        if ($minCreatedA !== null && $minCreatedB !== null) {
-            $cmp = $minCreatedA <=> $minCreatedB;
+        if ($kitchenA !== null && $kitchenB !== null) {
+            $cmp = $kitchenA <=> $kitchenB;
             if ($cmp !== 0) {
                 return $cmp;
             }
-        } elseif ($minCreatedA !== null xor $minCreatedB !== null) {
-            return $minCreatedA === null ? 1 : -1;
+        } elseif ($kitchenA !== null xor $kitchenB !== null) {
+            return $kitchenA === null ? 1 : -1;
         }
 
         if ($minIdA !== $minIdB) {
@@ -1054,28 +3736,41 @@ class KdsDashboard extends Component
     }
 
     /**
+     * 列の「厨房に出た最古の瞬間」: 原則は未提供行の updated_at（Recu 確定で一括更新される）の最小。
+     * 未提供行が無い列は order.placed_at ?? line.updated_at の最小にフォールバック。
+     *
      * @param  array<string, mixed>  $col
      * @return array{CarbonInterface|null, int}
      */
-    private static function columnFifoEarliestTicketMeta(array $col): array
+    private static function columnFifoKitchenSendMeta(array $col): array
     {
-        $minCreated = null;
         $minId = PHP_INT_MAX;
+        $minActionableAt = null;
+        $minFallbackAt = null;
+
         foreach ($col['tickets'] ?? [] as $line) {
             if (! $line instanceof OrderLine) {
                 continue;
             }
             $minId = min($minId, (int) $line->id);
-            $created = $line->created_at;
-            if ($created === null) {
-                continue;
+
+            if (in_array($line->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true)) {
+                $u = $line->updated_at;
+                if ($u !== null && ($minActionableAt === null || $u->lt($minActionableAt))) {
+                    $minActionableAt = $u;
+                }
             }
-            if ($minCreated === null || $created->lt($minCreated)) {
-                $minCreated = $created;
+
+            $placed = $line->order?->placed_at;
+            $fb = $placed ?? $line->updated_at;
+            if ($fb !== null && ($minFallbackAt === null || $fb->lt($minFallbackAt))) {
+                $minFallbackAt = $fb;
             }
         }
 
-        return [$minCreated, $minId];
+        $minAt = $minActionableAt ?? $minFallbackAt;
+
+        return [$minAt, $minId];
     }
 
     public function toggleHistory(): void
@@ -1236,6 +3931,7 @@ class KdsDashboard extends Component
             'queuedBatchCount' => $this->queuedBatchCount,
             'hasShop' => $this->shopId !== 0,
             'broadcastHealth' => $this->broadcastHealth,
+            'kdsClientBootstrap' => $this->kdsClientBootstrap,
         ]);
     }
 }

@@ -31,8 +31,37 @@
                             preventDefault();
                         }
                         window.location.reload();
+                        return;
                     }
+                    // 楽観的UIのサイレント崩れを防ぐ: 通信失敗時に各行へロールバック通知
+                    window.dispatchEvent(new CustomEvent('kds-wire-fail'));
                 });
+            });
+
+            /*
+             * 【KDS Bootstrap同期 検証手順】
+             * 1. ブラウザコンソールで window.__KDS_DEBUG_BOOTSTRAP_SYNC__ = true を実行
+             * 2. KDS画面を開く（/kds）
+             * 3. 別タブで /admin/manage-kds-filter-settings を開き、Kitchenカテゴリを変更して保存
+             * 4. KDS画面のコンソールで "[KDS sync]" ログを確認
+             * 5. kitchenIds が新しい値になっていれば修正成功
+             * 確認後: window.__KDS_DEBUG_BOOTSTRAP_SYNC__ は削除不要（falseのままノイズなし）
+             */
+            // wire:poll morph後にAlpine状態をサーバー値で同期
+            Livewire.hook('morph.updated', ({ el, component }) => {
+                const root =
+                    el?.id === 'kds-dashboard-root'
+                        ? el
+                        : component?.el?.id === 'kds-dashboard-root'
+                          ? component.el
+                          : null;
+                if (!root) {
+                    return;
+                }
+                const bridge = window.Alpine?.$data?.(root);
+                if (bridge && window.Alpine?.store) {
+                    window.Alpine.store('kdsFilters').syncFromDom(root, bridge);
+                }
             });
         });
 
@@ -47,64 +76,15 @@
          * - Pusher 障害時は何も起こらず、wire:poll.10s が 10 秒以内に追従する。
          */
         document.addEventListener('alpine:init', () => {
-            window.Alpine.data('kdsEchoBridge', (opts = {}) => ({
-                shopId: Number(opts.shopId) || 0,
-                kitchenIds: Array.isArray(opts.kitchenIds) ? opts.kitchenIds.map((n) => Number(n)) : [],
-                hallIds: Array.isArray(opts.hallIds) ? opts.hallIds.map((n) => Number(n)) : [],
-                filterStrict: Boolean(opts.filterStrict),
-                showFilterConfigWarning: Boolean(opts.showFilterConfigWarning),
-                columnFilterMetas: Array.isArray(opts.columnFilterMetas) ? opts.columnFilterMetas : [],
+            window.Alpine.store('kdsFilters', {
+                shopId: 0,
+                kitchenIds: [],
+                hallIds: [],
+                filterStrict: false,
+                showFilterConfigWarning: false,
+                columnFilterMetas: [],
                 showKitchen: true,
                 showHall: true,
-                pendingEchoReload: null,
-                channel: null,
-                privateChannel: null,
-                status: 'connecting',
-                pusherBound: false,
-
-                pushStatus(next) {
-                    this.status = next;
-                    try {
-                        this.$wire.syncRealtimeState(next);
-                    } catch (e) {
-                        // noop
-                    }
-                },
-
-                loadKdsFilterTogglesFromStorage() {
-                    if (!this.shopId) {
-                        return;
-                    }
-                    try {
-                        const raw = localStorage.getItem('kds.filters.v1.' + this.shopId);
-                        if (!raw) {
-                            return;
-                        }
-                        const p = JSON.parse(raw);
-                        if (typeof p.showKitchen === 'boolean') {
-                            this.showKitchen = p.showKitchen;
-                        }
-                        if (typeof p.showHall === 'boolean') {
-                            this.showHall = p.showHall;
-                        }
-                    } catch (e) {
-                        /* ignore */
-                    }
-                },
-
-                persistKdsFilterToggles() {
-                    if (!this.shopId) {
-                        return;
-                    }
-                    try {
-                        localStorage.setItem(
-                            'kds.filters.v1.' + this.shopId,
-                            JSON.stringify({ showKitchen: this.showKitchen, showHall: this.showHall }),
-                        );
-                    } catch (e) {
-                        /* ignore */
-                    }
-                },
 
                 ticketVisible(cat) {
                     if (!this.filterStrict) {
@@ -139,8 +119,71 @@
                     return n;
                 },
 
+                syncFromDom(rootEl, bridge) {
+                    const raw = rootEl?.dataset?.kdsBootstrap;
+                    if (!raw) {
+                        return;
+                    }
+                    let fresh;
+                    try {
+                        fresh = JSON.parse(raw);
+                    } catch (e) {
+                        return;
+                    }
+                    const prevStoreShopId = this.shopId;
+                    if (Array.isArray(fresh.kitchenIds)) {
+                        this.kitchenIds = fresh.kitchenIds.map((n) => Number(n));
+                    }
+                    if (Array.isArray(fresh.hallIds)) {
+                        this.hallIds = fresh.hallIds.map((n) => Number(n));
+                    }
+                    if (typeof fresh.filterStrict === 'boolean') {
+                        this.filterStrict = fresh.filterStrict;
+                    }
+                    if (typeof fresh.showFilterConfigWarning === 'boolean') {
+                        this.showFilterConfigWarning = fresh.showFilterConfigWarning;
+                    }
+                    if (Array.isArray(fresh.columnFilterMetas)) {
+                        this.columnFilterMetas = fresh.columnFilterMetas;
+                    }
+                    const newSid = typeof fresh.shopId === 'number' ? fresh.shopId : Number(fresh.shopId) || 0;
+                    if (newSid !== prevStoreShopId) {
+                        this.shopId = newSid;
+                    }
+                    if (bridge && typeof fresh.shopId === 'number') {
+                        const sid = fresh.shopId;
+                        if (sid !== bridge.shopId) {
+                            bridge.shopId = sid;
+                            bridge.initEcho();
+                        }
+                    }
+                    if (window.__KDS_DEBUG_BOOTSTRAP_SYNC__) {
+                        console.log('[KDS sync]', {
+                            kitchenIds: this.kitchenIds,
+                            hallIds: this.hallIds,
+                            filterStrict: this.filterStrict,
+                        });
+                    }
+                },
+            });
+
+            window.Alpine.data('kdsEchoBridge', (opts = {}) => ({
+                shopId: Number(opts.shopId) || 0,
+                pendingEchoReload: null,
+                channel: null,
+                status: 'connecting',
+                pusherBound: false,
+
+                pushStatus(next) {
+                    this.status = next;
+                    try {
+                        this.$wire.syncRealtimeState(next);
+                    } catch (e) {
+                        // noop
+                    }
+                },
+
                 initEcho() {
-                    this.loadKdsFilterTogglesFromStorage();
                     if (!this.shopId || typeof window.Echo === 'undefined') {
                         this.pushStatus('disconnected');
                         return;
@@ -158,9 +201,6 @@
                             };
                         this.channel = window.Echo
                             .channel('pos.shop.' + this.shopId)
-                            .listen('.kds.orders.confirmed', onConfirmed);
-                        this.privateChannel = window.Echo
-                            .private('rt.shop.' + this.shopId + '.orders')
                             .listen('.kds.orders.confirmed', onConfirmed);
                         this.bindPusherState();
                     } catch (e) {
@@ -211,7 +251,6 @@
                     try {
                         if (this.shopId && window.Echo) {
                             window.Echo.leave('pos.shop.' + this.shopId);
-                            window.Echo.leave('private-rt.shop.' + this.shopId + '.orders');
                         }
                     } catch (e) { /* noop */ }
                     this.pushStatus('disconnected');
