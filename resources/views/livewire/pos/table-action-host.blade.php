@@ -600,6 +600,8 @@
             style="isolation: isolate"
             role="dialog"
             aria-modal="true"
+            x-data="{ optimisticClosing: false }"
+            x-show="!optimisticClosing"
         >
             <div
                 class="absolute inset-0 bg-slate-950/70"
@@ -739,7 +741,7 @@
                                 <input
                                     type="text"
                                     class="w-full min-h-10 rounded border border-gray-300 bg-white px-2 text-sm text-gray-950 focus:ring-2 focus:ring-amber-500 dark:border-gray-500 dark:bg-gray-800 dark:text-white"
-                                    wire:model="addNote"
+                                    wire:model.debounce.500ms="addNote"
                                 />
                             </div>
                         </div>
@@ -800,6 +802,7 @@
                         <button
                             type="button"
                             wire:click="submitAddLine"
+                            x-on:click="optimisticClosing = true"
                             wire:loading.attr="disabled"
                             wire:target="submitAddLine"
                             class="min-h-10 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-2 text-sm font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600"

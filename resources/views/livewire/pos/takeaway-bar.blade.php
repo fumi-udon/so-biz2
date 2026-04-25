@@ -59,7 +59,8 @@
             <div
                 data-pos-takeaway-guest-modal="true"
                 wire:key="takeaway-guest-modal-shell-{{ $selectedTableId }}"
-                x-data
+                x-data="{ optimisticClosing: false }"
+                x-show="!optimisticClosing"
                 x-init="
                     $nextTick(() => {
                         window.dispatchEvent(
@@ -106,7 +107,7 @@
                                     <x-filament::input
                                         id="takeaway-customer-name-{{ $selectedTableId }}"
                                         type="text"
-                                        wire:model="customerName"
+                                        wire:model.blur="customerName"
                                         autocomplete="name"
                                     />
                                 </x-filament::input.wrapper>
@@ -137,7 +138,7 @@
                                     <x-filament::input
                                         id="takeaway-customer-phone-{{ $selectedTableId }}"
                                         type="tel"
-                                        wire:model="customerPhone"
+                                        wire:model.blur="customerPhone"
                                         inputmode="tel"
                                         autocomplete="tel"
                                     />
@@ -167,6 +168,7 @@
                                 type="button"
                                 color="warning"
                                 wire:click="confirmTakeawayGuest"
+                                x-on:click="optimisticClosing = true"
                                 wire:loading.attr="disabled"
                                 wire:target="confirmTakeawayGuest"
                             >

@@ -14,6 +14,7 @@
                 data-pos-cloture-modal="true"
                 wire:key="cloture-modal-{{ $this->tableSessionId }}"
                 x-data="{
+                    optimisticClosing: false,
                     inputDt: $wire.entangle('tenderedDtInput'),
                     finalMinor: {{ (int) $this->finalTotalMinor }},
                     changeMinor() {
@@ -48,6 +49,7 @@
                         $wire.closeModal()
                     }
                 "
+                x-show="!optimisticClosing"
             >
                 <x-filament::modal
                     id="pos-cloture-checkout-modal"
@@ -222,7 +224,7 @@
                                 type="button"
                                 color="danger"
                                 size="sm"
-                                x-on:click="$wire.set('tenderedDtInput', inputDt); $wire.confirm()"
+                                x-on:click="optimisticClosing = true; $wire.set('tenderedDtInput', inputDt); $wire.confirm()"
                                 x-bind:disabled="@js($locked) || changeMinor() < 0"
                                 wire:loading.attr="disabled"
                                 wire:target="confirm"

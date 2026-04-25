@@ -11,6 +11,7 @@ use App\Enums\OrderLineStatus;
 use App\Enums\OrderStatus;
 use App\Enums\TableSessionStatus;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use stdClass;
 
@@ -27,6 +28,19 @@ final class TableDashboardQueryService
     ) {}
 
     public function getDashboardData(int $shopId): TableDashboardData
+    {
+        if ($shopId < 1) {
+            return new TableDashboardData([]);
+        }
+
+        $cacheKey = "pos:table-dashboard:shop:{$shopId}";
+
+        return Cache::remember($cacheKey, 1, function () use ($shopId): TableDashboardData {
+            return $this->buildDashboardData($shopId);
+        });
+    }
+
+    private function buildDashboardData(int $shopId): TableDashboardData
     {
         $p = (string) DB::connection()->getTablePrefix();
         $active = TableSessionStatus::Active->value;

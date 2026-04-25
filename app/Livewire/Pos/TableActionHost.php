@@ -662,6 +662,7 @@ class TableActionHost extends Component
         $qty = max(1, min(200, (int) $this->addQty));
         $this->addQty = $qty;
 
+        $this->uiState = 'in_flight';
         try {
             app(AddPosOrderFromStaffAction::class)->execute(
                 $this->shopId,
@@ -683,6 +684,8 @@ class TableActionHost extends Component
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
+        } finally {
+            $this->uiState = 'idle';
         }
     }
 
