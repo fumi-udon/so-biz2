@@ -44,4 +44,8 @@ return [
     'filter_kitchen' => 'Kitchen',
     'filter_hall' => 'Hall',
     'filter_config_warning' => 'KDS フィルター（Kitchen/Hall）の対象カテゴリが未設定です。管理画面の「KDS フィルター」から設定してください。全商品を表示しています。',
+
+    'confirm_dismiss_column' => 'この列を画面から消してよいですか？ 提供済みとして確定し、列全体が消えます。',
+    'confirm_dismiss_column_ok' => 'OK',
+    'confirm_dismiss_column_cancel' => 'キャンセル',
 ];

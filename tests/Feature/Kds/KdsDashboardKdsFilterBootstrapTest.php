@@ -123,10 +123,10 @@ final class KdsDashboardKdsFilterBootstrapTest extends TestCase
         $cols = Livewire::test(KdsDashboard::class)->instance()->tableColumns;
         $this->assertCount(1, $cols);
         $this->assertArrayHasKey('filterTicketMeta', $cols[0]);
-        $this->assertSame([['c' => (int) $cat->id]], $cols[0]['filterTicketMeta']);
+        $this->assertSame([['c' => (int) $cat->id, 's' => false]], $cols[0]['filterTicketMeta']);
 
         $metas = Livewire::test(KdsDashboard::class)->instance()->kdsClientBootstrap['columnFilterMetas'];
         $this->assertCount(1, $metas);
-        $this->assertSame([['c' => (int) $cat->id]], $metas[0]);
+        $this->assertSame([['c' => (int) $cat->id, 's' => false]], $metas[0]);
     }
 }

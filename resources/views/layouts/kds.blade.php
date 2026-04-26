@@ -109,7 +109,7 @@
                     const meta = this.columnFilterMetas[idx] || [];
                     let n = 0;
                     for (let i = 0; i < meta.length; i++) {
-                        if (this.ticketVisible(meta[i].c)) {
+                        if (this.ticketVisible(meta[i].c) || meta[i].s === true) {
                             n++;
                         }
                     }
@@ -161,6 +161,33 @@
                             filterStrict: this.filterStrict,
                         });
                     }
+                },
+            });
+
+            window.Alpine.store('kdsDismissColumn', {
+                open: false,
+                pendingId: null,
+                pendingRev: null,
+                openWith(id, rev) {
+                    this.open = true;
+                    this.pendingId = id;
+                    this.pendingRev = rev;
+                },
+                cancel() {
+                    this.open = false;
+                    this.pendingId = null;
+                    this.pendingRev = null;
+                },
+                confirm() {
+                    const id = this.pendingId;
+                    const rev = this.pendingRev;
+                    this.cancel();
+                    if (id == null || rev == null) {
+                        return;
+                    }
+                    window.dispatchEvent(
+                        new CustomEvent('kds-exec-mark-served', { detail: { id, rev } })
+                    );
                 },
             });
 

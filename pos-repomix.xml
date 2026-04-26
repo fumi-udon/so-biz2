@@ -11883,6 +11883,12 @@ class TableActionHost extends Component
                     {{ __('pos.drawer_no_orders') }}
                 </p>
             @else
+                {{--
+                  商品表示の情報源：posOrders（Livewire / DB）のみ
+                  Alpine store（posDraft）は表示に使わない。
+                  理由：submitAddLineでDB即書きするためstoreは不要。
+                  switchContextはテーブル切替の高速化のみに使用。
+                --}}
                 <div class="space-y-0.5">
                     <section>
                         @if ($this->unsentLines->isNotEmpty())

@@ -44,4 +44,8 @@ return [
     'filter_kitchen' => 'Kitchen',
     'filter_hall' => 'Hall',
     'filter_config_warning' => 'Filtres KDS Kitchen/Hall non configurés. Réglez-les dans Admin → Filtre KDS. Tous les articles sont affichés.',
+
+    'confirm_dismiss_column' => 'Retirer cette colonne de l’écran ? Tous les articles seront marqués servis et la colonne disparaîtra.',
+    'confirm_dismiss_column_ok' => 'OK',
+    'confirm_dismiss_column_cancel' => 'Annuler',
 ];

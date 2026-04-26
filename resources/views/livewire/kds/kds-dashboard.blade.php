@@ -192,21 +192,34 @@
                                         }
                                     }
                                     $qtyPrefix = ($ticket->qty ?? 1) > 1 ? '×'.$ticket->qty.' ' : '';
+                                    $isLastPending = (bool) ($ticket->getAttribute('kds_is_last_pending') ?? false);
                                 @endphp
                                 <li
                                     wire:key="kds-line-{{ $ticket->id }}-r{{ $ticket->line_revision }}"
                                     x-data="{
                                         key: 'kds-line-{{ (int)$ticket->id }}-r{{ (int)$ticket->line_revision }}',
+                                        lineId: {{ (int) $ticket->id }},
+                                        lineRev: {{ (int) $ticket->line_revision }},
                                         isNew: {{ ($ticket->kds_is_new_arrival ?? false) ? 'true' : 'false' }},
                                         animate: false,
                                         optimistic: null,
                                         pending: false,
                                         isServedUi() { return this.optimistic !== null ? this.optimistic : {{ $isServed ? 'true' : 'false' }}; },
-                                        async markServedTap(id, rev) {
+                                        async markServedTap(isLastPending) {
+                                            if (isLastPending) {
+                                                $store.kdsDismissColumn.openWith(this.lineId, this.lineRev);
+                                                return;
+                                            }
+                                            await this.doMarkServed();
+                                        },
+                                        async doMarkServed() {
                                             this.pending = true;
                                             this.optimistic = true;
-                                            await $wire.markServed(id, rev);
-                                            this.pending = false;
+                                            try {
+                                                await $wire.markServed(this.lineId, this.lineRev);
+                                            } finally {
+                                                this.pending = false;
+                                            }
                                         },
                                         async revertTap(id, rev) {
                                             this.pending = true;
@@ -215,7 +228,8 @@
                                             this.pending = false;
                                         },
                                     }"
-                                    x-show="$store.kdsFilters.ticketVisible(@js($ticket->menuItem?->menu_category_id))"
+                                    x-show="$store.kdsFilters.ticketVisible(@js($ticket->menuItem?->menu_category_id)) || isServedUi()"
+                                    x-on:kds-exec-mark-served.window="if (Number($event.detail.id) === lineId && Number($event.detail.rev) === lineRev) { void doMarkServed(); }"
                                     @kds-wire-fail.window="if (pending) { optimistic = null; pending = false; }"
                                     x-init="
                                         window.__kdsSeenKeys = window.__kdsSeenKeys || {};
@@ -254,7 +268,7 @@
                                         x-show="!isServedUi()"
                                         class="{{ $base }} w-full cursor-pointer"
                                         :class="isServedUi() ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80' : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70'"
-                                        @click="markServedTap({{ (int)$ticket->id }}, {{ (int)$ticket->line_revision }})"
+                                        @click="markServedTap(@js($isLastPending))"
                                     >
                                         <span class="flex min-w-0 flex-col gap-1">
                                             @if ($isCooking)
@@ -399,4 +413,40 @@
             </div>
         </div>
     @endif
+
+    <div
+        x-show="$store.kdsDismissColumn.open"
+        x-cloak
+        class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kds-dismiss-column-title"
+        x-on:click.self="$store.kdsDismissColumn.cancel()"
+        x-on:keydown.escape.window="if ($store.kdsDismissColumn.open) { $store.kdsDismissColumn.cancel(); }"
+    >
+        <div
+            class="w-full max-w-md rounded-xl border border-slate-600 bg-slate-900 p-4 shadow-2xl"
+            @click.stop
+        >
+            <p id="kds-dismiss-column-title" class="text-base font-semibold leading-snug text-slate-100">
+                {{ __('kds.confirm_dismiss_column') }}
+            </p>
+            <div class="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                    type="button"
+                    class="min-h-12 min-w-[5.5rem] touch-manipulation rounded-lg border border-slate-600 bg-slate-800 px-4 text-sm font-semibold text-slate-200 active:bg-slate-700"
+                    @click="$store.kdsDismissColumn.cancel()"
+                >
+                    {{ __('kds.confirm_dismiss_column_cancel') }}
+                </button>
+                <button
+                    type="button"
+                    class="min-h-12 min-w-[5.5rem] touch-manipulation rounded-lg border border-emerald-600 bg-emerald-800 px-4 text-sm font-semibold text-emerald-50 active:bg-emerald-700"
+                    @click="$store.kdsDismissColumn.confirm()"
+                >
+                    {{ __('kds.confirm_dismiss_column_ok') }}
+                </button>
+            </div>
+        </div>
+    </div>
 </div>

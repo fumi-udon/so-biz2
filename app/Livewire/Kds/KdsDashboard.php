@@ -207,6 +207,16 @@ class KdsDashboard extends Component
                 }
             }
             if ($hasPendingVisible) {
+                $pendingVisibleCount = 0;
+                foreach ($visibleTickets as $t) {
+                    if (in_array($t->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true)) {
+                        $pendingVisibleCount++;
+                    }
+                }
+                foreach ($visibleTickets as $ticket) {
+                    $isPending = in_array($ticket->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true);
+                    $ticket->setAttribute('kds_is_last_pending', $pendingVisibleCount === 1 && $isPending);
+                }
                 $col['tickets'] = $visibleTickets;
                 $filteredCols[] = $col;
             }
@@ -226,7 +236,10 @@ class KdsDashboard extends Component
             $col['filterTicketMeta'] = array_values(array_map(static function (OrderLine $t): array {
                 $mid = $t->menuItem?->menu_category_id;
 
-                return ['c' => $mid !== null ? (int) $mid : null];
+                return [
+                    'c' => $mid !== null ? (int) $mid : null,
+                    's' => $t->status === OrderLineStatus::Served,
+                ];
             }, $tickets));
             $out[] = $col;
         }
@@ -258,7 +271,7 @@ class KdsDashboard extends Component
     /**
      * Alpine `kdsEchoBridge` 向け（wire:poll 後も localStorage でトグルを復元）。
      *
-     * @return array{shopId: int, kitchenIds: list<int>, hallIds: list<int>, filterStrict: bool, showFilterConfigWarning: bool, columnFilterMetas: list<list<array{c: int|null}>>}
+     * @return array{shopId: int, kitchenIds: list<int>, hallIds: list<int>, filterStrict: bool, showFilterConfigWarning: bool, columnFilterMetas: list<list<array{c: int|null, s: bool}>>}
      */
     public function getKdsClientBootstrapProperty(): array
     {

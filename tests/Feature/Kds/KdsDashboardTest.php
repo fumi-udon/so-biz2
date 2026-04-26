@@ -1247,6 +1247,79 @@ class KdsDashboardTest extends TestCase
         $this->assertCount(5, $board['visibleColumns'][0]['tickets']);
     }
 
+    public function test_single_pending_line_is_flagged_as_last_pending(): void
+    {
+        $p = $this->seedActiveTicket('T-LAST-1');
+        $this->withSession(['kds.active_shop_id' => (int) $p['shop']->id]);
+        $tickets = Livewire::test(KdsDashboard::class)->instance()->tableColumns[0]['tickets'];
+        $this->assertCount(1, $tickets);
+        $this->assertTrue((bool) $tickets[0]->getAttribute('kds_is_last_pending'));
+    }
+
+    public function test_three_pending_lines_in_one_batch_none_flagged_as_last_pending(): void
+    {
+        $shop = Shop::query()->create([
+            'name' => 'KDS last-pend count',
+            'slug' => 'kds-lp-'.bin2hex(random_bytes(3)),
+            'is_active' => true,
+        ]);
+        $cat = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'M',
+            'slug' => 'm-lp-'.bin2hex(random_bytes(3)),
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $item = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $cat->id,
+            'name' => 'X',
+            'kitchen_name' => 'X',
+            'slug' => 'x-lp-'.bin2hex(random_bytes(3)),
+            'from_price_minor' => 1000,
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $table = RestaurantTable::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'T-LP',
+            'qr_token' => 'kds-lp-'.bin2hex(random_bytes(8)),
+            'sort_order' => 0,
+            'is_active' => true,
+        ]);
+        $session = $this->createActiveTableSession($shop, $table);
+        $order = PosOrder::query()->create([
+            'shop_id' => $shop->id,
+            'table_session_id' => $session->id,
+            'status' => OrderStatus::Confirmed,
+            'total_price_minor' => 3000,
+            'placed_at' => now(),
+        ]);
+        $batchUuid = '64000000-0000-4000-8000-000000000001';
+        for ($i = 1; $i <= 3; $i++) {
+            OrderLine::query()->create([
+                'order_id' => $order->id,
+                'menu_item_id' => $item->id,
+                'qty' => 1,
+                'unit_price_minor' => 1000,
+                'line_total_minor' => 1000,
+                'snapshot_name' => 'P'.$i,
+                'snapshot_kitchen_name' => 'P'.$i,
+                'snapshot_options_payload' => [],
+                'status' => OrderLineStatus::Confirmed,
+                'line_revision' => 1,
+                'kds_ticket_batch_id' => $batchUuid,
+            ]);
+        }
+
+        $this->withSession(['kds.active_shop_id' => (int) $shop->id]);
+        $tickets = Livewire::test(KdsDashboard::class)->instance()->tableColumns[0]['tickets'];
+        $this->assertCount(3, $tickets);
+        foreach ($tickets as $t) {
+            $this->assertFalse((bool) $t->getAttribute('kds_is_last_pending'));
+        }
+    }
+
     public function test_served_batch_disappears_while_sibling_batch_has_pending(): void
     {
         $shop = Shop::query()->create([

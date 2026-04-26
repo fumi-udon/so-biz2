@@ -44,4 +44,8 @@ return [
     'filter_kitchen' => 'Kitchen',
     'filter_hall' => 'Hall',
     'filter_config_warning' => 'KDS Kitchen/Hall category filters are not configured. Set them in Admin → KDS filter. Showing all items.',
+
+    'confirm_dismiss_column' => 'Dismiss this column',
+    'confirm_dismiss_column_ok' => 'OK',
+    'confirm_dismiss_column_cancel' => 'Cancel',
 ];
