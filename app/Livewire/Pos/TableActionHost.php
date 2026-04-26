@@ -326,7 +326,7 @@ class TableActionHost extends Component
      * Browser: `pos-action-host-ui-sync` then `pos-action-host-authoritative` in a single Livewire `$this->js()`
      * blob so Alpine sees a fixed ordering (skeleton → afterimage → live hand-off).
      *
-     * @return list<array{id:int,name:string,qty:int,summary:string}>
+     * @return list<array{id:int,name:string,qty:int,summary:string,is_unsent:bool}>
      */
     private function buildAuthoritativeLinePayloadLines(): array
     {
@@ -344,6 +344,7 @@ class TableActionHost extends Component
                     'name' => trim((string) $line->snapshot_name),
                     'qty' => (int) $line->qty,
                     'summary' => $this->linePrimaryText($line),
+                    'is_unsent' => $line->status === OrderLineStatus::Placed,
                 ];
             }
         }

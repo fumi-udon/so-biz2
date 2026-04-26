@@ -70,6 +70,7 @@ final class TableActionHostAuthoritativePayloadTest extends TestCase
         $this->assertStringContainsString('shopId', $blob);
         $this->assertStringContainsString('tableSessionId', $blob);
         $this->assertStringContainsString((string) $line->id, $blob);
+        $this->assertStringContainsString('is_unsent', $blob);
     }
 
     public function test_open_empty_table_emits_authoritative_with_empty_lines(): void
@@ -113,5 +114,6 @@ final class TableActionHostAuthoritativePayloadTest extends TestCase
         $this->assertStringContainsString((string) $line->id, $blob);
         $this->assertStringContainsString('shopId', $blob);
         $this->assertStringContainsString('tableSessionId', $blob);
+        $this->assertStringContainsString('is_unsent', $blob);
     }
 }

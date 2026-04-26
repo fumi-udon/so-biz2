@@ -13,6 +13,7 @@
  *
  * Afterimage（Phase 2-A）:
  * - `pos-action-host-authoritative` を受けて行のみ LRU キャッシュ（最大5卓、行数上限なし）
+ * - 各行 DTO: id, name, qty, summary, is_unsent（KDS 送信前 = サーバー上 line placed）
  * - 読取 API は `readAfterimage` のみがヒット返却。書き込みは Livewire 権威イベント経由のみ。
  */
 
@@ -114,7 +115,7 @@ document.addEventListener('alpine:init', () => {
         return;
     }
 
-    /** @type {Map<string, { lines: { id: number, name: string, qty: number, summary: string }[] }>} */
+    /** @type {Map<string, { lines: { id: number, name: string, qty: number, summary: string, is_unsent: boolean }[] }>} */
     const afterimageByKey = new Map();
     /** @type {string[]} LRU order: oldest index 0, MRU at end */
     const afterimageLruKeys = [];
@@ -190,7 +191,7 @@ document.addEventListener('alpine:init', () => {
          * Keys that include a non-active session (e.g. null session) always miss.
          *
          * @param {string} key `${shopId}:${tableId}:${sessionId}`
-         * @returns {{ lines: { id: number, name: string, qty: number, summary: string }[] } | null}
+         * @returns {{ lines: { id: number, name: string, qty: number, summary: string, is_unsent: boolean }[] } | null}
          */
         readAfterimage(key) {
             const parsed = parseAfterimageCacheKey(key);
@@ -232,9 +233,16 @@ document.addEventListener('alpine:init', () => {
                         name: typeof row?.name === 'string' ? row.name : '',
                         qty: Number.isFinite(qty) ? qty : 0,
                         summary: typeof row?.summary === 'string' ? row.summary : '',
+                        is_unsent: Boolean(row?.is_unsent),
                     };
                 })
                 .filter((row) => row.id > 0);
+            lines.sort((a, b) => {
+                if (a.is_unsent !== b.is_unsent) {
+                    return a.is_unsent ? -1 : 1;
+                }
+                return a.id - b.id;
+            });
             afterimageByKey.set(cacheKey, { lines });
             touchAfterimageOrderInternal(cacheKey);
         },

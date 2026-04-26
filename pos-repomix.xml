@@ -1312,178 +1312,6 @@ class RoutineInventoryCompletionService
 }
 </file>
 
-<file path="app/Livewire/Pos/DiscountModal.php">
-<?php
-
-namespace App\Livewire\Pos;
-
-use App\Actions\Pos\Discount\RecordDiscountRequest;
-use App\Actions\Pos\Discount\RecordItemDiscountAction;
-use App\Actions\Pos\Discount\RecordOrderDiscountAction;
-use App\Actions\Pos\Discount\RecordStaffDiscountAction;
-use App\Exceptions\Pos\DiscountPinRejectedException;
-use App\Exceptions\Pos\SessionAlreadySettledException;
-use App\Models\Staff;
-use Filament\Notifications\Notification;
-use Illuminate\Support\Str;
-use Livewire\Attributes\Locked;
-use Livewire\Attributes\On;
-use Livewire\Component;
-use Throwable;
-
-/**
- * Discount application modal. Handles all three scopes via a single UI:
- *
- *   scope=item   → RecordItemDiscountAction  (targetId=order_line_id)
- *   scope=order  → RecordOrderDiscountAction (targetId=order_id)
- *   scope=staff  → RecordStaffDiscountAction (targetId=table_session_id,
- *                  fixed 50%, only enabled on staff tables 100-109)
- *
- * Keeps the Livewire layer thin: PIN verification, DB writes, and audit
- * logging all happen inside the Action. Each submission generates a fresh
- * idempotency key so accidental double-clicks still produce exactly one
- * audit row (UNIQUE constraint guards against malicious replays).
- */
-class DiscountModal extends Component
-{
-    #[Locked]
-    public int $shopId = 0;
-
-    public bool $open = false;
-
-    /** @var 'idle'|'in_flight'|'failed' */
-    public string $uiState = 'idle';
-
-    /** @var 'item'|'order'|'staff' */
-    public string $scope = 'item';
-
-    public ?int $targetId = null;
-
-    public ?int $approverStaffId = null;
-
-    public string $approverPin = '';
-
-    public string $reason = '';
-
-    /** @var 'flat'|'percent' */
-    public string $mode = 'flat';
-
-    public ?int $flatMinor = null;
-
-    public ?int $percentBasisPoints = null;
-
-    private string $idempotencyKey = '';
-
-    public function mount(int $shopId): void
-    {
-        $this->shopId = $shopId;
-    }
-
-    #[On('pos-discount-open')]
-    public function onOpen(
-        mixed $shop_id = null,
-        mixed $scope = null,
-        mixed $target_id = null,
-    ): void {
-        if ((int) $shop_id !== $this->shopId) {
-            return;
-        }
-        $scopeStr = is_string($scope) ? $scope : '';
-        if (! in_array($scopeStr, ['item', 'order', 'staff'], true)) {
-            return;
-        }
-        $tid = is_numeric($target_id) ? (int) $target_id : 0;
-        if ($tid < 1) {
-            return;
-        }
-
-        $this->resetExcept(['shopId']);
-        $this->scope = $scopeStr;
-        $this->targetId = $tid;
-        $this->mode = $scopeStr === 'staff' ? 'percent' : 'flat';
-        if ($scopeStr === 'staff') {
-            $this->percentBasisPoints = 5_000;
-        }
-        $this->idempotencyKey = (string) Str::uuid();
-        $this->uiState = 'idle';
-        $this->open = true;
-    }
-
-    public function closeModal(): void
-    {
-        $this->open = false;
-        $this->uiState = 'idle';
-    }
-
-    public function submit(): void
-    {
-        if ($this->uiState === 'in_flight' || $this->targetId === null || $this->approverStaffId === null) {
-            return;
-        }
-        $this->uiState = 'in_flight';
-
-        try {
-            $req = new RecordDiscountRequest(
-                shopId: $this->shopId,
-                operatorUserId: (int) (auth()->id() ?? 0),
-                approverStaffId: (int) $this->approverStaffId,
-                approverPin: $this->approverPin,
-                reason: $this->reason,
-                idempotencyKey: $this->idempotencyKey !== '' ? $this->idempotencyKey : (string) Str::uuid(),
-                flatMinor: $this->mode === 'flat' ? max(0, (int) ($this->flatMinor ?? 0)) : null,
-                percentBasisPoints: $this->mode === 'percent' ? max(0, min(10_000, (int) ($this->percentBasisPoints ?? 0))) : null,
-            );
-
-            match ($this->scope) {
-                'item' => app(RecordItemDiscountAction::class)->execute($req, (int) $this->targetId),
-                'order' => app(RecordOrderDiscountAction::class)->execute($req, (int) $this->targetId),
-                'staff' => app(RecordStaffDiscountAction::class)->execute($req, (int) $this->targetId),
-            };
-
-            $this->dispatch('pos-discount-applied', scope: $this->scope, target_id: (int) $this->targetId);
-            $this->dispatch('pos-refresh-tiles');
-            $this->closeModal();
-        } catch (DiscountPinRejectedException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
-        } catch (SessionAlreadySettledException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
-            $this->closeModal();
-        } catch (Throwable $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
-        }
-    }
-
-    /**
-     * @return list<array{id:int,name:string,level:int}>
-     */
-    public function getApproverOptionsProperty(): array
-    {
-        return Staff::query()
-            ->with('jobLevel')
-            ->where('shop_id', $this->shopId)
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'job_level_id'])
-            ->filter(fn (Staff $s): bool => (int) ($s->jobLevel?->level ?? 0) >= 3)
-            ->map(fn (Staff $s): array => [
-                'id' => (int) $s->id,
-                'name' => (string) $s->name,
-                'level' => (int) ($s->jobLevel?->level ?? 0),
-            ])
-            ->values()
-            ->all();
-    }
-
-    public function render()
-    {
-        return view('livewire.pos.discount-modal');
-    }
-}
-</file>
-
 <file path="app/Models/Attendance.php">
 <?php
 
@@ -3945,6 +3773,46 @@ class TipCalculationService
 </div>
 </file>
 
+<file path="resources/views/components/client-nav.blade.php">
+@props([
+    'variant' => 'light',
+    'showLogout' => false,
+])
+
+@php $isDark = $variant === 'dark'; @endphp
+
+<nav x-data="{ open: false }" class="sticky top-0 z-40 border-b-4 border-black bg-gradient-to-r from-slate-950 via-indigo-900 to-slate-950 text-white">
+    <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-3 py-2.5">
+        <a href="{{ route('home') }}" class="text-lg font-black tracking-wide text-amber-300">{{ config('app.name', 'So-biz') }}</a>
+        <div class="hidden items-center gap-2 md:flex">
+            <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Accueil</a>
+            <a href="{{ route('timecard.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Pointage</a>
+            <a href="{{ route('mypage.reauth') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Mon espace</a>
+            <a href="{{ route('inventory.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Inventory</a>
+            <a href="{{ route('close-check.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Clôture tâches</a>
+            @if ($showLogout)
+                <a href="{{ route('timecard.index') }}" class="rounded-md border border-rose-200/60 bg-rose-500/80 px-2 py-1 text-xs font-black">Deconnexion</a>
+            @endif
+        </div>
+        <button type="button" class="rounded-md border border-white/30 bg-white/10 px-2 py-1 text-sm md:hidden" @click="open = !open" :aria-expanded="open ? 'true' : 'false'" aria-label="Ouvrir le menu">
+            ☰
+        </button>
+    </div>
+    <div x-show="open" x-cloak class="border-t border-white/20 bg-slate-900/95 px-3 py-2 md:hidden">
+        <div class="grid grid-cols-2 gap-2">
+            <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Accueil</a>
+            <a href="{{ route('timecard.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Pointage</a>
+            <a href="{{ route('mypage.reauth') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Mon espace</a>
+            <a href="{{ route('inventory.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Inventory</a>
+            <a href="{{ route('close-check.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Clôture tâches</a>
+            @if ($showLogout)
+                <a href="{{ route('timecard.index') }}" class="col-span-2 rounded-md border border-rose-200/60 bg-rose-500/80 px-2 py-1.5 text-center text-sm font-black">Deconnexion</a>
+            @endif
+        </div>
+    </div>
+</nav>
+</file>
+
 <file path="resources/views/components/livewire-payload-monitor.blade.php">
 {{--
   TEMP: Livewire /livewire/update レスポンス実測（SPEED_TEST のみ）。
@@ -4276,6 +4144,183 @@ class TipCalculationService
 <file path="resources/views/livewire/pos/printer-bridge.blade.php">
 {{-- Invisible: PrinterBridge only listens for browser events --}}
 <div class="fi-no-print hidden" aria-hidden="true" wire:key="printer-bridge"></div>
+</file>
+
+<file path="app/Livewire/Pos/DiscountModal.php">
+<?php
+
+namespace App\Livewire\Pos;
+
+use App\Actions\Pos\Discount\RecordDiscountRequest;
+use App\Actions\Pos\Discount\RecordItemDiscountAction;
+use App\Actions\Pos\Discount\RecordOrderDiscountAction;
+use App\Actions\Pos\Discount\RecordStaffDiscountAction;
+use App\Exceptions\Pos\DiscountPinRejectedException;
+use App\Exceptions\Pos\SessionAlreadySettledException;
+use App\Models\Staff;
+use App\Services\Pos\TableDashboardQueryService;
+use Filament\Notifications\Notification;
+use Illuminate\Support\Str;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
+use Livewire\Component;
+use Throwable;
+
+/**
+ * Discount application modal. Handles all three scopes via a single UI:
+ *
+ *   scope=item   → RecordItemDiscountAction  (targetId=order_line_id)
+ *   scope=order  → RecordOrderDiscountAction (targetId=order_id)
+ *   scope=staff  → RecordStaffDiscountAction (targetId=table_session_id,
+ *                  fixed 50%, only enabled on staff tables 100-109)
+ *
+ * Keeps the Livewire layer thin: PIN verification, DB writes, and audit
+ * logging all happen inside the Action. Each submission generates a fresh
+ * idempotency key so accidental double-clicks still produce exactly one
+ * audit row (UNIQUE constraint guards against malicious replays).
+ */
+class DiscountModal extends Component
+{
+    #[Locked]
+    public int $shopId = 0;
+
+    public bool $open = false;
+
+    /** @var 'idle'|'in_flight'|'failed' */
+    public string $uiState = 'idle';
+
+    /** @var 'item'|'order'|'staff' */
+    public string $scope = 'item';
+
+    public ?int $targetId = null;
+
+    public ?int $approverStaffId = null;
+
+    public string $approverPin = '';
+
+    public string $reason = '';
+
+    /** @var 'flat'|'percent' */
+    public string $mode = 'flat';
+
+    public ?int $flatMinor = null;
+
+    public ?int $percentBasisPoints = null;
+
+    private string $idempotencyKey = '';
+
+    public function mount(int $shopId): void
+    {
+        $this->shopId = $shopId;
+    }
+
+    #[On('pos-discount-open')]
+    public function onOpen(
+        mixed $shop_id = null,
+        mixed $scope = null,
+        mixed $target_id = null,
+    ): void {
+        if ((int) $shop_id !== $this->shopId) {
+            return;
+        }
+        $scopeStr = is_string($scope) ? $scope : '';
+        if (! in_array($scopeStr, ['item', 'order', 'staff'], true)) {
+            return;
+        }
+        $tid = is_numeric($target_id) ? (int) $target_id : 0;
+        if ($tid < 1) {
+            return;
+        }
+
+        $this->resetExcept(['shopId']);
+        $this->scope = $scopeStr;
+        $this->targetId = $tid;
+        $this->mode = $scopeStr === 'staff' ? 'percent' : 'flat';
+        if ($scopeStr === 'staff') {
+            $this->percentBasisPoints = 5_000;
+        }
+        $this->idempotencyKey = (string) Str::uuid();
+        $this->uiState = 'idle';
+        $this->open = true;
+    }
+
+    public function closeModal(): void
+    {
+        $this->open = false;
+        $this->uiState = 'idle';
+    }
+
+    public function submit(): void
+    {
+        if ($this->uiState === 'in_flight' || $this->targetId === null || $this->approverStaffId === null) {
+            return;
+        }
+        $this->js('(function(){try{window.dispatchEvent(new CustomEvent(\'pos-afterimage-self-action\',{bubbles:true}));}catch(e){}})()');
+        $this->uiState = 'in_flight';
+
+        try {
+            $req = new RecordDiscountRequest(
+                shopId: $this->shopId,
+                operatorUserId: (int) (auth()->id() ?? 0),
+                approverStaffId: (int) $this->approverStaffId,
+                approverPin: $this->approverPin,
+                reason: $this->reason,
+                idempotencyKey: $this->idempotencyKey !== '' ? $this->idempotencyKey : (string) Str::uuid(),
+                flatMinor: $this->mode === 'flat' ? max(0, (int) ($this->flatMinor ?? 0)) : null,
+                percentBasisPoints: $this->mode === 'percent' ? max(0, min(10_000, (int) ($this->percentBasisPoints ?? 0))) : null,
+            );
+
+            match ($this->scope) {
+                'item' => app(RecordItemDiscountAction::class)->execute($req, (int) $this->targetId),
+                'order' => app(RecordOrderDiscountAction::class)->execute($req, (int) $this->targetId),
+                'staff' => app(RecordStaffDiscountAction::class)->execute($req, (int) $this->targetId),
+            };
+
+            $this->dispatch('pos-discount-applied', scope: $this->scope, target_id: (int) $this->targetId);
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
+            $this->dispatch('pos-refresh-tiles');
+            $this->closeModal();
+        } catch (DiscountPinRejectedException $e) {
+            $this->uiState = 'failed';
+            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
+        } catch (SessionAlreadySettledException $e) {
+            $this->uiState = 'failed';
+            Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
+            $this->closeModal();
+        } catch (Throwable $e) {
+            $this->uiState = 'failed';
+            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    /**
+     * @return list<array{id:int,name:string,level:int}>
+     */
+    public function getApproverOptionsProperty(): array
+    {
+        return Staff::query()
+            ->with('jobLevel')
+            ->where('shop_id', $this->shopId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'job_level_id'])
+            ->filter(fn (Staff $s): bool => (int) ($s->jobLevel?->level ?? 0) >= 3)
+            ->map(fn (Staff $s): array => [
+                'id' => (int) $s->id,
+                'name' => (string) $s->name,
+                'level' => (int) ($s->jobLevel?->level ?? 0),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function render()
+    {
+        return view('livewire.pos.discount-modal');
+    }
+}
 </file>
 
 <file path="app/Livewire/Pos/PrinterBridge.php">
@@ -5878,46 +5923,6 @@ class WeeklyShiftGridService
 </section>
 </file>
 
-<file path="resources/views/components/client-nav.blade.php">
-@props([
-    'variant' => 'light',
-    'showLogout' => false,
-])
-
-@php $isDark = $variant === 'dark'; @endphp
-
-<nav x-data="{ open: false }" class="sticky top-0 z-40 border-b-4 border-black bg-gradient-to-r from-slate-950 via-indigo-900 to-slate-950 text-white">
-    <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-3 py-2.5">
-        <a href="{{ route('home') }}" class="text-lg font-black tracking-wide text-amber-300">{{ config('app.name', 'So-biz') }}</a>
-        <div class="hidden items-center gap-2 md:flex">
-            <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Accueil</a>
-            <a href="{{ route('timecard.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Pointage</a>
-            <a href="{{ route('mypage.reauth') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Mon espace</a>
-            <a href="{{ route('inventory.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Inventory</a>
-            <a href="{{ route('close-check.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Clôture tâches</a>
-            @if ($showLogout)
-                <a href="{{ route('timecard.index') }}" class="rounded-md border border-rose-200/60 bg-rose-500/80 px-2 py-1 text-xs font-black">Deconnexion</a>
-            @endif
-        </div>
-        <button type="button" class="rounded-md border border-white/30 bg-white/10 px-2 py-1 text-sm md:hidden" @click="open = !open" :aria-expanded="open ? 'true' : 'false'" aria-label="Ouvrir le menu">
-            ☰
-        </button>
-    </div>
-    <div x-show="open" x-cloak class="border-t border-white/20 bg-slate-900/95 px-3 py-2 md:hidden">
-        <div class="grid grid-cols-2 gap-2">
-            <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Accueil</a>
-            <a href="{{ route('timecard.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Pointage</a>
-            <a href="{{ route('mypage.reauth') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Mon espace</a>
-            <a href="{{ route('inventory.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Inventory</a>
-            <a href="{{ route('close-check.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Clôture tâches</a>
-            @if ($showLogout)
-                <a href="{{ route('timecard.index') }}" class="col-span-2 rounded-md border border-rose-200/60 bg-rose-500/80 px-2 py-1.5 text-center text-sm font-black">Deconnexion</a>
-            @endif
-        </div>
-    </div>
-</nav>
-</file>
-
 <file path="resources/views/components/rad-table-tile.blade.php">
 @props([
     'tile' => [],
@@ -6011,251 +6016,6 @@ class WeeklyShiftGridService
     <x-pos-speed-panel />
     <x-livewire-payload-monitor />
 @endif
-</file>
-
-<file path="app/Services/Pos/TableDashboardQueryService.php">
-<?php
-
-namespace App\Services\Pos;
-
-use App\Data\Pos\TableDashboardData;
-use App\Data\Pos\TableTileAggregate;
-use App\Domains\Pos\Tables\TableCategory;
-use App\Domains\Pos\Tables\TableUiStatusInput;
-use App\Domains\Pos\Tables\TableUiStatusResolver;
-use App\Enums\OrderLineStatus;
-use App\Enums\OrderStatus;
-use App\Enums\TableSessionStatus;
-use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-use stdClass;
-
-/**
- * Single round-trip (one SQL) 卓集約. V4 scalar aliases: `agg_*`.
- * See `docs/technical_contract_v4.md` §2.1–2.2
- *
- * Phase 2: TableUiStatusResolver を結線し、UI ステータスを Service 層で確定させる。
- */
-final class TableDashboardQueryService
-{
-    public function __construct(
-        private readonly TableUiStatusResolver $resolver = new TableUiStatusResolver,
-    ) {}
-
-    public function getDashboardData(int $shopId): TableDashboardData
-    {
-        if ($shopId < 1) {
-            return new TableDashboardData([]);
-        }
-
-        $cacheKey = "pos:table-dashboard:shop:{$shopId}";
-
-        return Cache::remember($cacheKey, 1, function () use ($shopId): TableDashboardData {
-            return $this->buildDashboardData($shopId);
-        });
-    }
-
-    private function buildDashboardData(int $shopId): TableDashboardData
-    {
-        $p = (string) DB::connection()->getTablePrefix();
-        $active = TableSessionStatus::Active->value;
-        $placed = OrderStatus::Placed->value;
-        $confirmed = OrderStatus::Confirmed->value;
-        $voided = OrderStatus::Voided->value;
-        $linePlaced = OrderLineStatus::Placed->value;
-
-        $rt = $p.'restaurant_tables';
-        $ts = $p.'table_sessions';
-        $orders = $p.'orders';
-        $ol = $p.'order_lines';
-
-        $innerActiveSessionId = "(
-            SELECT ts_inner.id
-            FROM {$ts} AS ts_inner
-            WHERE ts_inner.restaurant_table_id = rt.id
-            AND ts_inner.status = '{$this->q($active)}'
-            ORDER BY ts_inner.id DESC
-            LIMIT 1
-        )";
-
-        $innerLastAdditionPrintedAt = "(
-            SELECT ts_p.last_addition_printed_at
-            FROM {$ts} AS ts_p
-            WHERE ts_p.restaurant_table_id = rt.id
-            AND ts_p.status = '{$this->q($active)}'
-            ORDER BY ts_p.id DESC
-            LIMIT 1
-        )";
-
-        $innerActiveSessionStaffName = "(
-            SELECT ts_sn.staff_name
-            FROM {$ts} AS ts_sn
-            WHERE ts_sn.id = ({$innerActiveSessionId})
-            LIMIT 1
-        )";
-
-        $innerActiveSessionCustomerName = "(
-            SELECT ts_cn.customer_name
-            FROM {$ts} AS ts_cn
-            WHERE ts_cn.id = ({$innerActiveSessionId})
-            LIMIT 1
-        )";
-
-        $sql = <<<SQL
-        SELECT
-            rt.id,
-            rt.name AS restaurant_table_name,
-            ({$innerActiveSessionId}) AS agg_active_table_session_id,
-            ({$innerActiveSessionStaffName}) AS agg_active_session_staff_name,
-            ({$innerActiveSessionCustomerName}) AS agg_active_session_customer_name,
-            (SELECT COALESCE((
-                SELECT COUNT(o1.id)
-                FROM {$orders} AS o1
-                INNER JOIN {$ts} AS ts1 ON o1.table_session_id = ts1.id
-                WHERE ts1.restaurant_table_id = rt.id
-                AND ts1.status = '{$this->q($active)}'
-                AND o1.status = '{$this->q($placed)}'
-            ), 0)) AS agg_unacked_placed_pos_order_count,
-            (SELECT CASE WHEN EXISTS(
-                SELECT 1
-                FROM {$ol} AS ol1
-                INNER JOIN {$orders} AS o2 ON o2.id = ol1.order_id
-                INNER JOIN {$ts} AS ts2 ON o2.table_session_id = ts2.id
-                WHERE ts2.restaurant_table_id = rt.id
-                AND ts2.status = '{$this->q($active)}'
-                AND o2.status IN ('{$this->q($placed)}', '{$this->q($confirmed)}')
-                AND ol1.status = '{$this->q($linePlaced)}'
-            ) THEN 1 ELSE 0 END) AS agg_unacked_placed_line_exists,
-            (SELECT MIN(o3.placed_at)
-                FROM {$orders} AS o3
-                INNER JOIN {$ts} AS ts3 ON o3.table_session_id = ts3.id
-                WHERE ts3.restaurant_table_id = rt.id
-                AND ts3.status = '{$this->q($active)}'
-                AND o3.status = '{$this->q($placed)}'
-            ) AS agg_oldest_relevant_placed_at,
-            (SELECT CASE WHEN ({$innerLastAdditionPrintedAt}) IS NULL THEN 0 ELSE 1 END
-            ) AS agg_addition_checkout_flag,
-            ({$innerLastAdditionPrintedAt}) AS agg_last_addition_printed_at,
-            (SELECT CASE
-                WHEN ({$innerLastAdditionPrintedAt}) IS NULL THEN 0
-                WHEN EXISTS(
-                    SELECT 1
-                    FROM {$orders} AS o7
-                    WHERE o7.table_session_id = ({$innerActiveSessionId})
-                    AND o7.status != '{$this->q($voided)}'
-                    AND o7.created_at > ({$innerLastAdditionPrintedAt})
-                ) THEN 1
-                WHEN EXISTS(
-                    SELECT 1
-                    FROM {$ol} AS ol2
-                    INNER JOIN {$orders} AS o8 ON o8.id = ol2.order_id
-                    WHERE o8.table_session_id = ({$innerActiveSessionId})
-                    AND o8.status != '{$this->q($voided)}'
-                    AND ol2.created_at > ({$innerLastAdditionPrintedAt})
-                ) THEN 1
-                ELSE 0
-            END) AS agg_has_order_after_addition_printed,
-            (SELECT COALESCE((
-                SELECT COUNT(o5.id)
-                FROM {$orders} AS o5
-                WHERE o5.table_session_id = ({$innerActiveSessionId})
-                AND o5.status != '{$this->q($voided)}'
-            ), 0)) AS agg_relevant_pos_order_count,
-            (SELECT COALESCE((
-                SELECT SUM(o6.total_price_minor)
-                FROM {$orders} AS o6
-                WHERE o6.table_session_id = ({$innerActiveSessionId})
-                AND o6.status != '{$this->q($voided)}'
-            ), 0)) AS agg_session_total_minor
-        FROM {$rt} AS rt
-        WHERE rt.shop_id = ?
-        AND rt.is_active = 1
-        ORDER BY rt.sort_order ASC, rt.id ASC
-        SQL;
-
-        $rows = DB::select($sql, [$shopId]);
-        $tiles = [];
-        $seen = [];
-        /** @var stdClass $r */
-        foreach ($rows as $r) {
-            $rid = (int) $r->id;
-            if (isset($seen[$rid])) {
-                throw new \RuntimeException('Table dashboard aggregate: duplicate restaurant_table_id '.$rid);
-            }
-            $seen[$rid] = true;
-            $tiles[] = $this->toTile($r);
-        }
-
-        return new TableDashboardData($tiles);
-    }
-
-    private function toTile(stdClass $r): TableTileAggregate
-    {
-        $at = $r->agg_oldest_relevant_placed_at;
-        $oldest = $at === null ? null : CarbonImmutable::parse((string) $at);
-
-        $printedAtRaw = $r->agg_last_addition_printed_at ?? null;
-        $lastAdditionPrintedAt = $printedAtRaw === null ? null : CarbonImmutable::parse((string) $printedAtRaw);
-
-        $hasActiveSession = $r->agg_active_table_session_id !== null;
-        $unackedOrderCount = (int) $r->agg_unacked_placed_pos_order_count;
-        $unackedLineExists = (int) $r->agg_unacked_placed_line_exists === 1;
-        $hasUnackedPlaced = $unackedOrderCount > 0 || $unackedLineExists;
-        $hasOrderAfterAdditionPrinted = (int) ($r->agg_has_order_after_addition_printed ?? 0) === 1;
-
-        $input = new TableUiStatusInput(
-            hasActiveSession: $hasActiveSession,
-            hasUnackedPlaced: $hasUnackedPlaced,
-            lastAdditionPrintedAt: $lastAdditionPrintedAt,
-            hasOrdersAfterLastAdditionPrintedAt: $hasOrderAfterAdditionPrinted,
-        );
-
-        $uiStatus = $this->resolver->resolve($input);
-        $category = TableCategory::tryResolveFromId((int) $r->id);
-        $snRaw = $r->agg_active_session_staff_name ?? null;
-        $sessionStaffName = is_string($snRaw) && trim($snRaw) !== '' ? trim($snRaw) : null;
-        $cnRaw = $r->agg_active_session_customer_name ?? null;
-        $sessionCustomerName = is_string($cnRaw) && trim($cnRaw) !== '' ? trim($cnRaw) : null;
-
-        $displayTableName = (string) $r->restaurant_table_name;
-        if ($category === TableCategory::Takeaway && $sessionCustomerName !== null) {
-            $displayTableName = $sessionCustomerName;
-        }
-
-        return new TableTileAggregate(
-            restaurantTableId: (int) $r->id,
-            restaurantTableName: $displayTableName,
-            activeSessionStaffName: $sessionStaffName,
-            activeSessionCustomerName: $sessionCustomerName,
-            activeTableSessionId: $r->agg_active_table_session_id === null
-                ? null
-                : (int) $r->agg_active_table_session_id,
-            unackedPlacedPosOrderCount: $unackedOrderCount,
-            unackedPlacedLineExists: $unackedLineExists,
-            oldestRelevantPlacedAt: $oldest,
-            additionOrCheckoutSignalActive: (int) $r->agg_addition_checkout_flag === 1,
-            relevantPosOrderCount: (int) $r->agg_relevant_pos_order_count,
-            sessionTotalMinor: (int) $r->agg_session_total_minor,
-            category: $category,
-            uiStatus: $uiStatus,
-            lastAdditionPrintedAt: $lastAdditionPrintedAt,
-            hasOrderAfterAdditionPrinted: $hasOrderAfterAdditionPrinted,
-        );
-    }
-
-    private function q(string $value): string
-    {
-        if (! preg_match('/^[a-z0-9_\\-]+$/i', $value) || $value === '') {
-            throw new \InvalidArgumentException('Unsafe enum / status value for SQL');
-        }
-        if (str_contains($value, "'") || str_contains($value, '\\')) {
-            throw new \InvalidArgumentException('Invalid SQL literal');
-        }
-
-        return $value;
-    }
-}
 </file>
 
 <file path="resources/views/components/guest-order/category-rail.blade.php">
@@ -6759,249 +6519,6 @@ final class TableDashboardQueryService
         </div>
     @endif
 </div>
-</file>
-
-<file path="app/Livewire/Pos/ClotureModal.php">
-<?php
-
-namespace App\Livewire\Pos;
-
-use App\Actions\Pos\FinalizeTableSettlementAction;
-use App\Actions\Pos\FinalizeTableSettlementRequest;
-use App\Domains\Pos\Pricing\PricingEngine;
-use App\Domains\Pos\Settlement\SettlementSuggestionService;
-use App\Domains\Pos\Tables\TableCategory;
-use App\Enums\OrderStatus;
-use App\Enums\PaymentMethod;
-use App\Exceptions\Pos\InsufficientTenderException;
-use App\Exceptions\Pos\PendingOrdersRemainException;
-use App\Exceptions\Pos\SessionAlreadySettledException;
-use App\Exceptions\RevisionConflictException;
-use App\Models\PosOrder;
-use App\Models\TableSession;
-use App\Support\MenuItemMoney;
-use App\Support\Pos\StaffTableSettlementPricing;
-use Filament\Notifications\Notification;
-use Livewire\Attributes\Locked;
-use Livewire\Attributes\On;
-use Livewire\Component;
-use Throwable;
-
-/**
- * Cloture (checkout) modal Livewire component.
- *
- * Orchestrates the cashier-facing checkout flow:
- *   1. (re)prices the open session via PricingEngine (int-minor only).
- *   2. suggests Juste / Proche tender amounts via SettlementSuggestionService.
- *   3. delegates the transactional settlement to FinalizeTableSettlementAction (cash only in UI).
- *   4. dispatches `pos-settlement-completed` with `open_receipt_preview: true` so
- *      {@see TableActionHost} opens {@see ReceiptPreview} (intent=receipt); the
- *      cashier prints once from the preview (single `pos-trigger-print` path).
- */
-class ClotureModal extends Component
-{
-    #[Locked]
-    public int $shopId = 0;
-
-    public bool $open = false;
-
-    public ?int $tableSessionId = null;
-
-    public int $expectedSessionRevision = 0;
-
-    public string $tableLabel = '';
-
-    public string $shopName = '';
-
-    /** @var 'idle'|'in_flight'|'success'|'failed' */
-    public string $uiState = 'idle';
-
-    public int $subtotalMinor = 0;
-
-    public int $discountAppliedMinor = 0;
-
-    public int $roundingAdjustmentMinor = 0;
-
-    public int $finalTotalMinor = 0;
-
-    public int $justeMinor = 0;
-
-    /** @var list<int> */
-    public array $procheMinor = [];
-
-    public ?int $tenderedMinor = null;
-
-    /** Human-editable tender string (DT); synced to {@see $tenderedMinor}. */
-    public string $tenderedDtInput = '';
-
-    public int $changeMinor = 0;
-
-    public function mount(int $shopId): void
-    {
-        $this->shopId = $shopId;
-    }
-
-    #[On('pos-cloture-open')]
-    public function onOpen(mixed $shop_id = null, mixed $table_session_id = null, mixed $expected_revision = null): void
-    {
-        if ((int) $shop_id !== $this->shopId) {
-            return;
-        }
-        $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
-        if ($sid < 1) {
-            return;
-        }
-        $this->reset([
-            'tenderedMinor',
-            'tenderedDtInput',
-            'changeMinor',
-        ]);
-        $this->uiState = 'idle';
-        $this->tableSessionId = $sid;
-        $this->expectedSessionRevision = is_numeric($expected_revision) ? (int) $expected_revision : 0;
-
-        if (! $this->loadPricing()) {
-            return;
-        }
-
-        $this->open = true;
-    }
-
-    public function closeModal(): void
-    {
-        $this->open = false;
-        $this->tableSessionId = null;
-        $this->uiState = 'idle';
-    }
-
-    public function confirm(): void
-    {
-        if ($this->uiState === 'in_flight' || $this->tableSessionId === null) {
-            return;
-        }
-        $this->uiState = 'in_flight';
-
-        try {
-            $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
-            $tendered = (int) ($this->tenderedMinor ?? 0);
-            $this->changeMinor = $tendered - $this->finalTotalMinor;
-
-            if ($tendered < $this->finalTotalMinor) {
-                $this->uiState = 'failed';
-                Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
-
-                return;
-            }
-
-            app(FinalizeTableSettlementAction::class)->execute(
-                new FinalizeTableSettlementRequest(
-                    shopId: $this->shopId,
-                    tableSessionId: (int) $this->tableSessionId,
-                    expectedSessionRevision: $this->expectedSessionRevision,
-                    tenderedMinor: $tendered,
-                    paymentMethod: PaymentMethod::Cash,
-                    actorUserId: (int) (auth()->id() ?? 0),
-                )
-            );
-
-            $this->dispatch(
-                'pos-settlement-completed',
-                table_session_id: (int) $this->tableSessionId,
-                open_receipt_preview: true,
-            );
-            $this->dispatch('pos-refresh-tiles');
-            $this->uiState = 'success';
-            $this->closeModal();
-        } catch (InsufficientTenderException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
-        } catch (PendingOrdersRemainException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('rad_table.cannot_close_with_unacked'))->danger()->send();
-        } catch (SessionAlreadySettledException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
-            $this->closeModal();
-        } catch (RevisionConflictException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('pos.data_stale_title'))->body(__('pos.revision_conflict_reload'))->warning()->send();
-            $this->dispatch('pos-refresh-tiles');
-            $this->closeModal();
-        } catch (Throwable $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
-        }
-    }
-
-    public function formatMinor(int $minor): string
-    {
-        return MenuItemMoney::formatMinorForDisplay($minor);
-    }
-
-    public function render()
-    {
-        return view('livewire.pos.cloture-modal');
-    }
-
-    private function loadPricing(): bool
-    {
-        $session = TableSession::query()
-            ->with('restaurantTable:id,name')
-            ->where('shop_id', $this->shopId)
-            ->whereKey($this->tableSessionId)
-            ->first();
-
-        if ($session === null) {
-            Notification::make()->title(__('rad_table.active_session_not_found'))->danger()->send();
-            $this->closeModal();
-
-            return false;
-        }
-
-        $tid = (int) $session->restaurant_table_id;
-        if (StaffTableSettlementPricing::isStaffMealTableId($tid)
-            && is_string($session->staff_name)
-            && trim($session->staff_name) !== '') {
-            $this->tableLabel = trim($session->staff_name);
-        } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
-            && is_string($session->customer_name)
-            && trim($session->customer_name) !== '') {
-            $this->tableLabel = trim($session->customer_name);
-        } else {
-            $this->tableLabel = (string) ($session->restaurantTable->name ?? '');
-        }
-        $this->shopName = (string) (config('app.name') ?? 'Restaurant');
-
-        $orders = PosOrder::query()
-            ->where('shop_id', $this->shopId)
-            ->where('table_session_id', $session->id)
-            ->where('status', '!=', OrderStatus::Voided)
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get();
-
-        $pricing = StaffTableSettlementPricing::calculateFromPosOrders(
-            $orders,
-            $tid,
-            app(PricingEngine::class),
-        );
-
-        $this->subtotalMinor = $pricing->orderSubtotalMinor;
-        $this->discountAppliedMinor = $pricing->orderDiscountAppliedMinor;
-        $this->roundingAdjustmentMinor = $pricing->roundingAdjustmentMinor;
-        $this->finalTotalMinor = $pricing->finalTotalMinor;
-
-        $sugg = app(SettlementSuggestionService::class)->suggest($pricing->finalTotalMinor);
-        $this->justeMinor = $sugg->justeMinor;
-        $this->procheMinor = $sugg->procheMinor;
-
-        $this->tenderedMinor = null;
-        $this->tenderedDtInput = '';
-        $this->changeMinor = 0;
-
-        return true;
-    }
-}
 </file>
 
 <file path="app/Livewire/Pos/ReceiptPreview.php">
@@ -7509,6 +7026,671 @@ class ReceiptPreview extends Component
 }
 </file>
 
+<file path="app/Services/Pos/TableDashboardQueryService.php">
+<?php
+
+namespace App\Services\Pos;
+
+use App\Data\Pos\TableDashboardData;
+use App\Data\Pos\TableTileAggregate;
+use App\Domains\Pos\Tables\TableCategory;
+use App\Domains\Pos\Tables\TableUiStatusInput;
+use App\Domains\Pos\Tables\TableUiStatusResolver;
+use App\Enums\OrderLineStatus;
+use App\Enums\OrderStatus;
+use App\Enums\TableSessionStatus;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use stdClass;
+
+/**
+ * Single round-trip (one SQL) 卓集約. V4 scalar aliases: `agg_*`.
+ * See `docs/technical_contract_v4.md` §2.1–2.2
+ *
+ * Phase 2: TableUiStatusResolver を結線し、UI ステータスを Service 層で確定させる。
+ */
+final class TableDashboardQueryService
+{
+    public function __construct(
+        private readonly TableUiStatusResolver $resolver = new TableUiStatusResolver,
+    ) {}
+
+    public function getDashboardData(int $shopId): TableDashboardData
+    {
+        if ($shopId < 1) {
+            return new TableDashboardData([]);
+        }
+
+        $cacheKey = $this->dashboardCacheKey($shopId);
+
+        return Cache::remember($cacheKey, 1, function () use ($shopId): TableDashboardData {
+            return $this->buildDashboardData($shopId);
+        });
+    }
+
+    /**
+     * Drop the 1s shop tile aggregate cache so the next {@see getDashboardData()} rebuilds from DB.
+     * Call after mutations that affect placed / tile uiStatus (add line, Recu, delete, settlement, etc.).
+     */
+    public function forgetCachedDashboard(int $shopId): void
+    {
+        if ($shopId < 1) {
+            return;
+        }
+        Cache::forget($this->dashboardCacheKey($shopId));
+    }
+
+    private function dashboardCacheKey(int $shopId): string
+    {
+        return "pos:table-dashboard:shop:{$shopId}";
+    }
+
+    private function buildDashboardData(int $shopId): TableDashboardData
+    {
+        $p = (string) DB::connection()->getTablePrefix();
+        $active = TableSessionStatus::Active->value;
+        $placed = OrderStatus::Placed->value;
+        $confirmed = OrderStatus::Confirmed->value;
+        $voided = OrderStatus::Voided->value;
+        $linePlaced = OrderLineStatus::Placed->value;
+
+        $rt = $p.'restaurant_tables';
+        $ts = $p.'table_sessions';
+        $orders = $p.'orders';
+        $ol = $p.'order_lines';
+
+        $innerActiveSessionId = "(
+            SELECT ts_inner.id
+            FROM {$ts} AS ts_inner
+            WHERE ts_inner.restaurant_table_id = rt.id
+            AND ts_inner.status = '{$this->q($active)}'
+            ORDER BY ts_inner.id DESC
+            LIMIT 1
+        )";
+
+        $innerLastAdditionPrintedAt = "(
+            SELECT ts_p.last_addition_printed_at
+            FROM {$ts} AS ts_p
+            WHERE ts_p.restaurant_table_id = rt.id
+            AND ts_p.status = '{$this->q($active)}'
+            ORDER BY ts_p.id DESC
+            LIMIT 1
+        )";
+
+        $innerActiveSessionStaffName = "(
+            SELECT ts_sn.staff_name
+            FROM {$ts} AS ts_sn
+            WHERE ts_sn.id = ({$innerActiveSessionId})
+            LIMIT 1
+        )";
+
+        $innerActiveSessionCustomerName = "(
+            SELECT ts_cn.customer_name
+            FROM {$ts} AS ts_cn
+            WHERE ts_cn.id = ({$innerActiveSessionId})
+            LIMIT 1
+        )";
+
+        $sql = <<<SQL
+        SELECT
+            rt.id,
+            rt.name AS restaurant_table_name,
+            ({$innerActiveSessionId}) AS agg_active_table_session_id,
+            ({$innerActiveSessionStaffName}) AS agg_active_session_staff_name,
+            ({$innerActiveSessionCustomerName}) AS agg_active_session_customer_name,
+            (SELECT COALESCE((
+                SELECT COUNT(o1.id)
+                FROM {$orders} AS o1
+                INNER JOIN {$ts} AS ts1 ON o1.table_session_id = ts1.id
+                WHERE ts1.restaurant_table_id = rt.id
+                AND ts1.status = '{$this->q($active)}'
+                AND o1.status = '{$this->q($placed)}'
+            ), 0)) AS agg_unacked_placed_pos_order_count,
+            (SELECT CASE WHEN EXISTS(
+                SELECT 1
+                FROM {$ol} AS ol1
+                INNER JOIN {$orders} AS o2 ON o2.id = ol1.order_id
+                INNER JOIN {$ts} AS ts2 ON o2.table_session_id = ts2.id
+                WHERE ts2.restaurant_table_id = rt.id
+                AND ts2.status = '{$this->q($active)}'
+                AND o2.status IN ('{$this->q($placed)}', '{$this->q($confirmed)}')
+                AND ol1.status = '{$this->q($linePlaced)}'
+            ) THEN 1 ELSE 0 END) AS agg_unacked_placed_line_exists,
+            (SELECT MIN(o3.placed_at)
+                FROM {$orders} AS o3
+                INNER JOIN {$ts} AS ts3 ON o3.table_session_id = ts3.id
+                WHERE ts3.restaurant_table_id = rt.id
+                AND ts3.status = '{$this->q($active)}'
+                AND o3.status = '{$this->q($placed)}'
+            ) AS agg_oldest_relevant_placed_at,
+            (SELECT CASE WHEN ({$innerLastAdditionPrintedAt}) IS NULL THEN 0 ELSE 1 END
+            ) AS agg_addition_checkout_flag,
+            ({$innerLastAdditionPrintedAt}) AS agg_last_addition_printed_at,
+            (SELECT CASE
+                WHEN ({$innerLastAdditionPrintedAt}) IS NULL THEN 0
+                WHEN EXISTS(
+                    SELECT 1
+                    FROM {$orders} AS o7
+                    WHERE o7.table_session_id = ({$innerActiveSessionId})
+                    AND o7.status != '{$this->q($voided)}'
+                    AND o7.created_at > ({$innerLastAdditionPrintedAt})
+                ) THEN 1
+                WHEN EXISTS(
+                    SELECT 1
+                    FROM {$ol} AS ol2
+                    INNER JOIN {$orders} AS o8 ON o8.id = ol2.order_id
+                    WHERE o8.table_session_id = ({$innerActiveSessionId})
+                    AND o8.status != '{$this->q($voided)}'
+                    AND ol2.created_at > ({$innerLastAdditionPrintedAt})
+                ) THEN 1
+                ELSE 0
+            END) AS agg_has_order_after_addition_printed,
+            (SELECT COALESCE((
+                SELECT COUNT(o5.id)
+                FROM {$orders} AS o5
+                WHERE o5.table_session_id = ({$innerActiveSessionId})
+                AND o5.status != '{$this->q($voided)}'
+            ), 0)) AS agg_relevant_pos_order_count,
+            (SELECT COALESCE((
+                SELECT SUM(o6.total_price_minor)
+                FROM {$orders} AS o6
+                WHERE o6.table_session_id = ({$innerActiveSessionId})
+                AND o6.status != '{$this->q($voided)}'
+            ), 0)) AS agg_session_total_minor
+        FROM {$rt} AS rt
+        WHERE rt.shop_id = ?
+        AND rt.is_active = 1
+        ORDER BY rt.sort_order ASC, rt.id ASC
+        SQL;
+
+        $rows = DB::select($sql, [$shopId]);
+        $tiles = [];
+        $seen = [];
+        /** @var stdClass $r */
+        foreach ($rows as $r) {
+            $rid = (int) $r->id;
+            if (isset($seen[$rid])) {
+                throw new \RuntimeException('Table dashboard aggregate: duplicate restaurant_table_id '.$rid);
+            }
+            $seen[$rid] = true;
+            $tiles[] = $this->toTile($r);
+        }
+
+        return new TableDashboardData($tiles);
+    }
+
+    private function toTile(stdClass $r): TableTileAggregate
+    {
+        $at = $r->agg_oldest_relevant_placed_at;
+        $oldest = $at === null ? null : CarbonImmutable::parse((string) $at);
+
+        $printedAtRaw = $r->agg_last_addition_printed_at ?? null;
+        $lastAdditionPrintedAt = $printedAtRaw === null ? null : CarbonImmutable::parse((string) $printedAtRaw);
+
+        $hasActiveSession = $r->agg_active_table_session_id !== null;
+        $unackedOrderCount = (int) $r->agg_unacked_placed_pos_order_count;
+        $unackedLineExists = (int) $r->agg_unacked_placed_line_exists === 1;
+        $hasUnackedPlaced = $unackedOrderCount > 0 || $unackedLineExists;
+        $hasOrderAfterAdditionPrinted = (int) ($r->agg_has_order_after_addition_printed ?? 0) === 1;
+
+        $input = new TableUiStatusInput(
+            hasActiveSession: $hasActiveSession,
+            hasUnackedPlaced: $hasUnackedPlaced,
+            lastAdditionPrintedAt: $lastAdditionPrintedAt,
+            hasOrdersAfterLastAdditionPrintedAt: $hasOrderAfterAdditionPrinted,
+        );
+
+        $uiStatus = $this->resolver->resolve($input);
+        $category = TableCategory::tryResolveFromId((int) $r->id);
+        $snRaw = $r->agg_active_session_staff_name ?? null;
+        $sessionStaffName = is_string($snRaw) && trim($snRaw) !== '' ? trim($snRaw) : null;
+        $cnRaw = $r->agg_active_session_customer_name ?? null;
+        $sessionCustomerName = is_string($cnRaw) && trim($cnRaw) !== '' ? trim($cnRaw) : null;
+
+        $displayTableName = (string) $r->restaurant_table_name;
+        if ($category === TableCategory::Takeaway && $sessionCustomerName !== null) {
+            $displayTableName = $sessionCustomerName;
+        }
+
+        return new TableTileAggregate(
+            restaurantTableId: (int) $r->id,
+            restaurantTableName: $displayTableName,
+            activeSessionStaffName: $sessionStaffName,
+            activeSessionCustomerName: $sessionCustomerName,
+            activeTableSessionId: $r->agg_active_table_session_id === null
+                ? null
+                : (int) $r->agg_active_table_session_id,
+            unackedPlacedPosOrderCount: $unackedOrderCount,
+            unackedPlacedLineExists: $unackedLineExists,
+            oldestRelevantPlacedAt: $oldest,
+            additionOrCheckoutSignalActive: (int) $r->agg_addition_checkout_flag === 1,
+            relevantPosOrderCount: (int) $r->agg_relevant_pos_order_count,
+            sessionTotalMinor: (int) $r->agg_session_total_minor,
+            category: $category,
+            uiStatus: $uiStatus,
+            lastAdditionPrintedAt: $lastAdditionPrintedAt,
+            hasOrderAfterAdditionPrinted: $hasOrderAfterAdditionPrinted,
+        );
+    }
+
+    private function q(string $value): string
+    {
+        if (! preg_match('/^[a-z0-9_\\-]+$/i', $value) || $value === '') {
+            throw new \InvalidArgumentException('Unsafe enum / status value for SQL');
+        }
+        if (str_contains($value, "'") || str_contains($value, '\\')) {
+            throw new \InvalidArgumentException('Invalid SQL literal');
+        }
+
+        return $value;
+    }
+}
+</file>
+
+<file path="app/Livewire/Pos/ClotureModal.php">
+<?php
+
+namespace App\Livewire\Pos;
+
+use App\Actions\Pos\FinalizeTableSettlementAction;
+use App\Actions\Pos\FinalizeTableSettlementRequest;
+use App\Domains\Pos\Pricing\PricingEngine;
+use App\Domains\Pos\Settlement\SettlementSuggestionService;
+use App\Domains\Pos\Tables\TableCategory;
+use App\Enums\OrderStatus;
+use App\Enums\PaymentMethod;
+use App\Exceptions\Pos\InsufficientTenderException;
+use App\Exceptions\Pos\PendingOrdersRemainException;
+use App\Exceptions\Pos\SessionAlreadySettledException;
+use App\Exceptions\RevisionConflictException;
+use App\Models\PosOrder;
+use App\Models\TableSession;
+use App\Services\Pos\TableDashboardQueryService;
+use App\Support\MenuItemMoney;
+use App\Support\Pos\StaffTableSettlementPricing;
+use Filament\Notifications\Notification;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
+use Livewire\Component;
+use Throwable;
+
+/**
+ * Cloture (checkout) modal Livewire component.
+ *
+ * Orchestrates the cashier-facing checkout flow:
+ *   1. (re)prices the open session via PricingEngine (int-minor only).
+ *   2. suggests Juste / Proche tender amounts via SettlementSuggestionService.
+ *   3. delegates the transactional settlement to FinalizeTableSettlementAction (cash only in UI).
+ *   4. dispatches `pos-settlement-completed` with `open_receipt_preview: true` so
+ *      {@see TableActionHost} opens {@see ReceiptPreview} (intent=receipt); the
+ *      cashier prints once from the preview (single `pos-trigger-print` path).
+ */
+class ClotureModal extends Component
+{
+    #[Locked]
+    public int $shopId = 0;
+
+    public bool $open = false;
+
+    public ?int $tableSessionId = null;
+
+    public int $expectedSessionRevision = 0;
+
+    public string $tableLabel = '';
+
+    public string $shopName = '';
+
+    /** @var 'idle'|'in_flight'|'success'|'failed' */
+    public string $uiState = 'idle';
+
+    public int $subtotalMinor = 0;
+
+    public int $discountAppliedMinor = 0;
+
+    public int $roundingAdjustmentMinor = 0;
+
+    public int $finalTotalMinor = 0;
+
+    public int $justeMinor = 0;
+
+    /** @var list<int> */
+    public array $procheMinor = [];
+
+    public ?int $tenderedMinor = null;
+
+    /** Human-editable tender string (DT); synced to {@see $tenderedMinor}. */
+    public string $tenderedDtInput = '';
+
+    public int $changeMinor = 0;
+
+    public function mount(int $shopId): void
+    {
+        $this->shopId = $shopId;
+    }
+
+    #[On('pos-cloture-open')]
+    public function onOpen(mixed $shop_id = null, mixed $table_session_id = null, mixed $expected_revision = null): void
+    {
+        if ((int) $shop_id !== $this->shopId) {
+            return;
+        }
+        $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
+        if ($sid < 1) {
+            return;
+        }
+        $this->reset([
+            'tenderedMinor',
+            'tenderedDtInput',
+            'changeMinor',
+        ]);
+        $this->uiState = 'idle';
+        $this->tableSessionId = $sid;
+        $this->expectedSessionRevision = is_numeric($expected_revision) ? (int) $expected_revision : 0;
+
+        if (! $this->loadPricing()) {
+            return;
+        }
+
+        $this->open = true;
+    }
+
+    public function closeModal(): void
+    {
+        $this->open = false;
+        $this->tableSessionId = null;
+        $this->uiState = 'idle';
+    }
+
+    public function confirm(): void
+    {
+        if ($this->uiState === 'in_flight' || $this->tableSessionId === null) {
+            return;
+        }
+        $this->uiState = 'in_flight';
+
+        try {
+            $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
+            $tendered = (int) ($this->tenderedMinor ?? 0);
+            $this->changeMinor = $tendered - $this->finalTotalMinor;
+
+            if ($tendered < $this->finalTotalMinor) {
+                $this->uiState = 'failed';
+                Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
+
+                return;
+            }
+
+            app(FinalizeTableSettlementAction::class)->execute(
+                new FinalizeTableSettlementRequest(
+                    shopId: $this->shopId,
+                    tableSessionId: (int) $this->tableSessionId,
+                    expectedSessionRevision: $this->expectedSessionRevision,
+                    tenderedMinor: $tendered,
+                    paymentMethod: PaymentMethod::Cash,
+                    actorUserId: (int) (auth()->id() ?? 0),
+                )
+            );
+
+            $this->dispatch(
+                'pos-settlement-completed',
+                table_session_id: (int) $this->tableSessionId,
+                open_receipt_preview: true,
+            );
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
+            $this->dispatch('pos-refresh-tiles');
+            $this->uiState = 'success';
+            $this->closeModal();
+        } catch (InsufficientTenderException $e) {
+            $this->uiState = 'failed';
+            Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
+        } catch (PendingOrdersRemainException $e) {
+            $this->uiState = 'failed';
+            Notification::make()->title(__('rad_table.cannot_close_with_unacked'))->danger()->send();
+        } catch (SessionAlreadySettledException $e) {
+            $this->uiState = 'failed';
+            Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
+            $this->closeModal();
+        } catch (RevisionConflictException $e) {
+            $this->uiState = 'failed';
+            Notification::make()->title(__('pos.data_stale_title'))->body(__('pos.revision_conflict_reload'))->warning()->send();
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
+            $this->dispatch('pos-refresh-tiles');
+            $this->closeModal();
+        } catch (Throwable $e) {
+            $this->uiState = 'failed';
+            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    public function formatMinor(int $minor): string
+    {
+        return MenuItemMoney::formatMinorForDisplay($minor);
+    }
+
+    public function render()
+    {
+        return view('livewire.pos.cloture-modal');
+    }
+
+    private function loadPricing(): bool
+    {
+        $session = TableSession::query()
+            ->with('restaurantTable:id,name')
+            ->where('shop_id', $this->shopId)
+            ->whereKey($this->tableSessionId)
+            ->first();
+
+        if ($session === null) {
+            Notification::make()->title(__('rad_table.active_session_not_found'))->danger()->send();
+            $this->closeModal();
+
+            return false;
+        }
+
+        $tid = (int) $session->restaurant_table_id;
+        if (StaffTableSettlementPricing::isStaffMealTableId($tid)
+            && is_string($session->staff_name)
+            && trim($session->staff_name) !== '') {
+            $this->tableLabel = trim($session->staff_name);
+        } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
+            && is_string($session->customer_name)
+            && trim($session->customer_name) !== '') {
+            $this->tableLabel = trim($session->customer_name);
+        } else {
+            $this->tableLabel = (string) ($session->restaurantTable->name ?? '');
+        }
+        $this->shopName = (string) (config('app.name') ?? 'Restaurant');
+
+        $orders = PosOrder::query()
+            ->where('shop_id', $this->shopId)
+            ->where('table_session_id', $session->id)
+            ->where('status', '!=', OrderStatus::Voided)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $pricing = StaffTableSettlementPricing::calculateFromPosOrders(
+            $orders,
+            $tid,
+            app(PricingEngine::class),
+        );
+
+        $this->subtotalMinor = $pricing->orderSubtotalMinor;
+        $this->discountAppliedMinor = $pricing->orderDiscountAppliedMinor;
+        $this->roundingAdjustmentMinor = $pricing->roundingAdjustmentMinor;
+        $this->finalTotalMinor = $pricing->finalTotalMinor;
+
+        $sugg = app(SettlementSuggestionService::class)->suggest($pricing->finalTotalMinor);
+        $this->justeMinor = $sugg->justeMinor;
+        $this->procheMinor = $sugg->procheMinor;
+
+        $this->tenderedMinor = null;
+        $this->tenderedDtInput = '';
+        $this->changeMinor = 0;
+
+        return true;
+    }
+}
+</file>
+
+<file path="app/Livewire/Pos/StaffMealBar.php">
+<?php
+
+namespace App\Livewire\Pos;
+
+use App\Domains\Pos\Tables\TableUiStatus;
+use App\Services\Pos\TableDashboardQueryService;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
+use Livewire\Attributes\Reactive;
+use Livewire\Component;
+
+/**
+ * Staff meal (賄い) tables 100–104: compact footer buttons, outside the customer floor grid.
+ */
+class StaffMealBar extends Component
+{
+    #[Locked]
+    public int $shopId = 0;
+
+    #[Reactive]
+    public bool $staffDoorOpen = false;
+
+    /**
+     * When true, render as a compact strip beside Change Table / Logout (same footer band).
+     */
+    public bool $inlineInFooter = false;
+
+    public bool $isPollingPaused = false;
+
+    /** 右ペインで開いている賄い卓（ビューで amber 反転 + scale に使用） */
+    public ?int $floorSelectedStaffTableId = null;
+
+    /**
+     * @var list<array<string, mixed>>
+     */
+    public array $staffTiles = [];
+
+    public function mount(int $shopId, bool $inlineInFooter = false): void
+    {
+        $this->shopId = $shopId;
+        $this->inlineInFooter = $inlineInFooter;
+        if ($this->shopId > 0) {
+            $this->loadStaffTiles();
+        }
+    }
+
+    #[On('pos-tile-interaction-ended')]
+    public function onTileInteractionEnded(): void
+    {
+        $this->isPollingPaused = false;
+        $this->floorSelectedStaffTableId = null;
+    }
+
+    /**
+     * 通常卓グリッドから卓が開かれたとき、賄い帯のサーバ側リング状態を外す（Livewire 相乗りは TableStatusGrid のみ）。
+     */
+    #[On('pos-staff-meal-floor-reset')]
+    public function onStaffMealFloorReset(): void
+    {
+        $this->floorSelectedStaffTableId = null;
+        $this->skipRender();
+    }
+
+    #[On('pos-refresh-tiles')]
+    public function onRefreshTiles(): void
+    {
+        if ($this->shopId > 0) {
+            $this->loadStaffTiles();
+        }
+    }
+
+    public function loadStaffTiles(): void
+    {
+        if ($this->shopId === 0) {
+            $this->staffTiles = [];
+
+            return;
+        }
+        $data = app(TableDashboardQueryService::class)->getDashboardData($this->shopId);
+        $out = [];
+        foreach ($data->tiles as $tile) {
+            $a = $tile->toArray();
+            $id = (int) ($a['restaurantTableId'] ?? 0);
+            if ($id >= 100 && $id <= 104) {
+                $out[] = $a;
+            }
+        }
+        usort($out, static fn (array $x, array $y): int => ($x['restaurantTableId'] ?? 0) <=> ($y['restaurantTableId'] ?? 0));
+        $this->staffTiles = array_slice($out, 0, 5);
+    }
+
+    /**
+     * ハートで開く / スタッフ卓に白以外（待機中以外）の状態があれば常に表示。
+     */
+    #[Computed]
+    public function showStaffMealBar(): bool
+    {
+        if ($this->shopId <= 0) {
+            return false;
+        }
+        if ($this->staffDoorOpen) {
+            return true;
+        }
+        foreach ($this->staffTiles as $t) {
+            if ((string) ($t['uiStatus'] ?? TableUiStatus::Free->value) !== TableUiStatus::Free->value) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function openTableContext(int $tableId, mixed $sessionId = null): void
+    {
+        $sid = is_numeric($sessionId) ? (int) $sessionId : null;
+        if ($sid !== null && $sid < 1) {
+            $sid = null;
+        }
+        $this->floorSelectedStaffTableId = $tableId;
+        $this->dispatch('pos-takeaway-bar-clear-ui');
+        $this->isPollingPaused = true;
+        $this->dispatch('pos-tile-interaction-started');
+        $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid)
+            ->to(TableActionHost::class);
+        $this->dispatch('pos-table-selection-sync', tableId: $tableId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $t
+     */
+    public function tileSurfaceClasses(array $t): string
+    {
+        $status = (string) ($t['uiStatus'] ?? TableUiStatus::Free->value);
+
+        return match ($status) {
+            TableUiStatus::Alert->value => 'bg-red-600 text-white border-red-800 dark:bg-red-500 dark:border-red-300',
+            TableUiStatus::Pending->value => 'bg-red-600 text-white border-red-800 dark:bg-red-500 dark:border-red-300',
+            TableUiStatus::Active->value => 'bg-sky-400 text-sky-950 border-sky-600 shadow-sm dark:bg-sky-500 dark:text-sky-950 dark:border-sky-300',
+            TableUiStatus::Billed->value => 'bg-sky-200 text-sky-950 border-sky-600 dark:bg-sky-700 dark:text-sky-50 dark:border-sky-400',
+
+            default => 'bg-white text-gray-950 border-gray-300 dark:bg-gray-800 dark:text-white dark:border-gray-600',
+        };
+    }
+
+    public function render()
+    {
+        return view('livewire.pos.staff-meal-bar');
+    }
+}
+</file>
+
 <file path="app/Livewire/Pos/TakeawayBar.php">
 <?php
 
@@ -7722,6 +7904,9 @@ class TakeawayBar extends Component
         $this->customerPhone = '';
         $this->floorSelectedTakeawayTableId = null;
         $this->loadTakeawayTiles();
+        if ($this->shopId > 0) {
+            app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+        }
         $this->dispatch('pos-refresh-tiles');
         $this->dispatch('pos-tile-interaction-ended');
 
@@ -7761,159 +7946,6 @@ class TakeawayBar extends Component
     public function render()
     {
         return view('livewire.pos.takeaway-bar');
-    }
-}
-</file>
-
-<file path="app/Livewire/Pos/StaffMealBar.php">
-<?php
-
-namespace App\Livewire\Pos;
-
-use App\Domains\Pos\Tables\TableUiStatus;
-use App\Services\Pos\TableDashboardQueryService;
-use Livewire\Attributes\Computed;
-use Livewire\Attributes\Locked;
-use Livewire\Attributes\On;
-use Livewire\Attributes\Reactive;
-use Livewire\Component;
-
-/**
- * Staff meal (賄い) tables 100–104: compact footer buttons, outside the customer floor grid.
- */
-class StaffMealBar extends Component
-{
-    #[Locked]
-    public int $shopId = 0;
-
-    #[Reactive]
-    public bool $staffDoorOpen = false;
-
-    /**
-     * When true, render as a compact strip beside Change Table / Logout (same footer band).
-     */
-    public bool $inlineInFooter = false;
-
-    public bool $isPollingPaused = false;
-
-    /** 右ペインで開いている賄い卓（ビューで amber 反転 + scale に使用） */
-    public ?int $floorSelectedStaffTableId = null;
-
-    /**
-     * @var list<array<string, mixed>>
-     */
-    public array $staffTiles = [];
-
-    public function mount(int $shopId, bool $inlineInFooter = false): void
-    {
-        $this->shopId = $shopId;
-        $this->inlineInFooter = $inlineInFooter;
-        if ($this->shopId > 0) {
-            $this->loadStaffTiles();
-        }
-    }
-
-    #[On('pos-tile-interaction-ended')]
-    public function onTileInteractionEnded(): void
-    {
-        $this->isPollingPaused = false;
-        $this->floorSelectedStaffTableId = null;
-    }
-
-    /**
-     * 通常卓グリッドから卓が開かれたとき、賄い帯のサーバ側リング状態を外す（Livewire 相乗りは TableStatusGrid のみ）。
-     */
-    #[On('pos-staff-meal-floor-reset')]
-    public function onStaffMealFloorReset(): void
-    {
-        $this->floorSelectedStaffTableId = null;
-        $this->skipRender();
-    }
-
-    #[On('pos-refresh-tiles')]
-    public function onRefreshTiles(): void
-    {
-        if ($this->shopId > 0) {
-            $this->loadStaffTiles();
-        }
-    }
-
-    public function loadStaffTiles(): void
-    {
-        if ($this->shopId === 0) {
-            $this->staffTiles = [];
-
-            return;
-        }
-        $data = app(TableDashboardQueryService::class)->getDashboardData($this->shopId);
-        $out = [];
-        foreach ($data->tiles as $tile) {
-            $a = $tile->toArray();
-            $id = (int) ($a['restaurantTableId'] ?? 0);
-            if ($id >= 100 && $id <= 104) {
-                $out[] = $a;
-            }
-        }
-        usort($out, static fn (array $x, array $y): int => ($x['restaurantTableId'] ?? 0) <=> ($y['restaurantTableId'] ?? 0));
-        $this->staffTiles = array_slice($out, 0, 5);
-    }
-
-    /**
-     * ハートで開く / スタッフ卓に白以外（待機中以外）の状態があれば常に表示。
-     */
-    #[Computed]
-    public function showStaffMealBar(): bool
-    {
-        if ($this->shopId <= 0) {
-            return false;
-        }
-        if ($this->staffDoorOpen) {
-            return true;
-        }
-        foreach ($this->staffTiles as $t) {
-            if ((string) ($t['uiStatus'] ?? TableUiStatus::Free->value) !== TableUiStatus::Free->value) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public function openTableContext(int $tableId, mixed $sessionId = null): void
-    {
-        $sid = is_numeric($sessionId) ? (int) $sessionId : null;
-        if ($sid !== null && $sid < 1) {
-            $sid = null;
-        }
-        $this->floorSelectedStaffTableId = $tableId;
-        $this->dispatch('pos-takeaway-bar-clear-ui');
-        $this->isPollingPaused = true;
-        $this->dispatch('pos-tile-interaction-started');
-        $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid)
-            ->to(TableActionHost::class);
-        $this->dispatch('pos-table-selection-sync', tableId: $tableId);
-    }
-
-    /**
-     * @param  array<string, mixed>  $t
-     */
-    public function tileSurfaceClasses(array $t): string
-    {
-        $status = (string) ($t['uiStatus'] ?? TableUiStatus::Free->value);
-
-        return match ($status) {
-            TableUiStatus::Alert->value => 'bg-red-600 text-white border-red-800 dark:bg-red-500 dark:border-red-300',
-            TableUiStatus::Pending->value => 'bg-red-600 text-white border-red-800 dark:bg-red-500 dark:border-red-300',
-            TableUiStatus::Active->value => 'bg-sky-400 text-sky-950 border-sky-600 shadow-sm dark:bg-sky-500 dark:text-sky-950 dark:border-sky-300',
-            TableUiStatus::Billed->value => 'bg-sky-200 text-sky-950 border-sky-600 dark:bg-sky-700 dark:text-sky-50 dark:border-sky-400',
-
-            default => 'bg-white text-gray-950 border-gray-300 dark:bg-gray-800 dark:text-white dark:border-gray-600',
-        };
-    }
-
-    public function render()
-    {
-        return view('livewire.pos.staff-meal-bar');
     }
 }
 </file>
@@ -9317,197 +9349,6 @@ final class KdsQueryService
 </div>
 </file>
 
-<file path="resources/views/livewire/pos/takeaway-bar.blade.php">
-<div
-    @class([
-        'w-full shrink-0 border-t border-yellow-200 bg-yellow-50/90 dark:border-yellow-800 dark:bg-yellow-900/30',
-    ])
-    x-data="{ peerTakeawayTid: null }"
-    x-on:pos-floor-peer-sync.window="peerTakeawayTid = ($event.detail && $event.detail.takeawayFloorTid != null) ? Number($event.detail.takeawayFloorTid) : null"
-    x-on:pos-tile-interaction-ended.window="peerTakeawayTid = null"
-    data-takeaway-bar="true"
-    role="region"
-    aria-label="{{ __('pos.takeaway_region_label') }}"
->
-    <div class="max-w-full px-2 py-2 sm:px-6 sm:py-5">
-        <p class="mb-0.5 text-[12px] font-extrabold uppercase tracking-wider text-yellow-900 dark:text-yellow-100 sm:text-[10px]">
-            {{ __('pos.takeaway_heading') }}
-        </p>
-        @if (count($takeawayTiles) === 0)
-            <p class="text-[10px] text-yellow-950/80 dark:text-yellow-100/90">
-                {{ __('pos.takeaway_no_tables') }}
-            </p>
-        @else
-            {{-- 6 卓固定・1 行。選択: amber 反転 + scale / クリックフラッシュ: app.css --}}
-            <div class="flex w-full min-w-0 flex-nowrap gap-px overflow-visible py-px sm:gap-0.5 sm:py-0.5 md:gap-1">
-                @foreach ($takeawayTiles as $tile)
-                    @php
-                        $tid = (int) $tile['restaurantTableId'];
-                        $isFloorSel = $this->floorSelectedTakeawayTableId !== null && $this->floorSelectedTakeawayTableId === $tid;
-                        $surface = $this->tileSurfaceClasses($tile);
-                        $previewTableName =
-                            (string) ($tile['restaurantTableName'] ?? '') !== ''
-                                ? (string) $tile['restaurantTableName']
-                                : (string) __('pos.table_name_fallback', ['id' => $tid]);
-                    @endphp
-                    <button
-                        type="button"
-                        wire:click="openModalForTable({{ $tid }})"
-                        wire:key="takeaway-tile-{{ $tid }}"
-                        @pointerdown="window.dispatchEvent(new CustomEvent('show-local-skeleton', { detail: { tid: {{ $tid }}, token: Date.now(), tableName: @js($previewTableName) }, bubbles: true }))"
-                        x-data="{ flash: false, flashTimer: null }"
-                        x-on:click="
-                            flash = true;
-                            if (flashTimer) clearTimeout(flashTimer);
-                            flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);
-                        "
-                        x-bind:class="{ 'pos-tile-select-flash': flash }"
-                        data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
-                        title="{{ $this->tileLabel($tile) }}"
-                        @class([
-                            'relative z-0 inline-flex min-h-8 min-w-0 flex-1 basis-0 items-center justify-center rounded border px-1 py-1 text-[9px] font-semibold leading-none shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 sm:min-h-[3rem] sm:px-0.5 sm:py-1 sm:text-[9px] '.$surface,
-                            '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isFloorSel,
-                            'font-semibold' => ! $isFloorSel,
-                            'font-black' => $isFloorSel,
-                        ])
-                        x-bind:class="(peerTakeawayTid === {{ $tid }} && ! @js($isFloorSel)) ? '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400 font-black' : ''"
-                    >
-                        <span @class(['truncate', 'font-black' => $isFloorSel])>{{ $this->tileLabel($tile) }}</span>
-                    </button>
-                @endforeach
-            </div>
-        @endif
-    </div>
-
-    @if ($modalOpen && $selectedTableId !== null)
-        @teleport('body')
-            <div
-                data-pos-takeaway-guest-modal="true"
-                wire:key="takeaway-guest-modal-shell-{{ $selectedTableId }}"
-                x-data="{ optimisticClosing: false }"
-                x-show="!optimisticClosing"
-                x-init="
-                    $nextTick(() => {
-                        window.dispatchEvent(
-                            new CustomEvent('open-modal', {
-                                detail: { id: 'pos-takeaway-guest-modal' },
-                                bubbles: true,
-                            }),
-                        )
-                    })
-                "
-                x-on:close-modal.window="
-                    if ($event.detail && $event.detail.id === 'pos-takeaway-guest-modal') {
-                        $wire.closeModal()
-                    }
-                "
-            >
-                <x-filament::modal
-                    id="pos-takeaway-guest-modal"
-                    :heading="__('pos.takeaway_modal_title', ['id' => $selectedTableId])"
-                    :description="__('pos.takeaway_modal_subtitle')"
-                    width="md"
-                    display-classes="block"
-                    :close-button="true"
-                    :close-by-clicking-away="true"
-                    :close-by-escaping="true"
-                >
-                    <div class="space-y-4">
-                        <div
-                            class="fi-fo-field-wrp"
-                            data-field-wrapper
-                        >
-                            <div
-                                class="grid gap-y-2"
-                            >
-                                <label
-                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
-                                    for="takeaway-customer-name-{{ $selectedTableId }}"
-                                >
-                                    {{ __('pos.takeaway_customer_name') }}
-                                </label>
-                                <x-filament::input.wrapper
-                                    :valid="! $errors->has('customerName')"
-                                >
-                                    <x-filament::input
-                                        id="takeaway-customer-name-{{ $selectedTableId }}"
-                                        type="text"
-                                        wire:model.blur="customerName"
-                                        autocomplete="name"
-                                    />
-                                </x-filament::input.wrapper>
-                                @error('customerName')
-                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
-                                        {{ $message }}
-                                    </p>
-                                @enderror
-                            </div>
-                        </div>
-
-                        <div
-                            class="fi-fo-field-wrp"
-                            data-field-wrapper
-                        >
-                            <div
-                                class="grid gap-y-2"
-                            >
-                                <label
-                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
-                                    for="takeaway-customer-phone-{{ $selectedTableId }}"
-                                >
-                                    {{ __('pos.takeaway_customer_phone') }}
-                                </label>
-                                <x-filament::input.wrapper
-                                    :valid="! $errors->has('customerPhone')"
-                                >
-                                    <x-filament::input
-                                        id="takeaway-customer-phone-{{ $selectedTableId }}"
-                                        type="tel"
-                                        wire:model.blur="customerPhone"
-                                        inputmode="tel"
-                                        autocomplete="tel"
-                                    />
-                                </x-filament::input.wrapper>
-                                @error('customerPhone')
-                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
-                                        {{ $message }}
-                                    </p>
-                                @enderror
-                            </div>
-                        </div>
-                    </div>
-
-                    <x-slot name="footer">
-                        <div
-                            class="fi-modal-footer-actions flex flex-wrap items-center gap-3"
-                        >
-                            <x-filament::button
-                                type="button"
-                                color="gray"
-                                outlined
-                                wire:click="closeModal"
-                            >
-                                {{ __('pos.takeaway_cancel') }}
-                            </x-filament::button>
-                            <x-filament::button
-                                type="button"
-                                color="warning"
-                                wire:click="confirmTakeawayGuest"
-                                x-on:click="optimisticClosing = true"
-                                wire:loading.attr="disabled"
-                                wire:target="confirmTakeawayGuest"
-                            >
-                                {{ __('pos.takeaway_confirm') }}
-                            </x-filament::button>
-                        </div>
-                    </x-slot>
-                </x-filament::modal>
-            </div>
-        @endteleport
-    @endif
-</div>
-</file>
-
 <file path="routes/web.php">
 <?php
 
@@ -9930,6 +9771,198 @@ class TableStatusGrid extends Component
 }
 </file>
 
+<file path="resources/views/livewire/pos/takeaway-bar.blade.php">
+<div
+    @class([
+        'w-full shrink-0 border-t border-yellow-200 bg-yellow-50/90 dark:border-yellow-800 dark:bg-yellow-900/30',
+    ])
+    x-data="{ peerTakeawayTid: null }"
+    x-on:pos-floor-peer-sync.window="peerTakeawayTid = ($event.detail && $event.detail.takeawayFloorTid != null) ? Number($event.detail.takeawayFloorTid) : null"
+    x-on:pos-tile-interaction-ended.window="peerTakeawayTid = null"
+    data-takeaway-bar="true"
+    role="region"
+    aria-label="{{ __('pos.takeaway_region_label') }}"
+>
+    <div class="max-w-full px-2 py-2 sm:px-6 sm:py-5">
+        <p class="mb-0.5 text-[12px] font-extrabold uppercase tracking-wider text-yellow-900 dark:text-yellow-100 sm:text-[10px]">
+            {{ __('pos.takeaway_heading') }}
+        </p>
+        @if (count($takeawayTiles) === 0)
+            <p class="text-[10px] text-yellow-950/80 dark:text-yellow-100/90">
+                {{ __('pos.takeaway_no_tables') }}
+            </p>
+        @else
+            {{-- 6 卓固定・1 行。選択: amber 反転 + scale / クリックフラッシュ: app.css --}}
+            <div class="flex w-full min-w-0 flex-nowrap gap-px overflow-visible py-px sm:gap-0.5 sm:py-0.5 md:gap-1">
+                @foreach ($takeawayTiles as $tile)
+                    @php
+                        $tid = (int) $tile['restaurantTableId'];
+                        $sid = (int) ($tile['activeTableSessionId'] ?? 0);
+                        $isFloorSel = $this->floorSelectedTakeawayTableId !== null && $this->floorSelectedTakeawayTableId === $tid;
+                        $surface = $this->tileSurfaceClasses($tile);
+                        $previewTableName =
+                            (string) ($tile['restaurantTableName'] ?? '') !== ''
+                                ? (string) $tile['restaurantTableName']
+                                : (string) __('pos.table_name_fallback', ['id' => $tid]);
+                    @endphp
+                    <button
+                        type="button"
+                        wire:click="openModalForTable({{ $tid }})"
+                        wire:key="takeaway-tile-{{ $tid }}"
+                        @pointerdown="window.dispatchEvent(new CustomEvent('show-local-skeleton', { detail: { tid: {{ $tid }}, token: Date.now(), tableName: @js($previewTableName), sessionId: @js($sid > 0 ? $sid : null) }, bubbles: true }))"
+                        x-data="{ flash: false, flashTimer: null }"
+                        x-on:click="
+                            flash = true;
+                            if (flashTimer) clearTimeout(flashTimer);
+                            flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);
+                        "
+                        x-bind:class="{ 'pos-tile-select-flash': flash }"
+                        data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
+                        title="{{ $this->tileLabel($tile) }}"
+                        @class([
+                            'relative z-0 inline-flex min-h-8 min-w-0 flex-1 basis-0 items-center justify-center rounded border px-1 py-1 text-[9px] font-semibold leading-none shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 sm:min-h-[3rem] sm:px-0.5 sm:py-1 sm:text-[9px] '.$surface,
+                            '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isFloorSel,
+                            'font-semibold' => ! $isFloorSel,
+                            'font-black' => $isFloorSel,
+                        ])
+                        x-bind:class="(peerTakeawayTid === {{ $tid }} && ! @js($isFloorSel)) ? '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400 font-black' : ''"
+                    >
+                        <span @class(['truncate', 'font-black' => $isFloorSel])>{{ $this->tileLabel($tile) }}</span>
+                    </button>
+                @endforeach
+            </div>
+        @endif
+    </div>
+
+    @if ($modalOpen && $selectedTableId !== null)
+        @teleport('body')
+            <div
+                data-pos-takeaway-guest-modal="true"
+                wire:key="takeaway-guest-modal-shell-{{ $selectedTableId }}"
+                x-data="{ optimisticClosing: false }"
+                x-show="!optimisticClosing"
+                x-init="
+                    $nextTick(() => {
+                        window.dispatchEvent(
+                            new CustomEvent('open-modal', {
+                                detail: { id: 'pos-takeaway-guest-modal' },
+                                bubbles: true,
+                            }),
+                        )
+                    })
+                "
+                x-on:close-modal.window="
+                    if ($event.detail && $event.detail.id === 'pos-takeaway-guest-modal') {
+                        $wire.closeModal()
+                    }
+                "
+            >
+                <x-filament::modal
+                    id="pos-takeaway-guest-modal"
+                    :heading="__('pos.takeaway_modal_title', ['id' => $selectedTableId])"
+                    :description="__('pos.takeaway_modal_subtitle')"
+                    width="md"
+                    display-classes="block"
+                    :close-button="true"
+                    :close-by-clicking-away="true"
+                    :close-by-escaping="true"
+                >
+                    <div class="space-y-4">
+                        <div
+                            class="fi-fo-field-wrp"
+                            data-field-wrapper
+                        >
+                            <div
+                                class="grid gap-y-2"
+                            >
+                                <label
+                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
+                                    for="takeaway-customer-name-{{ $selectedTableId }}"
+                                >
+                                    {{ __('pos.takeaway_customer_name') }}
+                                </label>
+                                <x-filament::input.wrapper
+                                    :valid="! $errors->has('customerName')"
+                                >
+                                    <x-filament::input
+                                        id="takeaway-customer-name-{{ $selectedTableId }}"
+                                        type="text"
+                                        wire:model.blur="customerName"
+                                        autocomplete="name"
+                                    />
+                                </x-filament::input.wrapper>
+                                @error('customerName')
+                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
+                                        {{ $message }}
+                                    </p>
+                                @enderror
+                            </div>
+                        </div>
+
+                        <div
+                            class="fi-fo-field-wrp"
+                            data-field-wrapper
+                        >
+                            <div
+                                class="grid gap-y-2"
+                            >
+                                <label
+                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
+                                    for="takeaway-customer-phone-{{ $selectedTableId }}"
+                                >
+                                    {{ __('pos.takeaway_customer_phone') }}
+                                </label>
+                                <x-filament::input.wrapper
+                                    :valid="! $errors->has('customerPhone')"
+                                >
+                                    <x-filament::input
+                                        id="takeaway-customer-phone-{{ $selectedTableId }}"
+                                        type="tel"
+                                        wire:model.blur="customerPhone"
+                                        inputmode="tel"
+                                        autocomplete="tel"
+                                    />
+                                </x-filament::input.wrapper>
+                                @error('customerPhone')
+                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
+                                        {{ $message }}
+                                    </p>
+                                @enderror
+                            </div>
+                        </div>
+                    </div>
+
+                    <x-slot name="footer">
+                        <div
+                            class="fi-modal-footer-actions flex flex-wrap items-center gap-3"
+                        >
+                            <x-filament::button
+                                type="button"
+                                color="gray"
+                                outlined
+                                wire:click="closeModal"
+                            >
+                                {{ __('pos.takeaway_cancel') }}
+                            </x-filament::button>
+                            <x-filament::button
+                                type="button"
+                                color="warning"
+                                wire:click="confirmTakeawayGuest"
+                                x-on:click="optimisticClosing = true"
+                                wire:loading.attr="disabled"
+                                wire:target="confirmTakeawayGuest"
+                            >
+                                {{ __('pos.takeaway_confirm') }}
+                            </x-filament::button>
+                        </div>
+                    </x-slot>
+                </x-filament::modal>
+            </div>
+        @endteleport
+    @endif
+</div>
+</file>
+
 <file path="resources/views/livewire/pos/staff-meal-bar.blade.php">
 <div @class([
     'w-full max-w-full shrink-0 max-md:w-full',
@@ -9961,15 +9994,22 @@ class TableStatusGrid extends Component
             x-data="{
                 optimisticStaffTableId: null,
                 peerStaffTid: null,
-                clickStaffTile(tid, tableName) {
+                clickStaffTile(tid, tableName, sessionId) {
                     const token = Date.now()
                     this.optimisticStaffTableId = tid;
+                    const sid =
+                        typeof sessionId === 'number' &&
+                        Number.isFinite(sessionId) &&
+                        sessionId > 0
+                            ? sessionId
+                            : null
                     window.dispatchEvent(
                         new CustomEvent('show-local-skeleton', {
                             detail: {
                                 tid: tid,
                                 token: token,
                                 tableName: typeof tableName === 'string' ? tableName : '',
+                                sessionId: sid,
                             },
                             bubbles: true,
                         }),
@@ -10006,7 +10046,7 @@ class TableStatusGrid extends Component
                     type="button"
                     wire:click="openTableContext({{ $tid }}, {{ $sid > 0 ? $sid : 'null' }})"
                     wire:key="staff-meal-{{ $tid }}"
-                    @pointerdown="clickStaffTile({{ $tid }}, @js($previewTableName))"
+                    @pointerdown="clickStaffTile({{ $tid }}, @js($previewTableName), @js($sid > 0 ? $sid : null))"
                     x-bind:class="{
                         '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear will-change-transform dark:ring-amber-400': @js($isStaffSel) || optimisticStaffTableId === {{ $tid }} || peerStaffTid === {{ $tid }},
                     }"
@@ -10043,18 +10083,25 @@ class TableStatusGrid extends Component
     x-data="{
         selectedTableId: null,
         optimisticTableId: null,
-        clickTile(tid, tableName) {
+        clickTile(tid, tableName, sessionId) {
             const token = Date.now()
             this.optimisticTableId = null;
             this.$nextTick(() => {
                 this.optimisticTableId = tid;
             })
+            const sid =
+                typeof sessionId === 'number' &&
+                Number.isFinite(sessionId) &&
+                sessionId > 0
+                    ? sessionId
+                    : null
             window.dispatchEvent(
                 new CustomEvent('show-local-skeleton', {
                     detail: {
                         tid: tid,
                         token: token,
                         tableName: typeof tableName === 'string' ? tableName : '',
+                        sessionId: sid,
                     },
                     bubbles: true,
                 }),
@@ -10107,7 +10154,7 @@ class TableStatusGrid extends Component
                             type="button"
                             wire:click="openTableContext({{ $tid }}, {{ $sid }}, @js((string) ($tile['restaurantTableName'] ?? '')))"
                             @click="selectedTableId = {{ $tid }}"
-                            @pointerdown="clickTile({{ $tid }}, @js($previewTableName))"
+                            @pointerdown="clickTile({{ $tid }}, @js($previewTableName), @js($sid > 0 ? $sid : null))"
                             x-bind:class="{
                                 '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': optimisticTableId === {{ $tid }},
                             }"
@@ -10186,6 +10233,7 @@ use App\Models\OrderLine;
 use App\Models\PosOrder;
 use App\Models\RestaurantTable;
 use App\Models\TableSession;
+use App\Services\Pos\TableDashboardQueryService;
 use App\Services\Pos\TableSessionLifecycleService;
 use App\Services\StaffDirectoryService;
 use App\Services\StaffPinAuthenticationService;
@@ -10390,6 +10438,7 @@ class TableActionHost extends Component
         if ($sid === null) {
             $this->isOrdersLoaded = true;
             $this->dispatchBrowserPeerSyncForOpenedTable($tid);
+            $this->dispatchAuthoritativeLinePayload();
             $this->posDraftSyncContextToBrowser();
 
             return;
@@ -10432,22 +10481,46 @@ class TableActionHost extends Component
                 : null,
         ])->toHtml();
         $this->js(
-            'try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
-            .'if(s&&typeof s.switchContext==="function"){s.switchContext(p[0],p[1],p[2]);}}catch(e){}'
+            '(function(){try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
+            .'if(s&&typeof s.switchContext==="function"){s.switchContext(p[0],p[1],p[2]);}}catch(e){}})()'
         );
+    }
+
+    /**
+     * Tile grid reads {@see TableDashboardQueryService} with a 1s cache; forget before refresh so uiStatus
+     * (e.g. unacked placed / red tiles) matches DB immediately after mutations.
+     */
+    private function dispatchPosRefreshTilesWithShopDashboardCacheForget(): void
+    {
+        if ($this->shopId > 0) {
+            app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+        }
+        $this->dispatch('pos-refresh-tiles');
     }
 
     private function posDraftHostCloseJs(int $shopId, ?int $tableId, ?int $sessionId): string
     {
         $payload = Js::from([$shopId, $tableId, $sessionId])->toHtml();
 
-        return 'try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
-            .'if(s&&typeof s.onHostClosed==="function"){s.onHostClosed(p[0],p[1],p[2]);}}catch(e){}';
+        return '(function(){try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
+            .'if(s&&typeof s.onHostClosed==="function"){s.onHostClosed(p[0],p[1],p[2]);}}catch(e){}})()';
+    }
+
+    /**
+     * Lets TableActionHost Alpine treat the next `pos-action-host-authoritative` as user-driven
+     * (switch afterimage → live). Dispatched before mutating server state.
+     */
+    private function markAfterimageSelfActionForBrowser(): void
+    {
+        $this->js('(function(){try{window.dispatchEvent(new CustomEvent(\'pos-afterimage-self-action\',{bubbles:true}));}catch(e){}})()');
     }
 
     /**
      * Sync takeaway/staff floor rings without bundling extra Livewire components:
      * fires browser CustomEvents consumed by Alpine on the POS bars.
+     *
+     * `dispatchAuthoritativeLinePayload()` emits `pos-action-host-ui-sync` immediately before
+     * `pos-action-host-authoritative` after every successful `loadOrderDetails()` (and empty-open path).
      */
     private function dispatchBrowserPeerSyncForOpenedTable(int $tableId): void
     {
@@ -10459,7 +10532,83 @@ class TableActionHost extends Component
         ])->toHtml();
         $this->js(
             'window.dispatchEvent(new CustomEvent("pos-floor-peer-sync", { bubbles: true, detail: '.$detail.' }));'
-            ."window.dispatchEvent(new CustomEvent('pos-action-host-ui-sync', { bubbles: true }));"
+        );
+    }
+
+    /**
+     * Browser: `pos-action-host-ui-sync` then `pos-action-host-authoritative` in a single Livewire `$this->js()`
+     * blob so Alpine sees a fixed ordering (skeleton → afterimage → live hand-off).
+     *
+     * @return list<array{id:int,name:string,qty:int,summary:string}>
+     */
+    private function buildAuthoritativeLinePayloadLines(): array
+    {
+        if (! $this->isOrdersLoaded) {
+            return [];
+        }
+        $out = [];
+        foreach ($this->posOrders as $order) {
+            foreach ($order->lines as $line) {
+                if ($line->status === OrderLineStatus::Cancelled) {
+                    continue;
+                }
+                $out[] = [
+                    'id' => (int) $line->getKey(),
+                    'name' => trim((string) $line->snapshot_name),
+                    'qty' => (int) $line->qty,
+                    'summary' => $this->linePrimaryText($line),
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    private function resolveAuthoritativeRestaurantTableId(): ?int
+    {
+        if ($this->session !== null) {
+            $tid = (int) ($this->session->restaurant_table_id ?? 0);
+
+            return $tid > 0 ? $tid : null;
+        }
+        if ($this->activeRestaurantTableId !== null && (int) $this->activeRestaurantTableId > 0) {
+            return (int) $this->activeRestaurantTableId;
+        }
+
+        return null;
+    }
+
+    private function resolveAuthoritativeTableSessionId(): ?int
+    {
+        if ($this->activeTableSessionId === null || (int) $this->activeTableSessionId < 1) {
+            return null;
+        }
+        if ($this->session === null) {
+            return null;
+        }
+
+        return (int) $this->activeTableSessionId;
+    }
+
+    /**
+     * Emit line-only authoritative payload for the afterimage cache (no totals).
+     * Always chained after `pos-action-host-ui-sync` in the same script string (do not split calls).
+     */
+    private function dispatchAuthoritativeLinePayload(): void
+    {
+        if ($this->shopId < 1) {
+            return;
+        }
+        $lines = $this->buildAuthoritativeLinePayloadLines();
+        $detail = Js::from([
+            'shopId' => (int) $this->shopId,
+            'restaurantTableId' => $this->resolveAuthoritativeRestaurantTableId(),
+            'tableSessionId' => $this->resolveAuthoritativeTableSessionId(),
+            'lines' => $lines,
+        ])->toHtml();
+        $this->js(
+            "window.dispatchEvent(new CustomEvent('pos-action-host-ui-sync', { bubbles: true }));"
+            ."window.dispatchEvent(new CustomEvent('pos-action-host-authoritative', { bubbles: true, detail: {$detail} }));"
         );
     }
 
@@ -10485,11 +10634,13 @@ class TableActionHost extends Component
         $this->isOrdersLoaded = false;
         if ($this->shopId === 0) {
             $this->isOrdersLoaded = true;
+            $this->dispatchAuthoritativeLinePayload();
 
             return;
         }
         if ($sessionId === null || $sessionId < 1) {
             $this->isOrdersLoaded = true;
+            $this->dispatchAuthoritativeLinePayload();
 
             return;
         }
@@ -10502,6 +10653,7 @@ class TableActionHost extends Component
             ->first();
         if ($existing === null) {
             $this->isOrdersLoaded = true;
+            $this->dispatchAuthoritativeLinePayload();
 
             return;
         }
@@ -10509,6 +10661,7 @@ class TableActionHost extends Component
         $this->isOrdersLoaded = true;
         $this->sessionRowCache = $existing;
         $this->forgetSessionOrderComputed(preserveSessionRowCache: true);
+        $this->dispatchAuthoritativeLinePayload();
     }
 
     /**
@@ -10666,7 +10819,8 @@ class TableActionHost extends Component
             }
         }
         $this->forgetSessionOrderComputed();
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchAuthoritativeLinePayload();
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     /**
@@ -10719,12 +10873,12 @@ class TableActionHost extends Component
     {
         $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
         if ($sid < 1 || (int) $shop_id !== $this->shopId) {
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
 
             return;
         }
         if ($this->activeTableSessionId !== $sid) {
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
 
             return;
         }
@@ -10734,7 +10888,7 @@ class TableActionHost extends Component
             return;
         }
         $this->loadSessionData($sid);
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     private function applyPendingEchoReloadIfAny(): void
@@ -10747,7 +10901,7 @@ class TableActionHost extends Component
             return;
         }
         $this->loadSessionData((int) $this->activeTableSessionId);
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     public function ajouter(): void
@@ -10878,6 +11032,7 @@ class TableActionHost extends Component
         $qty = max(1, min(200, (int) $this->addQty));
         $this->addQty = $qty;
 
+        $this->markAfterimageSelfActionForBrowser();
         try {
             app(AddPosOrderFromStaffAction::class)->execute(
                 $this->shopId,
@@ -10890,7 +11045,7 @@ class TableActionHost extends Component
             );
             // 明示: 商品追加後も卓コンテキストを維持するため closeHost / pos-tile-interaction-ended を呼ばない。
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->closeAddModal();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
@@ -10935,7 +11090,7 @@ class TableActionHost extends Component
         if ($sessionId > 0) {
             $this->loadSessionData($sessionId);
         }
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     /**
@@ -11103,7 +11258,7 @@ class TableActionHost extends Component
         $this->previewIntent = PrintIntent::Addition->value;
         $this->previewSessionId = 0;
         $this->loadSessionData($sid);
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
         $this->closeHostIfSessionClosed();
     }
 
@@ -11136,6 +11291,7 @@ class TableActionHost extends Component
         if (! $this->hasUnackedPlaced) {
             return;
         }
+        $this->markAfterimageSelfActionForBrowser();
         $this->uiState = 'in_flight';
         try {
             app(RecuPlacedOrdersForSessionAction::class)->execute(
@@ -11146,7 +11302,7 @@ class TableActionHost extends Component
             $this->uiState = 'success';
             // 明示: KDS 送信後も卓コンテキストを維持するため closeHost / pos-tile-interaction-ended を呼ばない。
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
@@ -11156,7 +11312,7 @@ class TableActionHost extends Component
                 ->warning()
                 ->send();
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
             $this->uiState = 'failed';
@@ -11214,6 +11370,7 @@ class TableActionHost extends Component
             return;
         }
 
+        $this->markAfterimageSelfActionForBrowser();
         $this->uiState = 'in_flight';
         try {
             DB::transaction(function () use ($drafts): void {
@@ -11259,7 +11416,7 @@ class TableActionHost extends Component
 
             $this->uiState = 'success';
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
@@ -11269,7 +11426,7 @@ class TableActionHost extends Component
                 ->warning()
                 ->send();
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
             $this->uiState = 'failed';
@@ -11346,12 +11503,12 @@ class TableActionHost extends Component
             } else {
                 $this->closeHost();
             }
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
 
             return;
         }
 
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     #[On('pos-discount-applied')]
@@ -11361,7 +11518,7 @@ class TableActionHost extends Component
             return;
         }
         $this->loadSessionData((int) $this->activeTableSessionId);
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     public function openDiscountForCurrent(): void
@@ -11509,6 +11666,7 @@ class TableActionHost extends Component
         if ($this->activeTableSessionId === null) {
             return;
         }
+        $this->markAfterimageSelfActionForBrowser();
         try {
             app(DeleteOrderLineWithPolicyAction::class)->execute(
                 shopId: $this->shopId,
@@ -11520,7 +11678,7 @@ class TableActionHost extends Component
                 approverPin: $approverPin,
             );
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
         } catch (Throwable $e) {
             Notification::make()
                 ->title(__('pos.action_failed'))
@@ -11906,6 +12064,15 @@ class TableActionHost extends Component
         isLocalSkeletonVisible: false,
         localSkeletonToken: null,
         previewTableName: '',
+        previewSessionId: null,
+        /**
+         * Line list surface: skeleton (Phase1 pulse) | afterimage (LRU hit, HIT_STALE) | live (Livewire posOrders).
+         * Authoritative alone does not leave afterimage unless selfActionPending (own write / Sync / first-load skeleton).
+         */
+        lineSurfaceMode: 'live',
+        afterimageLines: [],
+        /** Next authoritative may reveal Livewire lines (user/Sync/first skeleton load). */
+        selfActionPending: false,
         seenUnsentLineKeys: {},
         bulkSyncing: false,
         closeDrawer() {
@@ -11915,6 +12082,10 @@ class TableActionHost extends Component
             this.isLocalSkeletonVisible = false;
             this.localSkeletonToken = null;
             this.previewTableName = '';
+            this.previewSessionId = null;
+            this.lineSurfaceMode = 'live';
+            this.afterimageLines = [];
+            this.selfActionPending = false;
             $wire.closeHost();
         },
         shouldAnimateUnsent(key, isFresh) {
@@ -11968,26 +12139,107 @@ class TableActionHost extends Component
         } catch (e) {}
         localSkeletonToken = detail.token ?? Date.now()
         previewTableName = typeof detail.tableName === 'string' ? detail.tableName : ''
-        isLocalSkeletonVisible = true
+        const rawSid = detail.sessionId
+        previewSessionId =
+            typeof rawSid === 'number' && Number.isFinite(rawSid) && rawSid > 0
+                ? rawSid
+                : null
+        const shopId = {{ $echoShopId }}
+        const tidRaw = detail.tid
+        const tid =
+            tidRaw != null && tidRaw !== '' && Number.isFinite(Number(tidRaw)) ? Number(tidRaw) : 0
+        if (previewSessionId === null || shopId < 1 || tid < 1) {
+            lineSurfaceMode = 'skeleton'
+            isLocalSkeletonVisible = true
+            afterimageLines = []
+            selfActionPending = true
+        } else {
+            const s = window.Alpine && typeof Alpine.store === 'function' ? Alpine.store('posDraft') : null
+            const key = String(shopId) + ':' + String(tid) + ':' + String(previewSessionId)
+            const hit = s && typeof s.readAfterimage === 'function' ? s.readAfterimage(key) : null
+            if (hit != null && Array.isArray(hit.lines)) {
+                lineSurfaceMode = 'afterimage'
+                isLocalSkeletonVisible = false
+                selfActionPending = false
+                afterimageLines = hit.lines.map(function (l) {
+                    return {
+                        id: l.id,
+                        name: l.name,
+                        qty: l.qty,
+                        summary: l.summary,
+                    }
+                })
+            } else {
+                lineSurfaceMode = 'skeleton'
+                isLocalSkeletonVisible = true
+                afterimageLines = []
+                selfActionPending = true
+            }
+        }
     "
     x-on:pos-tile-interaction-started.window="
+        if (lineSurfaceMode === 'afterimage') {
+            return
+        }
         if (!isLocalSkeletonVisible) {
             localSkeletonToken = Date.now()
             isLocalSkeletonVisible = true
+            lineSurfaceMode = 'skeleton'
         }
     "
     x-on:pos-action-host-ui-sync.window="
-        isLocalSkeletonVisible = false
+        if (lineSurfaceMode !== 'skeleton') {
+            isLocalSkeletonVisible = false
+        }
         previewTableName = ''
+        previewSessionId = null
         localSkeletonToken = null
         try {
             performance.mark('pos-host-ui-sync')
         } catch (e) {}
     "
+    x-on:pos-action-host-authoritative.window="
+        const detail = $event.detail || {}
+        const incomingSid =
+            typeof detail.tableSessionId === 'number'
+            && Number.isFinite(detail.tableSessionId)
+            && detail.tableSessionId > 0
+                ? detail.tableSessionId
+                : null
+        if (selfActionPending) {
+            lineSurfaceMode = 'live'
+            afterimageLines = []
+            selfActionPending = false
+            isLocalSkeletonVisible = false
+            return
+        }
+        if (lineSurfaceMode === 'afterimage') {
+            return
+        }
+        const curRaw = $wire.activeTableSessionId
+        const curSid =
+            typeof curRaw === 'number' && Number.isFinite(curRaw) && curRaw > 0
+                ? curRaw
+                : (curRaw != null && curRaw !== '' && Number.isFinite(Number(curRaw)) && Number(curRaw) > 0
+                    ? Number(curRaw)
+                    : null)
+        if (incomingSid !== null && curSid !== null && incomingSid !== curSid) {
+            return
+        }
+        lineSurfaceMode = 'live'
+        afterimageLines = []
+        isLocalSkeletonVisible = false
+    "
+    x-on:pos-afterimage-self-action.window="selfActionPending = true"
+    x-on:pos-afterimage-sync-request.window="selfActionPending = true"
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
         localSkeletonToken = null
         previewTableName = ''
+        previewSessionId = null
+        lineSurfaceMode = 'live'
+        afterimageLines = []
+        selfActionPending = false
     "
 >
     @if (! $open)
@@ -12065,7 +12317,11 @@ class TableActionHost extends Component
                             bulkSyncing = false;
                         });
                     "
-                    x-bind:disabled="isLocalSkeletonVisible || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)"
+                    x-bind:disabled="
+                        isLocalSkeletonVisible
+                        || (lineSurfaceMode === 'afterimage' && !@js($this->hasUnackedPlaced))
+                        || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
+                    "
                     class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
                 >
                     {{ __('pos.action_recu_staff') }}
@@ -12077,7 +12333,7 @@ class TableActionHost extends Component
             class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]"
         >
             <div
-                x-show="isLocalSkeletonVisible"
+                x-show="lineSurfaceMode === 'skeleton' && isLocalSkeletonVisible"
                 x-cloak
                 class="absolute inset-x-1 inset-y-[2px] z-20 flex min-h-[6.5rem] flex-col gap-1 rounded-md border border-slate-200/80 bg-linear-to-b from-white via-white to-blue-50/90 px-1 py-2 shadow-sm dark:border-slate-600/80 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950/90"
                 aria-hidden="true"
@@ -12087,7 +12343,36 @@ class TableActionHost extends Component
                 <div class="h-6 w-10/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
                 <div class="h-6 w-full max-w-[92%] animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
             </div>
-            <div x-show="!isLocalSkeletonVisible" class="min-h-0">
+            <div
+                x-show="lineSurfaceMode === 'afterimage'"
+                x-cloak
+                class="relative z-10 min-h-0 space-y-1 px-0.5 pb-2 pt-1"
+                role="status"
+                aria-live="polite"
+            >
+                <div class="sticky top-0 z-10 mb-1 flex justify-center">
+                    <span class="inline-flex items-center gap-1 rounded-full border-2 border-amber-500 bg-amber-100 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-amber-950 shadow-sm dark:border-amber-400 dark:bg-amber-950/60 dark:text-amber-100">
+                        <span aria-hidden="true">🔄</span>
+                        <span>{{ __('pos.afterimage_syncing') }}</span>
+                    </span>
+                </div>
+                <template x-for="row in afterimageLines" :key="row.id">
+                    <div class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[12px] shadow-sm dark:border-slate-600 dark:bg-slate-900">
+                        <div class="font-extrabold leading-tight text-slate-900 dark:text-white">
+                            <span class="tabular-nums" x-text="row.qty"></span>
+                            <span class="ms-1" x-text="row.name"></span>
+                        </div>
+                        <p class="mt-0.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300" x-show="row.summary" x-text="row.summary"></p>
+                    </div>
+                </template>
+                <p
+                    x-show="afterimageLines.length === 0"
+                    class="px-1 text-center text-sm text-slate-600 dark:text-slate-300"
+                >
+                    {{ __('pos.drawer_no_orders') }}
+                </p>
+            </div>
+            <div x-show="lineSurfaceMode === 'live'" class="min-h-0">
             @if (! $this->isOrdersLoaded)
                 <div class="space-y-1 py-1">
                     <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
@@ -12107,10 +12392,8 @@ class TableActionHost extends Component
                 </p>
             @else
                 {{--
-                  商品表示の情報源：posOrders（Livewire / DB）のみ
-                  Alpine store（posDraft）は表示に使わない。
-                  理由：submitAddLineでDB即書きするためstoreは不要。
-                  switchContextはテーブル切替の高速化のみに使用。
+                  live: 商品表示は posOrders（Livewire / DB）のみ。
+                  afterimage: posDraft.readAfterimage の LRU ミラー（読取のみ）。submitAddLine は DB 直書きのまま。
                 --}}
                 <div class="space-y-0.5">
                     <section>
@@ -12146,7 +12429,7 @@ class TableActionHost extends Component
                                             @if (! $this->isBilledState)
                                                 wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                             @endif
-                                            x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
+                                            x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js($footerLocked)"
                                             wire:loading.attr="disabled"
                                             wire:target="promptRemoveLine({{ (int) $line->id }})"
                                             class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -12192,7 +12475,7 @@ class TableActionHost extends Component
                                         @if (! $this->isBilledState)
                                             wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                         @endif
-                                        x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
+                                        x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js($footerLocked)"
                                         wire:loading.attr="disabled"
                                         wire:target="promptRemoveLine({{ (int) $line->id }})"
                                         class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -12414,7 +12697,7 @@ class TableActionHost extends Component
             <button
                 type="button"
                 wire:click="printAddition"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
@@ -12431,7 +12714,7 @@ class TableActionHost extends Component
             <button
                 type="button"
                 wire:click="checkoutSession"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canCloture || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canCloture || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"
@@ -12461,7 +12744,7 @@ class TableActionHost extends Component
             <button
                 type="button"
                 wire:click="printAddition"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="min-h-9 rounded-md border-2 border-sky-900 bg-sky-100 py-1 text-center text-[10px] font-extrabold uppercase tracking-wide text-sky-950 shadow-sm hover:bg-sky-200 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-[11px]"

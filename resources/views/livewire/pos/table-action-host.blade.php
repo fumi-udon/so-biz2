@@ -119,14 +119,22 @@
                 lineSurfaceMode = 'afterimage'
                 isLocalSkeletonVisible = false
                 selfActionPending = false
-                afterimageLines = hit.lines.map(function (l) {
-                    return {
-                        id: l.id,
-                        name: l.name,
-                        qty: l.qty,
-                        summary: l.summary,
-                    }
-                })
+                afterimageLines = hit.lines
+                    .map(function (l) {
+                        return {
+                            id: l.id,
+                            name: l.name,
+                            qty: l.qty,
+                            summary: l.summary,
+                            is_unsent: Boolean(l.is_unsent),
+                        }
+                    })
+                    .sort(function (a, b) {
+                        if (a.is_unsent !== b.is_unsent) {
+                            return a.is_unsent ? -1 : 1
+                        }
+                        return a.id - b.id
+                    })
             } else {
                 lineSurfaceMode = 'skeleton'
                 isLocalSkeletonVisible = true
@@ -171,9 +179,6 @@
             isLocalSkeletonVisible = false
             return
         }
-        if (lineSurfaceMode === 'afterimage') {
-            return
-        }
         const curRaw = $wire.activeTableSessionId
         const curSid =
             typeof curRaw === 'number' && Number.isFinite(curRaw) && curRaw > 0
@@ -184,9 +189,35 @@
         if (incomingSid !== null && curSid !== null && incomingSid !== curSid) {
             return
         }
+        const rawAuthoritative = Array.isArray(detail.lines) ? detail.lines : []
+        const mappedAuthoritative = rawAuthoritative
+            .map(function (row) {
+                const id = Number(row && row.id)
+                const qty = Number(row && row.qty)
+                return {
+                    id: Number.isFinite(id) && id > 0 ? id : 0,
+                    name: typeof (row && row.name) === 'string' ? row.name : '',
+                    qty: Number.isFinite(qty) ? qty : 0,
+                    summary: typeof (row && row.summary) === 'string' ? row.summary : '',
+                    is_unsent: Boolean(row && row.is_unsent),
+                }
+            })
+            .filter(function (r) {
+                return r.id > 0
+            })
+        mappedAuthoritative.sort(function (a, b) {
+            if (a.is_unsent !== b.is_unsent) {
+                return a.is_unsent ? -1 : 1
+            }
+            return a.id - b.id
+        })
+        afterimageLines = mappedAuthoritative
+        isLocalSkeletonVisible = false
+        if (lineSurfaceMode === 'afterimage') {
+            return
+        }
         lineSurfaceMode = 'live'
         afterimageLines = []
-        isLocalSkeletonVisible = false
     "
     x-on:pos-afterimage-self-action.window="selfActionPending = true"
     x-on:pos-afterimage-sync-request.window="selfActionPending = true"
@@ -315,12 +346,27 @@
                     </span>
                 </div>
                 <template x-for="row in afterimageLines" :key="row.id">
-                    <div class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[12px] shadow-sm dark:border-slate-600 dark:bg-slate-900">
-                        <div class="font-extrabold leading-tight text-slate-900 dark:text-white">
+                    <div
+                        class="rounded-md border px-2 py-1 text-[12px] shadow-sm"
+                        :class="row.is_unsent
+                            ? 'border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/20'
+                            : 'border-slate-200 bg-slate-100 opacity-90 dark:border-slate-700 dark:bg-slate-900/60'"
+                    >
+                        <div
+                            class="leading-tight"
+                            :class="row.is_unsent
+                                ? 'font-extrabold text-gray-950 dark:text-white'
+                                : 'font-medium text-slate-700 dark:text-slate-200'"
+                        >
                             <span class="tabular-nums" x-text="row.qty"></span>
                             <span class="ms-1" x-text="row.name"></span>
                         </div>
-                        <p class="mt-0.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300" x-show="row.summary" x-text="row.summary"></p>
+                        <p
+                            class="mt-0.5 text-[11px] leading-snug"
+                            :class="row.is_unsent ? 'text-gray-700 dark:text-gray-200' : 'text-slate-600 dark:text-slate-300'"
+                            x-show="row.summary"
+                            x-text="row.summary"
+                        ></p>
                     </div>
                 </template>
                 <p
