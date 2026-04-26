@@ -96,6 +96,7 @@ return [
     'data_stale_title' => 'データが更新されました',
     'revision_conflict_reload' => '注文内容が変わりました。一覧を更新しました。',
     'ui_working' => '処理中…',
+    'afterimage_syncing' => '同期中…',
     'discount_approver_not_found' => '承認者が見つかりません。',
     'discount_already_recorded' => 'この割引は既に登録済みです。',
     'discount_target_not_found' => '割引対象が見つかりません。',

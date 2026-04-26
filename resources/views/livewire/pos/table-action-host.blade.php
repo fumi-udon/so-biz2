@@ -22,6 +22,13 @@
         isLocalSkeletonVisible: false,
         localSkeletonToken: null,
         previewTableName: '',
+        previewSessionId: null,
+        /**
+         * Line list surface: skeleton (Phase1 pulse) | afterimage (LRU hit, HIT_STALE) | live (Livewire posOrders).
+         * Flow: tap → Hit/Miss → afterimage or skeleton → pos-action-host-ui-sync (clears skeleton chrome) → authoritative → live.
+         */
+        lineSurfaceMode: 'live',
+        afterimageLines: [],
         seenUnsentLineKeys: {},
         bulkSyncing: false,
         closeDrawer() {
@@ -31,6 +38,9 @@
             this.isLocalSkeletonVisible = false;
             this.localSkeletonToken = null;
             this.previewTableName = '';
+            this.previewSessionId = null;
+            this.lineSurfaceMode = 'live';
+            this.afterimageLines = [];
             $wire.closeHost();
         },
         shouldAnimateUnsent(key, isFresh) {
@@ -84,26 +94,71 @@
         } catch (e) {}
         localSkeletonToken = detail.token ?? Date.now()
         previewTableName = typeof detail.tableName === 'string' ? detail.tableName : ''
-        isLocalSkeletonVisible = true
+        const rawSid = detail.sessionId
+        previewSessionId =
+            typeof rawSid === 'number' && Number.isFinite(rawSid) && rawSid > 0
+                ? rawSid
+                : null
+        const shopId = {{ $echoShopId }}
+        const tidRaw = detail.tid
+        const tid =
+            tidRaw != null && tidRaw !== '' && Number.isFinite(Number(tidRaw)) ? Number(tidRaw) : 0
+        if (previewSessionId === null || shopId < 1 || tid < 1) {
+            lineSurfaceMode = 'skeleton'
+            isLocalSkeletonVisible = true
+            afterimageLines = []
+        } else {
+            const s = window.Alpine && typeof Alpine.store === 'function' ? Alpine.store('posDraft') : null
+            const key = String(shopId) + ':' + String(tid) + ':' + String(previewSessionId)
+            const hit = s && typeof s.readAfterimage === 'function' ? s.readAfterimage(key) : null
+            if (hit != null && Array.isArray(hit.lines)) {
+                lineSurfaceMode = 'afterimage'
+                isLocalSkeletonVisible = false
+                afterimageLines = hit.lines.map(function (l) {
+                    return {
+                        id: l.id,
+                        name: l.name,
+                        qty: l.qty,
+                        summary: l.summary,
+                    }
+                })
+            } else {
+                lineSurfaceMode = 'skeleton'
+                isLocalSkeletonVisible = true
+                afterimageLines = []
+            }
+        }
     "
     x-on:pos-tile-interaction-started.window="
         if (!isLocalSkeletonVisible) {
             localSkeletonToken = Date.now()
             isLocalSkeletonVisible = true
+            lineSurfaceMode = 'skeleton'
         }
     "
     x-on:pos-action-host-ui-sync.window="
-        isLocalSkeletonVisible = false
+        if (lineSurfaceMode !== 'skeleton') {
+            isLocalSkeletonVisible = false
+        }
         previewTableName = ''
+        previewSessionId = null
         localSkeletonToken = null
         try {
             performance.mark('pos-host-ui-sync')
         } catch (e) {}
     "
+    x-on:pos-action-host-authoritative.window="
+        lineSurfaceMode = 'live'
+        afterimageLines = []
+        isLocalSkeletonVisible = false
+    "
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
         localSkeletonToken = null
         previewTableName = ''
+        previewSessionId = null
+        lineSurfaceMode = 'live'
+        afterimageLines = []
     "
 >
     @if (! $open)
@@ -181,7 +236,7 @@
                             bulkSyncing = false;
                         });
                     "
-                    x-bind:disabled="isLocalSkeletonVisible || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)"
+                    x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)"
                     class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
                 >
                     {{ __('pos.action_recu_staff') }}
@@ -193,7 +248,7 @@
             class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]"
         >
             <div
-                x-show="isLocalSkeletonVisible"
+                x-show="lineSurfaceMode === 'skeleton' && isLocalSkeletonVisible"
                 x-cloak
                 class="absolute inset-x-1 inset-y-[2px] z-20 flex min-h-[6.5rem] flex-col gap-1 rounded-md border border-slate-200/80 bg-linear-to-b from-white via-white to-blue-50/90 px-1 py-2 shadow-sm dark:border-slate-600/80 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950/90"
                 aria-hidden="true"
@@ -203,7 +258,36 @@
                 <div class="h-6 w-10/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
                 <div class="h-6 w-full max-w-[92%] animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
             </div>
-            <div x-show="!isLocalSkeletonVisible" class="min-h-0">
+            <div
+                x-show="lineSurfaceMode === 'afterimage'"
+                x-cloak
+                class="relative z-10 min-h-0 space-y-1 px-0.5 pb-2 pt-1"
+                role="status"
+                aria-live="polite"
+            >
+                <div class="sticky top-0 z-10 mb-1 flex justify-center">
+                    <span class="inline-flex items-center gap-1 rounded-full border-2 border-amber-500 bg-amber-100 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-amber-950 shadow-sm dark:border-amber-400 dark:bg-amber-950/60 dark:text-amber-100">
+                        <span aria-hidden="true">🔄</span>
+                        <span>{{ __('pos.afterimage_syncing') }}</span>
+                    </span>
+                </div>
+                <template x-for="row in afterimageLines" :key="row.id">
+                    <div class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[12px] shadow-sm dark:border-slate-600 dark:bg-slate-900">
+                        <div class="font-extrabold leading-tight text-slate-900 dark:text-white">
+                            <span class="tabular-nums" x-text="row.qty"></span>
+                            <span class="ms-1" x-text="row.name"></span>
+                        </div>
+                        <p class="mt-0.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300" x-show="row.summary" x-text="row.summary"></p>
+                    </div>
+                </template>
+                <p
+                    x-show="afterimageLines.length === 0"
+                    class="px-1 text-center text-sm text-slate-600 dark:text-slate-300"
+                >
+                    {{ __('pos.drawer_no_orders') }}
+                </p>
+            </div>
+            <div x-show="lineSurfaceMode === 'live'" class="min-h-0">
             @if (! $this->isOrdersLoaded)
                 <div class="space-y-1 py-1">
                     <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
@@ -223,10 +307,8 @@
                 </p>
             @else
                 {{--
-                  商品表示の情報源：posOrders（Livewire / DB）のみ
-                  Alpine store（posDraft）は表示に使わない。
-                  理由：submitAddLineでDB即書きするためstoreは不要。
-                  switchContextはテーブル切替の高速化のみに使用。
+                  live: 商品表示は posOrders（Livewire / DB）のみ。
+                  afterimage: posDraft.readAfterimage の LRU ミラー（読取のみ）。submitAddLine は DB 直書きのまま。
                 --}}
                 <div class="space-y-0.5">
                     <section>
@@ -262,7 +344,7 @@
                                             @if (! $this->isBilledState)
                                                 wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                             @endif
-                                            x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
+                                            x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js($footerLocked)"
                                             wire:loading.attr="disabled"
                                             wire:target="promptRemoveLine({{ (int) $line->id }})"
                                             class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -308,7 +390,7 @@
                                         @if (! $this->isBilledState)
                                             wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                         @endif
-                                        x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
+                                        x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js($footerLocked)"
                                         wire:loading.attr="disabled"
                                         wire:target="promptRemoveLine({{ (int) $line->id }})"
                                         class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -530,7 +612,7 @@
             <button
                 type="button"
                 wire:click="printAddition"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
@@ -547,7 +629,7 @@
             <button
                 type="button"
                 wire:click="checkoutSession"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canCloture || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canCloture || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"
@@ -577,7 +659,7 @@
             <button
                 type="button"
                 wire:click="printAddition"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="min-h-9 rounded-md border-2 border-sky-900 bg-sky-100 py-1 text-center text-[10px] font-extrabold uppercase tracking-wide text-sky-950 shadow-sm hover:bg-sky-200 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-[11px]"

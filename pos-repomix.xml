@@ -123,6 +123,7 @@ resources/
       pos/
         footer-utility-menu.blade.php
       client-nav.blade.php
+      livewire-payload-monitor.blade.php
       mypage-entry-modal.blade.php
       pos-speed-panel.blade.php
       rad-table-tile.blade.php
@@ -3944,6 +3945,224 @@ class TipCalculationService
 </div>
 </file>
 
+<file path="resources/views/components/livewire-payload-monitor.blade.php">
+{{--
+  TEMP: Livewire /livewire/update レスポンス実測（SPEED_TEST のみ）。
+  削除手順:
+  1) このファイルを削除: resources/views/components/livewire-payload-monitor.blade.php
+  2) resources/views/livewire/pos/table-dashboard.blade.php から
+     <x-livewire-payload-monitor /> の1行を削除（<x-pos-speed-panel /> のみ残す）
+--}}
+@if (config('app.speed_test'))
+<div
+    id="livewire-payload-monitor-root"
+    wire:ignore
+    class="fi-lw-payload-monitor flex w-full flex-none flex-col border-t border-violet-900/80 bg-violet-950 px-2 py-1.5 font-mono text-[9px] leading-snug text-violet-100 shadow-[0_-2px_10px_rgba(0,0,0,0.2)] sm:px-3"
+    role="status"
+    aria-label="Livewire payload size"
+>
+    <div class="mb-0.5 text-[8px] font-bold uppercase tracking-wide text-violet-300">Livewire payload (last update)</div>
+    <div id="lw-pm-main" class="break-words text-violet-50">[PAYLOAD] —</div>
+    <div id="lw-pm-hist" class="mt-0.5 text-[8px] text-violet-300/90">履歴: —</div>
+</div>
+
+@once
+    @push('scripts')
+        <script>
+            (function () {
+                try {
+                    if (!document.getElementById('livewire-payload-monitor-root')) {
+                        return;
+                    }
+                    if (window.__livewirePayloadMonitorInstalled) {
+                        return;
+                    }
+                    window.__livewirePayloadMonitorInstalled = true;
+
+                    const $main = () => document.getElementById('lw-pm-main');
+                    const $hist = () => document.getElementById('lw-pm-hist');
+                    const history = [];
+
+                    function fmtKb(n) {
+                        if (n == null || Number.isNaN(n) || n < 0) {
+                            return '—';
+                        }
+                        if (n < 1024) {
+                            return n + ' B';
+                        }
+                        return (n / 1024).toFixed(1) + ' kB';
+                    }
+
+                    function parsePathname(url) {
+                        try {
+                            return new URL(url, window.location.origin).pathname;
+                        } catch (e) {
+                            return String(url || '');
+                        }
+                    }
+
+                    function extractNameFromSnapshot(snapshotRaw) {
+                        try {
+                            const o = typeof snapshotRaw === 'string' ? JSON.parse(snapshotRaw) : snapshotRaw;
+                            if (o && o.memo && o.memo.name) {
+                                return String(o.memo.name);
+                            }
+                        } catch (e) {
+                            /* ignore */
+                        }
+                        return '?';
+                    }
+
+                    function analyzePayload(text) {
+                        const o = JSON.parse(text);
+                        const comps = Array.isArray(o.components) ? o.components : [];
+                        let htmlChars = 0;
+                        let largestName = '—';
+                        let largestLen = -1;
+                        for (let i = 0; i < comps.length; i++) {
+                            const c = comps[i];
+                            const nm = extractNameFromSnapshot(c.snapshot);
+                            const h = c.effects && typeof c.effects.html === 'string' ? c.effects.html : '';
+                            const len = h.length;
+                            htmlChars += len;
+                            if (len > largestLen) {
+                                largestLen = len;
+                                largestName = nm;
+                            }
+                        }
+                        return {
+                            compsCount: comps.length,
+                            htmlChars: htmlChars,
+                            largest: largestName,
+                            decodedUtf8: new TextEncoder().encode(text).length,
+                        };
+                    }
+
+                    function pickResourceTiming() {
+                        try {
+                            const entries = performance.getEntriesByType('resource');
+                            let best = null;
+                            for (let i = 0; i < entries.length; i++) {
+                                const e = entries[i];
+                                if (!e.name) {
+                                    continue;
+                                }
+                                const p = parsePathname(e.name);
+                                if (!p.includes('livewire/update')) {
+                                    continue;
+                                }
+                                if (!best || e.responseEnd >= best.responseEnd) {
+                                    best = e;
+                                }
+                            }
+                            return best;
+                        } catch (e) {
+                            return null;
+                        }
+                    }
+
+                    function updateUi(encBytes, decodedBytes, stats, recordHistory) {
+                        const main = $main();
+                        const hist = $hist();
+                        if (!main || !hist) {
+                            return;
+                        }
+                        const line =
+                            '[PAYLOAD] size: ' +
+                            fmtKb(encBytes) +
+                            ' / decoded: ' +
+                            fmtKb(decodedBytes) +
+                            ' | comps: ' +
+                            stats.compsCount +
+                            ' | html: ' +
+                            stats.htmlChars.toLocaleString() +
+                            ' chars | largest: ' +
+                            stats.largest;
+                        main.textContent = line;
+
+                        if (
+                            recordHistory &&
+                            encBytes != null &&
+                            !Number.isNaN(encBytes) &&
+                            encBytes > 0
+                        ) {
+                            history.push(encBytes);
+                            while (history.length > 5) {
+                                history.shift();
+                            }
+                        }
+                        hist.textContent =
+                            history.length > 0
+                                ? '履歴: ' +
+                                  history
+                                      .map(function (b) {
+                                          return (b / 1024).toFixed(1);
+                                      })
+                                      .join(' / ') +
+                                  ' kB'
+                                : '履歴: —';
+                    }
+
+                    const nativeFetch = window.fetch.bind(window);
+                    window.fetch = function (input, init) {
+                        const reqUrl = typeof input === 'string' ? input : input && input.url ? input.url : '';
+                        return nativeFetch(input, init).then(function (response) {
+                            try {
+                                const pathname = parsePathname(reqUrl);
+                                if (!pathname.includes('livewire/update')) {
+                                    return response;
+                                }
+                                const clone = response.clone();
+                                queueMicrotask(function () {
+                                    clone
+                                        .text()
+                                        .then(function (text) {
+                                            let stats;
+                                            try {
+                                                stats = analyzePayload(text);
+                                            } catch (e) {
+                                                stats = {
+                                                    compsCount: 0,
+                                                    htmlChars: 0,
+                                                    largest: '(parse error)',
+                                                    decodedUtf8: new TextEncoder().encode(text).length,
+                                                };
+                                            }
+                                            const apply = function (recordHistory) {
+                                                const rt = pickResourceTiming();
+                                                let enc = rt && rt.encodedBodySize > 0 ? rt.encodedBodySize : null;
+                                                let decPerf = rt && rt.decodedBodySize > 0 ? rt.decodedBodySize : null;
+                                                if (enc == null && rt && rt.transferSize > 0) {
+                                                    enc = rt.transferSize;
+                                                }
+                                                const decoded = decPerf != null && decPerf > 0 ? decPerf : stats.decodedUtf8;
+                                                updateUi(enc, decoded, stats, recordHistory);
+                                            };
+                                            apply(false);
+                                            setTimeout(function () {
+                                                apply(true);
+                                            }, 48);
+                                        })
+                                        .catch(function () {
+                                            /* ignore clone read errors */
+                                        });
+                                });
+                            } catch (e) {
+                                /* ignore */
+                            }
+                            return response;
+                        });
+                    };
+                } catch (e) {
+                    /* ignore */
+                }
+            })();
+        </script>
+    @endpush
+@endonce
+@endif
+</file>
+
 <file path="resources/views/components/mypage-entry-modal.blade.php">
 {{-- 名前選択 → PIN（同一PINの複数人に対応）— Tailwind + Alpine（Bootstrap 不使用） --}}
 @props([
@@ -4057,12 +4276,6 @@ class TipCalculationService
 <file path="resources/views/livewire/pos/printer-bridge.blade.php">
 {{-- Invisible: PrinterBridge only listens for browser events --}}
 <div class="fi-no-print hidden" aria-hidden="true" wire:key="printer-bridge"></div>
-</file>
-
-<file path="resources/views/livewire/pos/table-dashboard.blade.php">
-@if (config('app.speed_test', env('SPEED_TEST', false)))
-    <x-pos-speed-panel />
-@endif
 </file>
 
 <file path="app/Livewire/Pos/PrinterBridge.php">
@@ -5791,6 +6004,13 @@ class WeeklyShiftGridService
         </div>
     @endif
 </x-filament::section>
+</file>
+
+<file path="resources/views/livewire/pos/table-dashboard.blade.php">
+@if (config('app.speed_test', env('SPEED_TEST', false)))
+    <x-pos-speed-panel />
+    <x-livewire-payload-monitor />
+@endif
 </file>
 
 <file path="app/Services/Pos/TableDashboardQueryService.php">
@@ -8701,192 +8921,6 @@ class StaffMealBar extends Component
 </div>
 </file>
 
-<file path="resources/views/livewire/pos/takeaway-bar.blade.php">
-<div
-    @class([
-        'w-full shrink-0 border-t border-yellow-200 bg-yellow-50/90 dark:border-yellow-800 dark:bg-yellow-900/30',
-    ])
-    x-data="{ peerTakeawayTid: null }"
-    x-on:pos-floor-peer-sync.window="peerTakeawayTid = ($event.detail && $event.detail.takeawayFloorTid != null) ? Number($event.detail.takeawayFloorTid) : null"
-    x-on:pos-tile-interaction-ended.window="peerTakeawayTid = null"
-    data-takeaway-bar="true"
-    role="region"
-    aria-label="{{ __('pos.takeaway_region_label') }}"
->
-    <div class="max-w-full px-2 py-2 sm:px-6 sm:py-5">
-        <p class="mb-0.5 text-[12px] font-extrabold uppercase tracking-wider text-yellow-900 dark:text-yellow-100 sm:text-[10px]">
-            {{ __('pos.takeaway_heading') }}
-        </p>
-        @if (count($takeawayTiles) === 0)
-            <p class="text-[10px] text-yellow-950/80 dark:text-yellow-100/90">
-                {{ __('pos.takeaway_no_tables') }}
-            </p>
-        @else
-            {{-- 6 卓固定・1 行。選択: amber 反転 + scale / クリックフラッシュ: app.css --}}
-            <div class="flex w-full min-w-0 flex-nowrap gap-px overflow-visible py-px sm:gap-0.5 sm:py-0.5 md:gap-1">
-                @foreach ($takeawayTiles as $tile)
-                    @php
-                        $tid = (int) $tile['restaurantTableId'];
-                        $isFloorSel = $this->floorSelectedTakeawayTableId !== null && $this->floorSelectedTakeawayTableId === $tid;
-                        $surface = $this->tileSurfaceClasses($tile);
-                    @endphp
-                    <button
-                        type="button"
-                        wire:click="openModalForTable({{ $tid }})"
-                        wire:key="takeaway-tile-{{ $tid }}"
-                        x-data="{ flash: false, flashTimer: null }"
-                        x-on:click="
-                            flash = true;
-                            if (flashTimer) clearTimeout(flashTimer);
-                            flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);
-                        "
-                        x-bind:class="{ 'pos-tile-select-flash': flash }"
-                        data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
-                        title="{{ $this->tileLabel($tile) }}"
-                        @class([
-                            'relative z-0 inline-flex min-h-8 min-w-0 flex-1 basis-0 items-center justify-center rounded border px-1 py-1 text-[9px] font-semibold leading-none shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 sm:min-h-[3rem] sm:px-0.5 sm:py-1 sm:text-[9px] '.$surface,
-                            '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isFloorSel,
-                            'font-semibold' => ! $isFloorSel,
-                            'font-black' => $isFloorSel,
-                        ])
-                        x-bind:class="(peerTakeawayTid === {{ $tid }} && ! @js($isFloorSel)) ? '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400 font-black' : ''"
-                    >
-                        <span @class(['truncate', 'font-black' => $isFloorSel])>{{ $this->tileLabel($tile) }}</span>
-                    </button>
-                @endforeach
-            </div>
-        @endif
-    </div>
-
-    @if ($modalOpen && $selectedTableId !== null)
-        @teleport('body')
-            <div
-                data-pos-takeaway-guest-modal="true"
-                wire:key="takeaway-guest-modal-shell-{{ $selectedTableId }}"
-                x-data="{ optimisticClosing: false }"
-                x-show="!optimisticClosing"
-                x-init="
-                    $nextTick(() => {
-                        window.dispatchEvent(
-                            new CustomEvent('open-modal', {
-                                detail: { id: 'pos-takeaway-guest-modal' },
-                                bubbles: true,
-                            }),
-                        )
-                    })
-                "
-                x-on:close-modal.window="
-                    if ($event.detail && $event.detail.id === 'pos-takeaway-guest-modal') {
-                        $wire.closeModal()
-                    }
-                "
-            >
-                <x-filament::modal
-                    id="pos-takeaway-guest-modal"
-                    :heading="__('pos.takeaway_modal_title', ['id' => $selectedTableId])"
-                    :description="__('pos.takeaway_modal_subtitle')"
-                    width="md"
-                    display-classes="block"
-                    :close-button="true"
-                    :close-by-clicking-away="true"
-                    :close-by-escaping="true"
-                >
-                    <div class="space-y-4">
-                        <div
-                            class="fi-fo-field-wrp"
-                            data-field-wrapper
-                        >
-                            <div
-                                class="grid gap-y-2"
-                            >
-                                <label
-                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
-                                    for="takeaway-customer-name-{{ $selectedTableId }}"
-                                >
-                                    {{ __('pos.takeaway_customer_name') }}
-                                </label>
-                                <x-filament::input.wrapper
-                                    :valid="! $errors->has('customerName')"
-                                >
-                                    <x-filament::input
-                                        id="takeaway-customer-name-{{ $selectedTableId }}"
-                                        type="text"
-                                        wire:model.blur="customerName"
-                                        autocomplete="name"
-                                    />
-                                </x-filament::input.wrapper>
-                                @error('customerName')
-                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
-                                        {{ $message }}
-                                    </p>
-                                @enderror
-                            </div>
-                        </div>
-
-                        <div
-                            class="fi-fo-field-wrp"
-                            data-field-wrapper
-                        >
-                            <div
-                                class="grid gap-y-2"
-                            >
-                                <label
-                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
-                                    for="takeaway-customer-phone-{{ $selectedTableId }}"
-                                >
-                                    {{ __('pos.takeaway_customer_phone') }}
-                                </label>
-                                <x-filament::input.wrapper
-                                    :valid="! $errors->has('customerPhone')"
-                                >
-                                    <x-filament::input
-                                        id="takeaway-customer-phone-{{ $selectedTableId }}"
-                                        type="tel"
-                                        wire:model.blur="customerPhone"
-                                        inputmode="tel"
-                                        autocomplete="tel"
-                                    />
-                                </x-filament::input.wrapper>
-                                @error('customerPhone')
-                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
-                                        {{ $message }}
-                                    </p>
-                                @enderror
-                            </div>
-                        </div>
-                    </div>
-
-                    <x-slot name="footer">
-                        <div
-                            class="fi-modal-footer-actions flex flex-wrap items-center gap-3"
-                        >
-                            <x-filament::button
-                                type="button"
-                                color="gray"
-                                outlined
-                                wire:click="closeModal"
-                            >
-                                {{ __('pos.takeaway_cancel') }}
-                            </x-filament::button>
-                            <x-filament::button
-                                type="button"
-                                color="warning"
-                                wire:click="confirmTakeawayGuest"
-                                x-on:click="optimisticClosing = true"
-                                wire:loading.attr="disabled"
-                                wire:target="confirmTakeawayGuest"
-                            >
-                                {{ __('pos.takeaway_confirm') }}
-                            </x-filament::button>
-                        </div>
-                    </x-slot>
-                </x-filament::modal>
-            </div>
-        @endteleport
-    @endif
-</div>
-</file>
-
 <file path="app/Services/Kds/KdsQueryService.php">
 <?php
 
@@ -9273,6 +9307,197 @@ final class KdsQueryService
                             >
                                 <span wire:loading.remove wire:target="confirm">{{ __('rad_table.cloture_confirm') }}</span>
                                 <span wire:loading wire:target="confirm">{{ __('pos.ui_working') }}</span>
+                            </x-filament::button>
+                        </div>
+                    </x-slot>
+                </x-filament::modal>
+            </div>
+        @endteleport
+    @endif
+</div>
+</file>
+
+<file path="resources/views/livewire/pos/takeaway-bar.blade.php">
+<div
+    @class([
+        'w-full shrink-0 border-t border-yellow-200 bg-yellow-50/90 dark:border-yellow-800 dark:bg-yellow-900/30',
+    ])
+    x-data="{ peerTakeawayTid: null }"
+    x-on:pos-floor-peer-sync.window="peerTakeawayTid = ($event.detail && $event.detail.takeawayFloorTid != null) ? Number($event.detail.takeawayFloorTid) : null"
+    x-on:pos-tile-interaction-ended.window="peerTakeawayTid = null"
+    data-takeaway-bar="true"
+    role="region"
+    aria-label="{{ __('pos.takeaway_region_label') }}"
+>
+    <div class="max-w-full px-2 py-2 sm:px-6 sm:py-5">
+        <p class="mb-0.5 text-[12px] font-extrabold uppercase tracking-wider text-yellow-900 dark:text-yellow-100 sm:text-[10px]">
+            {{ __('pos.takeaway_heading') }}
+        </p>
+        @if (count($takeawayTiles) === 0)
+            <p class="text-[10px] text-yellow-950/80 dark:text-yellow-100/90">
+                {{ __('pos.takeaway_no_tables') }}
+            </p>
+        @else
+            {{-- 6 卓固定・1 行。選択: amber 反転 + scale / クリックフラッシュ: app.css --}}
+            <div class="flex w-full min-w-0 flex-nowrap gap-px overflow-visible py-px sm:gap-0.5 sm:py-0.5 md:gap-1">
+                @foreach ($takeawayTiles as $tile)
+                    @php
+                        $tid = (int) $tile['restaurantTableId'];
+                        $isFloorSel = $this->floorSelectedTakeawayTableId !== null && $this->floorSelectedTakeawayTableId === $tid;
+                        $surface = $this->tileSurfaceClasses($tile);
+                        $previewTableName =
+                            (string) ($tile['restaurantTableName'] ?? '') !== ''
+                                ? (string) $tile['restaurantTableName']
+                                : (string) __('pos.table_name_fallback', ['id' => $tid]);
+                    @endphp
+                    <button
+                        type="button"
+                        wire:click="openModalForTable({{ $tid }})"
+                        wire:key="takeaway-tile-{{ $tid }}"
+                        @pointerdown="window.dispatchEvent(new CustomEvent('show-local-skeleton', { detail: { tid: {{ $tid }}, token: Date.now(), tableName: @js($previewTableName) }, bubbles: true }))"
+                        x-data="{ flash: false, flashTimer: null }"
+                        x-on:click="
+                            flash = true;
+                            if (flashTimer) clearTimeout(flashTimer);
+                            flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);
+                        "
+                        x-bind:class="{ 'pos-tile-select-flash': flash }"
+                        data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
+                        title="{{ $this->tileLabel($tile) }}"
+                        @class([
+                            'relative z-0 inline-flex min-h-8 min-w-0 flex-1 basis-0 items-center justify-center rounded border px-1 py-1 text-[9px] font-semibold leading-none shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 sm:min-h-[3rem] sm:px-0.5 sm:py-1 sm:text-[9px] '.$surface,
+                            '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isFloorSel,
+                            'font-semibold' => ! $isFloorSel,
+                            'font-black' => $isFloorSel,
+                        ])
+                        x-bind:class="(peerTakeawayTid === {{ $tid }} && ! @js($isFloorSel)) ? '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400 font-black' : ''"
+                    >
+                        <span @class(['truncate', 'font-black' => $isFloorSel])>{{ $this->tileLabel($tile) }}</span>
+                    </button>
+                @endforeach
+            </div>
+        @endif
+    </div>
+
+    @if ($modalOpen && $selectedTableId !== null)
+        @teleport('body')
+            <div
+                data-pos-takeaway-guest-modal="true"
+                wire:key="takeaway-guest-modal-shell-{{ $selectedTableId }}"
+                x-data="{ optimisticClosing: false }"
+                x-show="!optimisticClosing"
+                x-init="
+                    $nextTick(() => {
+                        window.dispatchEvent(
+                            new CustomEvent('open-modal', {
+                                detail: { id: 'pos-takeaway-guest-modal' },
+                                bubbles: true,
+                            }),
+                        )
+                    })
+                "
+                x-on:close-modal.window="
+                    if ($event.detail && $event.detail.id === 'pos-takeaway-guest-modal') {
+                        $wire.closeModal()
+                    }
+                "
+            >
+                <x-filament::modal
+                    id="pos-takeaway-guest-modal"
+                    :heading="__('pos.takeaway_modal_title', ['id' => $selectedTableId])"
+                    :description="__('pos.takeaway_modal_subtitle')"
+                    width="md"
+                    display-classes="block"
+                    :close-button="true"
+                    :close-by-clicking-away="true"
+                    :close-by-escaping="true"
+                >
+                    <div class="space-y-4">
+                        <div
+                            class="fi-fo-field-wrp"
+                            data-field-wrapper
+                        >
+                            <div
+                                class="grid gap-y-2"
+                            >
+                                <label
+                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
+                                    for="takeaway-customer-name-{{ $selectedTableId }}"
+                                >
+                                    {{ __('pos.takeaway_customer_name') }}
+                                </label>
+                                <x-filament::input.wrapper
+                                    :valid="! $errors->has('customerName')"
+                                >
+                                    <x-filament::input
+                                        id="takeaway-customer-name-{{ $selectedTableId }}"
+                                        type="text"
+                                        wire:model.blur="customerName"
+                                        autocomplete="name"
+                                    />
+                                </x-filament::input.wrapper>
+                                @error('customerName')
+                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
+                                        {{ $message }}
+                                    </p>
+                                @enderror
+                            </div>
+                        </div>
+
+                        <div
+                            class="fi-fo-field-wrp"
+                            data-field-wrapper
+                        >
+                            <div
+                                class="grid gap-y-2"
+                            >
+                                <label
+                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
+                                    for="takeaway-customer-phone-{{ $selectedTableId }}"
+                                >
+                                    {{ __('pos.takeaway_customer_phone') }}
+                                </label>
+                                <x-filament::input.wrapper
+                                    :valid="! $errors->has('customerPhone')"
+                                >
+                                    <x-filament::input
+                                        id="takeaway-customer-phone-{{ $selectedTableId }}"
+                                        type="tel"
+                                        wire:model.blur="customerPhone"
+                                        inputmode="tel"
+                                        autocomplete="tel"
+                                    />
+                                </x-filament::input.wrapper>
+                                @error('customerPhone')
+                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
+                                        {{ $message }}
+                                    </p>
+                                @enderror
+                            </div>
+                        </div>
+                    </div>
+
+                    <x-slot name="footer">
+                        <div
+                            class="fi-modal-footer-actions flex flex-wrap items-center gap-3"
+                        >
+                            <x-filament::button
+                                type="button"
+                                color="gray"
+                                outlined
+                                wire:click="closeModal"
+                            >
+                                {{ __('pos.takeaway_cancel') }}
+                            </x-filament::button>
+                            <x-filament::button
+                                type="button"
+                                color="warning"
+                                wire:click="confirmTakeawayGuest"
+                                x-on:click="optimisticClosing = true"
+                                wire:loading.attr="disabled"
+                                wire:target="confirmTakeawayGuest"
+                            >
+                                {{ __('pos.takeaway_confirm') }}
                             </x-filament::button>
                         </div>
                     </x-slot>
@@ -9736,7 +9961,7 @@ class TableStatusGrid extends Component
             x-data="{
                 optimisticStaffTableId: null,
                 peerStaffTid: null,
-                clickStaffTile(tid) {
+                clickStaffTile(tid, tableName) {
                     const token = Date.now()
                     this.optimisticStaffTableId = tid;
                     window.dispatchEvent(
@@ -9744,6 +9969,7 @@ class TableStatusGrid extends Component
                             detail: {
                                 tid: tid,
                                 token: token,
+                                tableName: typeof tableName === 'string' ? tableName : '',
                             },
                             bubbles: true,
                         }),
@@ -9771,13 +9997,16 @@ class TableStatusGrid extends Component
                     $label = is_string($sn) && trim($sn) !== '' ? trim($sn) : null;
                     $isStaffSel = $this->floorSelectedStaffTableId !== null && $this->floorSelectedStaffTableId === $tid;
                     $staffSurface = $this->tileSurfaceClasses($tile);
+                    $previewTableName =
+                        (string) ($tile['restaurantTableName'] ?? '') !== ''
+                            ? (string) $tile['restaurantTableName']
+                            : (string) __('pos.table_name_fallback', ['id' => $tid]);
                 @endphp
                 <button
                     type="button"
                     wire:click="openTableContext({{ $tid }}, {{ $sid > 0 ? $sid : 'null' }})"
                     wire:key="staff-meal-{{ $tid }}"
-                    @pointerdown="clickStaffTile({{ $tid }})"
-                    @click="clickStaffTile({{ $tid }})"
+                    @pointerdown="clickStaffTile({{ $tid }}, @js($previewTableName))"
                     x-bind:class="{
                         '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear will-change-transform dark:ring-amber-400': @js($isStaffSel) || optimisticStaffTableId === {{ $tid }} || peerStaffTid === {{ $tid }},
                     }"
@@ -9814,7 +10043,7 @@ class TableStatusGrid extends Component
     x-data="{
         selectedTableId: null,
         optimisticTableId: null,
-        clickTile(tid) {
+        clickTile(tid, tableName) {
             const token = Date.now()
             this.optimisticTableId = null;
             this.$nextTick(() => {
@@ -9825,6 +10054,7 @@ class TableStatusGrid extends Component
                     detail: {
                         tid: tid,
                         token: token,
+                        tableName: typeof tableName === 'string' ? tableName : '',
                     },
                     bubbles: true,
                 }),
@@ -9864,6 +10094,10 @@ class TableStatusGrid extends Component
                         $lineTitle = 'font-extrabold '.$titleTone;
                         $lineMeta = 'font-semibold '.$metaTone;
                         $lineTotal = 'font-extrabold tabular-nums '.$titleTone;
+                        $previewTableName =
+                            (string) ($tile['restaurantTableName'] ?? '') !== ''
+                                ? (string) $tile['restaurantTableName']
+                                : (string) __('pos.table_name_fallback', ['id' => $tid]);
                     @endphp
                     <div
                         class="w-full min-w-0"
@@ -9873,7 +10107,7 @@ class TableStatusGrid extends Component
                             type="button"
                             wire:click="openTableContext({{ $tid }}, {{ $sid }}, @js((string) ($tile['restaurantTableName'] ?? '')))"
                             @click="selectedTableId = {{ $tid }}"
-                            @pointerdown="clickTile({{ $tid }})"
+                            @pointerdown="clickTile({{ $tid }}, @js($previewTableName))"
                             x-bind:class="{
                                 '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': optimisticTableId === {{ $tid }},
                             }"
@@ -11671,6 +11905,7 @@ class TableActionHost extends Component
     x-data="{
         isLocalSkeletonVisible: false,
         localSkeletonToken: null,
+        previewTableName: '',
         seenUnsentLineKeys: {},
         bulkSyncing: false,
         closeDrawer() {
@@ -11679,17 +11914,8 @@ class TableActionHost extends Component
             }
             this.isLocalSkeletonVisible = false;
             this.localSkeletonToken = null;
+            this.previewTableName = '';
             $wire.closeHost();
-        },
-        clearPaneSkeletonAfterMorph() {
-            const token = this.localSkeletonToken;
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    if (this.localSkeletonToken === token) {
-                        this.isLocalSkeletonVisible = false;
-                    }
-                });
-            });
         },
         shouldAnimateUnsent(key, isFresh) {
             if (!isFresh) {
@@ -11737,7 +11963,11 @@ class TableActionHost extends Component
     "
     x-on:show-local-skeleton.window="
         const detail = $event.detail || {}
+        try {
+            performance.mark('pos-tap-preview')
+        } catch (e) {}
         localSkeletonToken = detail.token ?? Date.now()
+        previewTableName = typeof detail.tableName === 'string' ? detail.tableName : ''
         isLocalSkeletonVisible = true
     "
     x-on:pos-tile-interaction-started.window="
@@ -11747,18 +11977,24 @@ class TableActionHost extends Component
         }
     "
     x-on:pos-action-host-ui-sync.window="
-        clearPaneSkeletonAfterMorph()
+        isLocalSkeletonVisible = false
+        previewTableName = ''
+        localSkeletonToken = null
+        try {
+            performance.mark('pos-host-ui-sync')
+        } catch (e) {}
     "
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
         localSkeletonToken = null
+        previewTableName = ''
     "
 >
     @if (! $open)
         <div
             wire:key="pane-welcome"
             x-cloak
-            x-show="!isLocalSkeletonVisible && !@js($open)"
+            x-show="!@js($open)"
             class="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
         >
             <p class="text-sm font-medium text-gray-800 dark:text-gray-100">
@@ -11766,40 +12002,7 @@ class TableActionHost extends Component
             </p>
         </div>
     @else
-        <div
-            wire:key="pane-local-skeleton"
-            x-cloak
-            x-show="isLocalSkeletonVisible"
-            class="flex min-h-0 flex-1 flex-col"
-        >
-            <div class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900">
-                <button
-                    type="button"
-                    wire:click="closeHost"
-                    wire:loading.attr="disabled"
-                    wire:target="closeHost"
-                    class="me-0.5 inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-md border-2 border-slate-400 bg-white text-gray-950 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 md:hidden dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
-                    aria-label="{{ __('pos.detail_pick_table') }}"
-                >
-                    <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="13,4 7,10 13,16" />
-                    </svg>
-                </button>
-                <div class="min-w-0 w-full flex-1">
-                    <div class="h-4 w-40 animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/70"></div>
-                    <div class="mt-1 h-3 w-28 animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/70"></div>
-                </div>
-            </div>
-            <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]">
-                <div class="space-y-1 py-1">
-                    <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
-                    <div class="h-6 w-11/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
-                    <div class="h-6 w-10/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
-                </div>
-            </div>
-        </div>
-
-        <div wire:key="pane-real-content" x-cloak x-show="!isLocalSkeletonVisible" class="min-h-0 flex flex-1 flex-col">
+        <div wire:key="pane-real-content" x-cloak class="flex min-h-0 flex-1 flex-col">
         {{-- Header: table name + primary actions --}}
         <div
             class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900"
@@ -11817,9 +12020,17 @@ class TableActionHost extends Component
                 </svg>
             </button>
             <div class="min-w-0 flex-1">
-                <div class="mt-0.5 flex items-center gap-1.5">
-                    <span class="rounded-full border-2 border-amber-400 bg-amber-100 px-4 py-1 text-[14px] font-extrabold uppercase tracking-wider text-blue-900 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-100">
-                    {{ $this->activeSessionLabel }}
+                <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
+                    <span class="inline-flex min-w-0 max-w-full rounded-full border-2 border-amber-400 bg-amber-100 px-4 py-1 text-[14px] font-extrabold uppercase tracking-wider text-blue-900 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-100">
+                        <span
+                            class="min-w-0 max-w-full truncate text-blue-900 dark:text-blue-100"
+                            x-show="previewTableName"
+                            x-text="previewTableName"
+                        ></span>
+                        <span
+                            class="min-w-0 max-w-full truncate text-blue-900 dark:text-blue-100"
+                            x-show="!previewTableName"
+                        >{{ $this->activeSessionLabel }}</span>
                     </span>
                     @if ($this->isBilledState)
                         <span class="rounded-full border-2 border-amber-500 bg-amber-200 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900 dark:border-amber-400 dark:bg-amber-900/50 dark:text-amber-100">
@@ -11833,7 +12044,7 @@ class TableActionHost extends Component
                     type="button"
                     wire:click="ajouter"
                     data-pos-ajouter-primary
-                    @disabled($footerLocked)
+                    x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                     wire:loading.attr="disabled"
                     wire:target="ajouter"
                     class="rounded-md border-2 border-sky-950 bg-sky-400 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-gray-950 shadow-md hover:bg-sky-300 dark:text-gray-950 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
@@ -11854,7 +12065,7 @@ class TableActionHost extends Component
                             bulkSyncing = false;
                         });
                     "
-                    @disabled(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
+                    x-bind:disabled="isLocalSkeletonVisible || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)"
                     class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
                 >
                     {{ __('pos.action_recu_staff') }}
@@ -11863,8 +12074,20 @@ class TableActionHost extends Component
         </div>
 
         <div
-            class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]"
+            class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]"
         >
+            <div
+                x-show="isLocalSkeletonVisible"
+                x-cloak
+                class="absolute inset-x-1 inset-y-[2px] z-20 flex min-h-[6.5rem] flex-col gap-1 rounded-md border border-slate-200/80 bg-linear-to-b from-white via-white to-blue-50/90 px-1 py-2 shadow-sm dark:border-slate-600/80 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950/90"
+                aria-hidden="true"
+            >
+                <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                <div class="h-6 w-11/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                <div class="h-6 w-10/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                <div class="h-6 w-full max-w-[92%] animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+            </div>
+            <div x-show="!isLocalSkeletonVisible" class="min-h-0">
             @if (! $this->isOrdersLoaded)
                 <div class="space-y-1 py-1">
                     <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
@@ -11923,7 +12146,7 @@ class TableActionHost extends Component
                                             @if (! $this->isBilledState)
                                                 wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                             @endif
-                                            @disabled($footerLocked)
+                                            x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                                             wire:loading.attr="disabled"
                                             wire:target="promptRemoveLine({{ (int) $line->id }})"
                                             class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -11969,7 +12192,7 @@ class TableActionHost extends Component
                                         @if (! $this->isBilledState)
                                             wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                         @endif
-                                        @disabled($footerLocked)
+                                        x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                                         wire:loading.attr="disabled"
                                         wire:target="promptRemoveLine({{ (int) $line->id }})"
                                         class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -11997,6 +12220,7 @@ class TableActionHost extends Component
                     </section>
                 </div>
             @endif
+            </div>
         </div>
         </div>
 
@@ -12190,7 +12414,7 @@ class TableActionHost extends Component
             <button
                 type="button"
                 wire:click="printAddition"
-                @disabled(! $this->canImprimerAddition || $footerLocked)
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
@@ -12207,7 +12431,7 @@ class TableActionHost extends Component
             <button
                 type="button"
                 wire:click="checkoutSession"
-                @disabled(! $this->canCloture || $footerLocked)
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canCloture || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"
@@ -12237,7 +12461,7 @@ class TableActionHost extends Component
             <button
                 type="button"
                 wire:click="printAddition"
-                @disabled(! $this->canImprimerAddition || $footerLocked)
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="min-h-9 rounded-md border-2 border-sky-900 bg-sky-100 py-1 text-center text-[10px] font-extrabold uppercase tracking-wide text-sky-950 shadow-sm hover:bg-sky-200 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-[11px]"

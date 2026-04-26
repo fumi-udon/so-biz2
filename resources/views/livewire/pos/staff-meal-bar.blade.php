@@ -28,15 +28,22 @@
             x-data="{
                 optimisticStaffTableId: null,
                 peerStaffTid: null,
-                clickStaffTile(tid, tableName) {
+                clickStaffTile(tid, tableName, sessionId) {
                     const token = Date.now()
                     this.optimisticStaffTableId = tid;
+                    const sid =
+                        typeof sessionId === 'number' &&
+                        Number.isFinite(sessionId) &&
+                        sessionId > 0
+                            ? sessionId
+                            : null
                     window.dispatchEvent(
                         new CustomEvent('show-local-skeleton', {
                             detail: {
                                 tid: tid,
                                 token: token,
                                 tableName: typeof tableName === 'string' ? tableName : '',
+                                sessionId: sid,
                             },
                             bubbles: true,
                         }),
@@ -73,7 +80,7 @@
                     type="button"
                     wire:click="openTableContext({{ $tid }}, {{ $sid > 0 ? $sid : 'null' }})"
                     wire:key="staff-meal-{{ $tid }}"
-                    @pointerdown="clickStaffTile({{ $tid }}, @js($previewTableName))"
+                    @pointerdown="clickStaffTile({{ $tid }}, @js($previewTableName), @js($sid > 0 ? $sid : null))"
                     x-bind:class="{
                         '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear will-change-transform dark:ring-amber-400': @js($isStaffSel) || optimisticStaffTableId === {{ $tid }} || peerStaffTid === {{ $tid }},
                     }"

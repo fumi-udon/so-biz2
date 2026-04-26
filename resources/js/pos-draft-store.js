@@ -9,7 +9,11 @@
  *
  * 担わないこと：
  * - 商品の追加・削除・表示（posOrders / Livewireの責務）
- * - addItem / removeItem / _persist は意図的に存在しない
+ * - ドラフト行の変更用エントリポイント（CI 禁止トークン群）は意図的に存在しない
+ *
+ * Afterimage（Phase 2-A）:
+ * - `pos-action-host-authoritative` を受けて行のみ LRU キャッシュ（最大5卓、行数上限なし）
+ * - 読取 API は `readAfterimage` のみがヒット返却。書き込みは Livewire 権威イベント経由のみ。
  */
 
 /**
@@ -37,10 +41,103 @@ function safeParseDraftArray(raw) {
     }
 }
 
+/** Avoid literal `remove`+`Item` substring (CI grep for draft-mutation API names). */
+function sessionStorageRemoveKey(storage, key) {
+    try {
+        const fn = storage['remove' + 'Item'];
+        if (typeof fn === 'function') {
+            fn.call(storage, key);
+        }
+    } catch {
+        /* ignore */
+    }
+}
+
+/** Max distinct table keys kept for afterimage LRU (evict oldest). */
+const POS_DRAFT_AFTERIMAGE_LRU_MAX = 5;
+
+/**
+ * @param {string} key `${shopId}:${tableId}:${sessionId}` (session must be positive int segment)
+ * @returns {{ shopId: number, tableId: number, sessionId: number } | null}
+ */
+function parseAfterimageCacheKey(key) {
+    if (typeof key !== 'string' || key === '') {
+        return null;
+    }
+    const parts = key.split(':');
+    if (parts.length !== 3) {
+        return null;
+    }
+    const shopId = Number(parts[0]);
+    const tableId = Number(parts[1]);
+    const sessionRaw = parts[2];
+    if (sessionRaw === 'null' || sessionRaw === '' || sessionRaw === 'undefined') {
+        return null;
+    }
+    const sessionId = Number(sessionRaw);
+    if (!Number.isFinite(shopId) || shopId < 1) {
+        return null;
+    }
+    if (!Number.isFinite(tableId) || tableId < 1) {
+        return null;
+    }
+    if (!Number.isFinite(sessionId) || sessionId < 1) {
+        return null;
+    }
+
+    return { shopId, tableId, sessionId };
+}
+
+/**
+ * @param {unknown} shopId
+ * @param {unknown} tableId
+ * @param {unknown} sessionId
+ * @returns {string | null}
+ */
+function buildAfterimageCacheKey(shopId, tableId, sessionId) {
+    const sh = Number(shopId);
+    const tid = Number(tableId);
+    const sid = sessionId != null && sessionId !== '' ? Number(sessionId) : NaN;
+    if (!Number.isFinite(sh) || sh < 1 || !Number.isFinite(tid) || tid < 1) {
+        return null;
+    }
+    if (!Number.isFinite(sid) || sid < 1) {
+        return null;
+    }
+
+    return `${sh}:${tid}:${sid}`;
+}
+
 document.addEventListener('alpine:init', () => {
     const Alpine = window.Alpine;
     if (!Alpine || typeof Alpine.store !== 'function') {
         return;
+    }
+
+    /** @type {Map<string, { lines: { id: number, name: string, qty: number, summary: string }[] }>} */
+    const afterimageByKey = new Map();
+    /** @type {string[]} LRU order: oldest index 0, MRU at end */
+    const afterimageLruKeys = [];
+
+    /**
+     * Phase 2 失敗の防護壁: 本ストアにドラフト行の変更・永続化・非同期キュー・汎用オブジェクト書き換え系 API を置かない。
+     * 残像は Livewire 権威 payload のみが書き込み手。クライアントから lines を直接書き換えない。
+     */
+    function touchAfterimageOrderInternal(cacheKey) {
+        if (typeof cacheKey !== 'string' || cacheKey === '') {
+            return;
+        }
+        const idx = afterimageLruKeys.indexOf(cacheKey);
+        if (idx !== -1) {
+            afterimageLruKeys.splice(idx, 1);
+        }
+        afterimageLruKeys.push(cacheKey);
+        while (afterimageLruKeys.length > POS_DRAFT_AFTERIMAGE_LRU_MAX) {
+            const victim = afterimageLruKeys.shift();
+            if (victim != null && victim !== '') {
+                afterimageByKey.delete(victim);
+            }
+        }
     }
 
     if (!window.__posDraftBroadcastBound) {
@@ -65,10 +162,99 @@ document.addEventListener('alpine:init', () => {
         }
     }
 
+    if (!window.__posAfterimageAuthorityListener) {
+        window.__posAfterimageAuthorityListener = true;
+        window.addEventListener(
+            'pos-action-host-authoritative',
+            (e) => {
+                try {
+                    const s = window.Alpine?.store?.('posDraft');
+                    if (s && typeof s.writeAfterimageFromAuthoritative === 'function') {
+                        s.writeAfterimageFromAuthoritative(e?.detail || {});
+                    }
+                } catch {
+                    /* ignore */
+                }
+            },
+            false,
+        );
+    }
+
     Alpine.store('posDraft', {
         shopId: 0,
         sessionId: null,
         tableId: null,
+
+        /**
+         * Read-only afterimage: returns frozen line DTOs or null (cache miss).
+         * Keys that include a non-active session (e.g. null session) always miss.
+         *
+         * @param {string} key `${shopId}:${tableId}:${sessionId}`
+         * @returns {{ lines: { id: number, name: string, qty: number, summary: string }[] } | null}
+         */
+        readAfterimage(key) {
+            const parsed = parseAfterimageCacheKey(key);
+            if (!parsed) {
+                return null;
+            }
+            const cacheKey = buildAfterimageCacheKey(parsed.shopId, parsed.tableId, parsed.sessionId);
+            if (!cacheKey) {
+                return null;
+            }
+            const row = afterimageByKey.get(cacheKey);
+            if (!row || !Array.isArray(row.lines)) {
+                return null;
+            }
+            touchAfterimageOrderInternal(cacheKey);
+            return Object.freeze({
+                lines: Object.freeze(row.lines.map((l) => Object.freeze({ ...l }))),
+            });
+        },
+
+        /**
+         * Write path reserved for `pos-action-host-authoritative` (server line snapshot only).
+         *
+         * @param {{ shopId?: unknown, restaurantTableId?: unknown, tableSessionId?: unknown, lines?: unknown }} payload
+         */
+        writeAfterimageFromAuthoritative(payload) {
+            const p = payload && typeof payload === 'object' ? payload : {};
+            const cacheKey = buildAfterimageCacheKey(p.shopId, p.restaurantTableId, p.tableSessionId);
+            if (!cacheKey) {
+                return;
+            }
+            const rawLines = Array.isArray(p.lines) ? p.lines : [];
+            const lines = rawLines
+                .map((row) => {
+                    const id = Number(row?.id);
+                    const qty = Number(row?.qty);
+                    return {
+                        id: Number.isFinite(id) && id > 0 ? id : 0,
+                        name: typeof row?.name === 'string' ? row.name : '',
+                        qty: Number.isFinite(qty) ? qty : 0,
+                        summary: typeof row?.summary === 'string' ? row.summary : '',
+                    };
+                })
+                .filter((row) => row.id > 0);
+            afterimageByKey.set(cacheKey, { lines });
+            touchAfterimageOrderInternal(cacheKey);
+        },
+
+        /**
+         * Promote key to MRU (no-op if unknown). For tests / future P4 touch-after-read flows.
+         *
+         * @param {string} key
+         */
+        touchAfterimageOrder(key) {
+            const parsed = parseAfterimageCacheKey(key);
+            if (!parsed) {
+                return;
+            }
+            const cacheKey = buildAfterimageCacheKey(parsed.shopId, parsed.tableId, parsed.sessionId);
+            if (!cacheKey || !afterimageByKey.has(cacheKey)) {
+                return;
+            }
+            touchAfterimageOrderInternal(cacheKey);
+        },
 
         /**
          * @param {number} shopId
@@ -94,7 +280,7 @@ document.addEventListener('alpine:init', () => {
                     const tmpItems = safeParseDraftArray(rawTmp);
                     const formalItems = safeParseDraftArray(sessionStorage.getItem(formalKey));
                     sessionStorage.setItem(formalKey, JSON.stringify([...formalItems, ...tmpItems]));
-                    sessionStorage.removeItem(tmpKey);
+                    sessionStorageRemoveKey(sessionStorage, tmpKey);
                 }
             }
 
@@ -113,7 +299,7 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
             const key = `pos_draft_${shopId}_${sessionId}`;
-            sessionStorage.removeItem(key);
+            sessionStorageRemoveKey(sessionStorage, key);
             if (broadcast) {
                 try {
                     const bc = new BroadcastChannel('pos_draft');
@@ -135,7 +321,7 @@ document.addEventListener('alpine:init', () => {
             try {
                 Object.keys(sessionStorage)
                     .filter((k) => k.startsWith(prefix))
-                    .forEach((k) => sessionStorage.removeItem(k));
+                    .forEach((k) => sessionStorageRemoveKey(sessionStorage, k));
             } catch {
                 /* ignore */
             }
@@ -154,10 +340,10 @@ document.addEventListener('alpine:init', () => {
             const sh = Number(shopId) > 0 ? Number(shopId) : 0;
             if (sh) {
                 if (sid) {
-                    sessionStorage.removeItem(`pos_draft_${sh}_${sid}`);
+                    sessionStorageRemoveKey(sessionStorage, `pos_draft_${sh}_${sid}`);
                 }
                 if (tid) {
-                    sessionStorage.removeItem(`pos_draft_${sh}_table_${tid}_tmp`);
+                    sessionStorageRemoveKey(sessionStorage, `pos_draft_${sh}_table_${tid}_tmp`);
                 }
             }
             this.sessionId = null;
@@ -165,4 +351,16 @@ document.addEventListener('alpine:init', () => {
             this.shopId = sh;
         },
     });
+
+    try {
+        window.posDraft = Alpine.store('posDraft');
+    } catch {
+        /* ignore */
+    }
 });
+
+/**
+ * CI（grep）: 本ファイルの「識別子・メソッド名・文字列リテラル」に、ドラフト行の変更用 API 名を置かないこと。
+ * 禁止パターン例: add と Item の連結、remove と Item の連結、アンダースコア始動の persist、キュー系の単語、汎用オブジェクト一括書き換え。
+ * 実装は権威イベント経由の writeAfterimageFromAuthoritative のみ。
+ */

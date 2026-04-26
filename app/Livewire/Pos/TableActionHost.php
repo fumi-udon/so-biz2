@@ -224,6 +224,7 @@ class TableActionHost extends Component
         if ($sid === null) {
             $this->isOrdersLoaded = true;
             $this->dispatchBrowserPeerSyncForOpenedTable($tid);
+            $this->dispatchAuthoritativeLinePayload();
             $this->posDraftSyncContextToBrowser();
 
             return;
@@ -266,8 +267,8 @@ class TableActionHost extends Component
                 : null,
         ])->toHtml();
         $this->js(
-            'try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
-            .'if(s&&typeof s.switchContext==="function"){s.switchContext(p[0],p[1],p[2]);}}catch(e){}'
+            '(function(){try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
+            .'if(s&&typeof s.switchContext==="function"){s.switchContext(p[0],p[1],p[2]);}}catch(e){}})()'
         );
     }
 
@@ -275,13 +276,16 @@ class TableActionHost extends Component
     {
         $payload = Js::from([$shopId, $tableId, $sessionId])->toHtml();
 
-        return 'try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
-            .'if(s&&typeof s.onHostClosed==="function"){s.onHostClosed(p[0],p[1],p[2]);}}catch(e){}';
+        return '(function(){try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
+            .'if(s&&typeof s.onHostClosed==="function"){s.onHostClosed(p[0],p[1],p[2]);}}catch(e){}})()';
     }
 
     /**
      * Sync takeaway/staff floor rings without bundling extra Livewire components:
      * fires browser CustomEvents consumed by Alpine on the POS bars.
+     *
+     * `dispatchAuthoritativeLinePayload()` emits `pos-action-host-ui-sync` immediately before
+     * `pos-action-host-authoritative` after every successful `loadOrderDetails()` (and empty-open path).
      */
     private function dispatchBrowserPeerSyncForOpenedTable(int $tableId): void
     {
@@ -293,7 +297,83 @@ class TableActionHost extends Component
         ])->toHtml();
         $this->js(
             'window.dispatchEvent(new CustomEvent("pos-floor-peer-sync", { bubbles: true, detail: '.$detail.' }));'
-            ."window.dispatchEvent(new CustomEvent('pos-action-host-ui-sync', { bubbles: true }));"
+        );
+    }
+
+    /**
+     * Browser: `pos-action-host-ui-sync` then `pos-action-host-authoritative` in a single Livewire `$this->js()`
+     * blob so Alpine sees a fixed ordering (skeleton → afterimage → live hand-off).
+     *
+     * @return list<array{id:int,name:string,qty:int,summary:string}>
+     */
+    private function buildAuthoritativeLinePayloadLines(): array
+    {
+        if (! $this->isOrdersLoaded) {
+            return [];
+        }
+        $out = [];
+        foreach ($this->posOrders as $order) {
+            foreach ($order->lines as $line) {
+                if ($line->status === OrderLineStatus::Cancelled) {
+                    continue;
+                }
+                $out[] = [
+                    'id' => (int) $line->getKey(),
+                    'name' => trim((string) $line->snapshot_name),
+                    'qty' => (int) $line->qty,
+                    'summary' => $this->linePrimaryText($line),
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    private function resolveAuthoritativeRestaurantTableId(): ?int
+    {
+        if ($this->session !== null) {
+            $tid = (int) ($this->session->restaurant_table_id ?? 0);
+
+            return $tid > 0 ? $tid : null;
+        }
+        if ($this->activeRestaurantTableId !== null && (int) $this->activeRestaurantTableId > 0) {
+            return (int) $this->activeRestaurantTableId;
+        }
+
+        return null;
+    }
+
+    private function resolveAuthoritativeTableSessionId(): ?int
+    {
+        if ($this->activeTableSessionId === null || (int) $this->activeTableSessionId < 1) {
+            return null;
+        }
+        if ($this->session === null) {
+            return null;
+        }
+
+        return (int) $this->activeTableSessionId;
+    }
+
+    /**
+     * Emit line-only authoritative payload for the afterimage cache (no totals).
+     * Always chained after `pos-action-host-ui-sync` in the same script string (do not split calls).
+     */
+    private function dispatchAuthoritativeLinePayload(): void
+    {
+        if ($this->shopId < 1) {
+            return;
+        }
+        $lines = $this->buildAuthoritativeLinePayloadLines();
+        $detail = Js::from([
+            'shopId' => (int) $this->shopId,
+            'restaurantTableId' => $this->resolveAuthoritativeRestaurantTableId(),
+            'tableSessionId' => $this->resolveAuthoritativeTableSessionId(),
+            'lines' => $lines,
+        ])->toHtml();
+        $this->js(
+            "window.dispatchEvent(new CustomEvent('pos-action-host-ui-sync', { bubbles: true }));"
+            ."window.dispatchEvent(new CustomEvent('pos-action-host-authoritative', { bubbles: true, detail: {$detail} }));"
         );
     }
 
@@ -319,11 +399,13 @@ class TableActionHost extends Component
         $this->isOrdersLoaded = false;
         if ($this->shopId === 0) {
             $this->isOrdersLoaded = true;
+            $this->dispatchAuthoritativeLinePayload();
 
             return;
         }
         if ($sessionId === null || $sessionId < 1) {
             $this->isOrdersLoaded = true;
+            $this->dispatchAuthoritativeLinePayload();
 
             return;
         }
@@ -336,6 +418,7 @@ class TableActionHost extends Component
             ->first();
         if ($existing === null) {
             $this->isOrdersLoaded = true;
+            $this->dispatchAuthoritativeLinePayload();
 
             return;
         }
@@ -343,6 +426,7 @@ class TableActionHost extends Component
         $this->isOrdersLoaded = true;
         $this->sessionRowCache = $existing;
         $this->forgetSessionOrderComputed(preserveSessionRowCache: true);
+        $this->dispatchAuthoritativeLinePayload();
     }
 
     /**
@@ -500,6 +584,7 @@ class TableActionHost extends Component
             }
         }
         $this->forgetSessionOrderComputed();
+        $this->dispatchAuthoritativeLinePayload();
         $this->dispatch('pos-refresh-tiles');
     }
 

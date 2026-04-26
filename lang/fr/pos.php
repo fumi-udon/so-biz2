@@ -96,6 +96,7 @@ return [
     'data_stale_title' => 'Données mises à jour',
     'revision_conflict_reload' => 'Les commandes ont changé. Liste actualisée.',
     'ui_working' => 'Traitement…',
+    'afterimage_syncing' => 'Synchronisation…',
     'discount_approver_not_found' => 'Agent approbateur introuvable.',
     'discount_already_recorded' => 'Cette remise a déjà été enregistrée.',
     'discount_target_not_found' => 'Cible de remise introuvable.',

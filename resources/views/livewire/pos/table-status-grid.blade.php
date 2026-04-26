@@ -8,18 +8,25 @@
     x-data="{
         selectedTableId: null,
         optimisticTableId: null,
-        clickTile(tid, tableName) {
+        clickTile(tid, tableName, sessionId) {
             const token = Date.now()
             this.optimisticTableId = null;
             this.$nextTick(() => {
                 this.optimisticTableId = tid;
             })
+            const sid =
+                typeof sessionId === 'number' &&
+                Number.isFinite(sessionId) &&
+                sessionId > 0
+                    ? sessionId
+                    : null
             window.dispatchEvent(
                 new CustomEvent('show-local-skeleton', {
                     detail: {
                         tid: tid,
                         token: token,
                         tableName: typeof tableName === 'string' ? tableName : '',
+                        sessionId: sid,
                     },
                     bubbles: true,
                 }),
@@ -72,7 +79,7 @@
                             type="button"
                             wire:click="openTableContext({{ $tid }}, {{ $sid }}, @js((string) ($tile['restaurantTableName'] ?? '')))"
                             @click="selectedTableId = {{ $tid }}"
-                            @pointerdown="clickTile({{ $tid }}, @js($previewTableName))"
+                            @pointerdown="clickTile({{ $tid }}, @js($previewTableName), @js($sid > 0 ? $sid : null))"
                             x-bind:class="{
                                 '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': optimisticTableId === {{ $tid }},
                             }"

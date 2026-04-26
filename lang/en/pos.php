@@ -96,6 +96,7 @@ return [
     'data_stale_title' => 'Data was updated',
     'revision_conflict_reload' => 'Orders changed. The list was refreshed.',
     'ui_working' => 'Working…',
+    'afterimage_syncing' => 'Syncing…',
     'discount_approver_not_found' => 'Approver not found.',
     'discount_already_recorded' => 'This discount has already been recorded.',
     'discount_target_not_found' => 'Discount target not found.',

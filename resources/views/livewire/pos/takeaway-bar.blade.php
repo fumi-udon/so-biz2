@@ -23,6 +23,7 @@
                 @foreach ($takeawayTiles as $tile)
                     @php
                         $tid = (int) $tile['restaurantTableId'];
+                        $sid = (int) ($tile['activeTableSessionId'] ?? 0);
                         $isFloorSel = $this->floorSelectedTakeawayTableId !== null && $this->floorSelectedTakeawayTableId === $tid;
                         $surface = $this->tileSurfaceClasses($tile);
                         $previewTableName =
@@ -34,7 +35,7 @@
                         type="button"
                         wire:click="openModalForTable({{ $tid }})"
                         wire:key="takeaway-tile-{{ $tid }}"
-                        @pointerdown="window.dispatchEvent(new CustomEvent('show-local-skeleton', { detail: { tid: {{ $tid }}, token: Date.now(), tableName: @js($previewTableName) }, bubbles: true }))"
+                        @pointerdown="window.dispatchEvent(new CustomEvent('show-local-skeleton', { detail: { tid: {{ $tid }}, token: Date.now(), tableName: @js($previewTableName), sessionId: @js($sid > 0 ? $sid : null) }, bubbles: true }))"
                         x-data="{ flash: false, flashTimer: null }"
                         x-on:click="
                             flash = true;
