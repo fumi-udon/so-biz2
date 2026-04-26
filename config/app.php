@@ -152,8 +152,9 @@ return [
     | Server-Timing header (HTTP profiling)
     |--------------------------------------------------------------------------
     |
-    | When true, web responses include Server-Timing: app, db, non-db (Chrome
-    | Network → click request → Timing). Enable with SERVER_TIMING=true.
+    | When true, web responses include Server-Timing: db (query time sum, ms),
+    | app (request wall time incl. DB, ms). Chrome: Network → request → Timing.
+    | Enable with SERVER_TIMING=true.
     |
     */
 

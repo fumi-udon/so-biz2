@@ -2,11 +2,13 @@
 
 namespace App\Support\Http;
 
+use App\Http\Middleware\AppendServerTiming;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Collects per-request timings for the Server-Timing header (Chrome DevTools → Network).
- * Activated per-request by {@see \App\Http\Middleware\AppendServerTiming}.
+ * Emits `db` (query time sum) and `app` (request wall time). Activated by
+ * {@see AppendServerTiming}.
  */
 final class ServerTimingCollector
 {
@@ -47,12 +49,12 @@ final class ServerTimingCollector
         }
 
         $wallMs = (microtime(true) - $this->startedAt) * 1000.0;
-        $nonDbMs = max(0.0, $wallMs - $this->dbMs);
 
+        // db = MySQL 報告のクエリ時間合計（ms）。app = リクエスト壁時計（DB 含むサーバー処理全体）。
+        // ブラウザの TTFB から app を引くと概ねネットワーク側の寄与に近い（Server-Timing は応答ヘッダ内のサーバー計測のみ）。
         $metrics = [
-            sprintf('app;dur=%.2f', $wallMs),
             sprintf('db;dur=%.2f;desc="%d q"', $this->dbMs, $this->queryCount),
-            sprintf('non-db;dur=%.2f', $nonDbMs),
+            sprintf('app;dur=%.2f', $wallMs),
         ];
 
         $response->headers->set('Server-Timing', implode(', ', $metrics), false);

@@ -8,7 +8,10 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Adds Server-Timing for wall / DB / remainder when app.server_timing is true.
+ * Livewire の update 等の Web 応答に Server-Timing を付与する（Chrome DevTools → Network → Timing）。
+ *
+ * DB 集計は {@see AppServiceProvider} の単一 DB::listen から
+ * {@see \App\Support\Http\ServerTimingCollector} に流す（ミドルウェア毎に listen 登録しない＝リスナー蓄積を防ぐ）。
  *
  * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing
  */
