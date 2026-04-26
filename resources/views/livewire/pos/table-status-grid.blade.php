@@ -8,7 +8,7 @@
     x-data="{
         selectedTableId: null,
         optimisticTableId: null,
-        clickTile(tid) {
+        clickTile(tid, tableName) {
             const token = Date.now()
             this.optimisticTableId = null;
             this.$nextTick(() => {
@@ -19,6 +19,7 @@
                     detail: {
                         tid: tid,
                         token: token,
+                        tableName: typeof tableName === 'string' ? tableName : '',
                     },
                     bubbles: true,
                 }),
@@ -58,6 +59,10 @@
                         $lineTitle = 'font-extrabold '.$titleTone;
                         $lineMeta = 'font-semibold '.$metaTone;
                         $lineTotal = 'font-extrabold tabular-nums '.$titleTone;
+                        $previewTableName =
+                            (string) ($tile['restaurantTableName'] ?? '') !== ''
+                                ? (string) $tile['restaurantTableName']
+                                : (string) __('pos.table_name_fallback', ['id' => $tid]);
                     @endphp
                     <div
                         class="w-full min-w-0"
@@ -67,7 +72,7 @@
                             type="button"
                             wire:click="openTableContext({{ $tid }}, {{ $sid }}, @js((string) ($tile['restaurantTableName'] ?? '')))"
                             @click="selectedTableId = {{ $tid }}"
-                            @pointerdown="clickTile({{ $tid }})"
+                            @pointerdown="clickTile({{ $tid }}, @js($previewTableName))"
                             x-bind:class="{
                                 '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': optimisticTableId === {{ $tid }},
                             }"

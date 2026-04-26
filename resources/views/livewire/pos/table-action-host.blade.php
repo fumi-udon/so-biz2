@@ -21,6 +21,7 @@
     x-data="{
         isLocalSkeletonVisible: false,
         localSkeletonToken: null,
+        previewTableName: '',
         seenUnsentLineKeys: {},
         bulkSyncing: false,
         closeDrawer() {
@@ -29,17 +30,8 @@
             }
             this.isLocalSkeletonVisible = false;
             this.localSkeletonToken = null;
+            this.previewTableName = '';
             $wire.closeHost();
-        },
-        clearPaneSkeletonAfterMorph() {
-            const token = this.localSkeletonToken;
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    if (this.localSkeletonToken === token) {
-                        this.isLocalSkeletonVisible = false;
-                    }
-                });
-            });
         },
         shouldAnimateUnsent(key, isFresh) {
             if (!isFresh) {
@@ -87,7 +79,11 @@
     "
     x-on:show-local-skeleton.window="
         const detail = $event.detail || {}
+        try {
+            performance.mark('pos-tap-preview')
+        } catch (e) {}
         localSkeletonToken = detail.token ?? Date.now()
+        previewTableName = typeof detail.tableName === 'string' ? detail.tableName : ''
         isLocalSkeletonVisible = true
     "
     x-on:pos-tile-interaction-started.window="
@@ -97,18 +93,24 @@
         }
     "
     x-on:pos-action-host-ui-sync.window="
-        clearPaneSkeletonAfterMorph()
+        isLocalSkeletonVisible = false
+        previewTableName = ''
+        localSkeletonToken = null
+        try {
+            performance.mark('pos-host-ui-sync')
+        } catch (e) {}
     "
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
         localSkeletonToken = null
+        previewTableName = ''
     "
 >
     @if (! $open)
         <div
             wire:key="pane-welcome"
             x-cloak
-            x-show="!isLocalSkeletonVisible && !@js($open)"
+            x-show="!@js($open)"
             class="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
         >
             <p class="text-sm font-medium text-gray-800 dark:text-gray-100">
@@ -116,40 +118,7 @@
             </p>
         </div>
     @else
-        <div
-            wire:key="pane-local-skeleton"
-            x-cloak
-            x-show="isLocalSkeletonVisible"
-            class="flex min-h-0 flex-1 flex-col"
-        >
-            <div class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900">
-                <button
-                    type="button"
-                    wire:click="closeHost"
-                    wire:loading.attr="disabled"
-                    wire:target="closeHost"
-                    class="me-0.5 inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-md border-2 border-slate-400 bg-white text-gray-950 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 md:hidden dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
-                    aria-label="{{ __('pos.detail_pick_table') }}"
-                >
-                    <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="13,4 7,10 13,16" />
-                    </svg>
-                </button>
-                <div class="min-w-0 w-full flex-1">
-                    <div class="h-4 w-40 animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/70"></div>
-                    <div class="mt-1 h-3 w-28 animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/70"></div>
-                </div>
-            </div>
-            <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]">
-                <div class="space-y-1 py-1">
-                    <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
-                    <div class="h-6 w-11/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
-                    <div class="h-6 w-10/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
-                </div>
-            </div>
-        </div>
-
-        <div wire:key="pane-real-content" x-cloak x-show="!isLocalSkeletonVisible" class="min-h-0 flex flex-1 flex-col">
+        <div wire:key="pane-real-content" x-cloak class="flex min-h-0 flex-1 flex-col">
         {{-- Header: table name + primary actions --}}
         <div
             class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900"
@@ -167,9 +136,17 @@
                 </svg>
             </button>
             <div class="min-w-0 flex-1">
-                <div class="mt-0.5 flex items-center gap-1.5">
-                    <span class="rounded-full border-2 border-amber-400 bg-amber-100 px-4 py-1 text-[14px] font-extrabold uppercase tracking-wider text-blue-900 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-100">
-                    {{ $this->activeSessionLabel }}
+                <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
+                    <span class="inline-flex min-w-0 max-w-full rounded-full border-2 border-amber-400 bg-amber-100 px-4 py-1 text-[14px] font-extrabold uppercase tracking-wider text-blue-900 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-100">
+                        <span
+                            class="min-w-0 max-w-full truncate text-blue-900 dark:text-blue-100"
+                            x-show="previewTableName"
+                            x-text="previewTableName"
+                        ></span>
+                        <span
+                            class="min-w-0 max-w-full truncate text-blue-900 dark:text-blue-100"
+                            x-show="!previewTableName"
+                        >{{ $this->activeSessionLabel }}</span>
                     </span>
                     @if ($this->isBilledState)
                         <span class="rounded-full border-2 border-amber-500 bg-amber-200 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900 dark:border-amber-400 dark:bg-amber-900/50 dark:text-amber-100">
@@ -183,7 +160,7 @@
                     type="button"
                     wire:click="ajouter"
                     data-pos-ajouter-primary
-                    @disabled($footerLocked)
+                    x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                     wire:loading.attr="disabled"
                     wire:target="ajouter"
                     class="rounded-md border-2 border-sky-950 bg-sky-400 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-gray-950 shadow-md hover:bg-sky-300 dark:text-gray-950 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
@@ -204,7 +181,7 @@
                             bulkSyncing = false;
                         });
                     "
-                    @disabled(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
+                    x-bind:disabled="isLocalSkeletonVisible || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)"
                     class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
                 >
                     {{ __('pos.action_recu_staff') }}
@@ -213,8 +190,20 @@
         </div>
 
         <div
-            class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]"
+            class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]"
         >
+            <div
+                x-show="isLocalSkeletonVisible"
+                x-cloak
+                class="absolute inset-x-1 inset-y-[2px] z-20 flex min-h-[6.5rem] flex-col gap-1 rounded-md border border-slate-200/80 bg-linear-to-b from-white via-white to-blue-50/90 px-1 py-2 shadow-sm dark:border-slate-600/80 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950/90"
+                aria-hidden="true"
+            >
+                <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                <div class="h-6 w-11/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                <div class="h-6 w-10/12 animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+                <div class="h-6 w-full max-w-[92%] animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
+            </div>
+            <div x-show="!isLocalSkeletonVisible" class="min-h-0">
             @if (! $this->isOrdersLoaded)
                 <div class="space-y-1 py-1">
                     <div class="h-6 w-full animate-pulse rounded-md bg-slate-200/90 dark:bg-slate-700/70"></div>
@@ -273,7 +262,7 @@
                                             @if (! $this->isBilledState)
                                                 wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                             @endif
-                                            @disabled($footerLocked)
+                                            x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                                             wire:loading.attr="disabled"
                                             wire:target="promptRemoveLine({{ (int) $line->id }})"
                                             class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -319,7 +308,7 @@
                                         @if (! $this->isBilledState)
                                             wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                         @endif
-                                        @disabled($footerLocked)
+                                        x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                                         wire:loading.attr="disabled"
                                         wire:target="promptRemoveLine({{ (int) $line->id }})"
                                         class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -347,6 +336,7 @@
                     </section>
                 </div>
             @endif
+            </div>
         </div>
         </div>
 
@@ -540,7 +530,7 @@
             <button
                 type="button"
                 wire:click="printAddition"
-                @disabled(! $this->canImprimerAddition || $footerLocked)
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
@@ -557,7 +547,7 @@
             <button
                 type="button"
                 wire:click="checkoutSession"
-                @disabled(! $this->canCloture || $footerLocked)
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canCloture || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"
@@ -587,7 +577,7 @@
             <button
                 type="button"
                 wire:click="printAddition"
-                @disabled(! $this->canImprimerAddition || $footerLocked)
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="min-h-9 rounded-md border-2 border-sky-900 bg-sky-100 py-1 text-center text-[10px] font-extrabold uppercase tracking-wide text-sky-950 shadow-sm hover:bg-sky-200 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-[11px]"

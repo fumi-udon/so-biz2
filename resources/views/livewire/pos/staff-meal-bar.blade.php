@@ -28,7 +28,7 @@
             x-data="{
                 optimisticStaffTableId: null,
                 peerStaffTid: null,
-                clickStaffTile(tid) {
+                clickStaffTile(tid, tableName) {
                     const token = Date.now()
                     this.optimisticStaffTableId = tid;
                     window.dispatchEvent(
@@ -36,6 +36,7 @@
                             detail: {
                                 tid: tid,
                                 token: token,
+                                tableName: typeof tableName === 'string' ? tableName : '',
                             },
                             bubbles: true,
                         }),
@@ -63,13 +64,16 @@
                     $label = is_string($sn) && trim($sn) !== '' ? trim($sn) : null;
                     $isStaffSel = $this->floorSelectedStaffTableId !== null && $this->floorSelectedStaffTableId === $tid;
                     $staffSurface = $this->tileSurfaceClasses($tile);
+                    $previewTableName =
+                        (string) ($tile['restaurantTableName'] ?? '') !== ''
+                            ? (string) $tile['restaurantTableName']
+                            : (string) __('pos.table_name_fallback', ['id' => $tid]);
                 @endphp
                 <button
                     type="button"
                     wire:click="openTableContext({{ $tid }}, {{ $sid > 0 ? $sid : 'null' }})"
                     wire:key="staff-meal-{{ $tid }}"
-                    @pointerdown="clickStaffTile({{ $tid }})"
-                    @click="clickStaffTile({{ $tid }})"
+                    @pointerdown="clickStaffTile({{ $tid }}, @js($previewTableName))"
                     x-bind:class="{
                         '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear will-change-transform dark:ring-amber-400': @js($isStaffSel) || optimisticStaffTableId === {{ $tid }} || peerStaffTid === {{ $tid }},
                     }"

@@ -65,15 +65,111 @@
 - REQUIRED: Extend Alpine only via `document.addEventListener('alpine:init', () => { window.Alpine.store(...) })`.
 - REQUIRED: Ensure Tailwind v4 content scanning is configured via `@source` in `resources/css/app.css`, not `tailwind.config.js`.
 
-## [RULE] POS Draft Store 責務（変更禁止）
+## [RULE] POS SPA-Hybrid Three Inviolable Principles（不可侵原則・変更禁止）
 
-- posDraft store の役割はテーブル切替コンテキスト管理のみ
-- addItem / removeItem / _persist を追加することは禁止
-- 商品の表示はposOrders（Livewire）のみを正とする
-- 商品追加はsubmitAddLineでDB即書き（Alpine storeに溜めない）
-- この分離はOVHサーバー遅延対策のハイブリッド設計の結論であり
-  将来の開発者が「storeに溜めれば速くなる」と誤解して
-  Phase 2の失敗を繰り返さないための防護壁
+This project pursues SPA-like UX on a high-latency link (Tunisia ↔ OVH Europe).
+The following three principles MUST hold simultaneously. Any change that violates
+even one of them is forbidden — they are the structural firewall against the
+Phase 2 failure (where draft accumulation in Alpine led to dual-source drift,
+DOM breakage, and "store にためれば速くなる" misconception).
+
+1. **WRITES ALWAYS GO THROUGH LIVEWIRE / DB**
+   - Adding, editing, or deleting order lines / sessions / discounts MUST be
+     performed via Livewire actions (DB write first, then UI update).
+   - FORBIDDEN: accumulating mutations in Alpine state and reconciling later.
+   - FORBIDDEN: any `addItem` / `removeItem` / `_persist` style API on Alpine
+     stores that hold business data.
+
+2. **ALPINE CACHE IS READ-ONLY AFTERIMAGE (残像) ONLY**
+   - Alpine may hold a thin, read-only snapshot of *recently viewed* server
+     state purely for instant context switching (e.g., last N tables' line
+     lists shown as a placeholder while Livewire re-fetches).
+   - The authoritative source for displayed business data (order lines,
+     prices, totals, KDS status) is ALWAYS the Livewire component
+     (`posOrders` etc.). Alpine values are overwritten on every Livewire
+     response.
+   - The cache MUST be visually marked as "syncing" (e.g., dim/badge) until
+     the matching Livewire payload arrives and confirms it.
+
+3. **A SYNC BUTTON ALWAYS EXISTS AS THE ESCAPE HATCH**
+   - The POS UI MUST provide a visible "🔄 Sync" control that forces a fresh
+     fetch from Livewire/DB and overwrites the read-only cache.
+   - Sync MUST NOT clear in-progress draft inputs (e.g., addModal fields).
+   - Sync is the contractually-promised path to the latest truth — staff are
+     trained to press it whenever in doubt or after multi-device operations.
+
+Operational consequence:
+- The `posDraft` Alpine store is restricted to context switching and
+  read-only afterimage cache. It MUST NOT carry mutation APIs.
+- Any future "let's just keep it in Alpine to make it faster" proposal is
+  rejected by these principles.
+
+## [RULE] POS Read-Only Cache & Sync Button（残像キャッシュと同期運用）
+
+Implementation rules derived from the three inviolable principles above.
+
+### Cache shape & lifetime
+
+- Scope: last 3–5 tables most recently opened in this browser tab.
+- Storage: in-memory Alpine store (preferred). `sessionStorage` allowed only
+  if scoped to a single tab and cleared on logout / shop switch.
+  `localStorage` is FORBIDDEN for line data (cross-tab drift risk).
+- Eviction: LRU on table count; per-entry soft-TTL of 60 seconds (after
+  which the "syncing" badge becomes prominent even if a payload arrives).
+- Content: minimal fields needed for placeholder render only
+  (line id, item name, qty, options summary, total). No mutation hooks.
+
+### Switch behaviour (right pane)
+
+- On table tap:
+  - If cache hit → render afterimage immediately + show "🔄 同期中…" badge.
+  - If cache miss → render skeleton placeholder (never blank).
+- On Livewire payload arrival:
+  - `posOrders` overwrites the displayed lines (authoritative).
+  - The cache entry for that table is updated from the payload.
+  - The "同期中…" badge is removed.
+
+### Sync button (mandatory UI)
+
+- Placement: visible at all times in the POS table dashboard header.
+- Action: triggers a Livewire fetch that refreshes the active table and
+  invalidates / refreshes all cache entries; MUST NOT touch in-progress
+  draft form fields.
+- Auto-trigger conditions (system-side safety net, in addition to manual
+  press):
+  - Browser tab regains visibility (`visibilitychange` → visible).
+  - Same table tapped twice consecutively.
+  - Cache entry exceeds soft-TTL while displayed.
+
+### Forbidden patterns
+
+- FORBIDDEN: writing user mutations into the cache (the cache is read-only).
+- FORBIDDEN: using the cache as the source of totals, KDS status, or any
+  value that influences money or kitchen flow.
+- FORBIDDEN: hydrating the cache via `@json` / `@js` inside `x-data` /
+  `x-init` attributes — use `<script type="application/json" id="...">`
+  or assign from Livewire response payloads.
+- FORBIDDEN: extending the cache to hold draft order lines (that is the
+  Phase 2 anti-pattern).
+
+### Staff-facing operating rule (to be communicated)
+
+- 「テーブル切替は前回の残像が一瞬出ます」
+- 「他端末の最新状況を見たいときは 🔄 Sync を押す」
+- 「入力途中で Sync を押しても入力は消えません」
+
+## [RULE] POS Draft Store 責務（旧ルール — 上記 SPA-Hybrid 三原則に統合済み）
+
+- The previous "POS Draft Store 責務" rule is superseded by, and fully
+  contained in, "[RULE] POS SPA-Hybrid Three Inviolable Principles" and
+  "[RULE] POS Read-Only Cache & Sync Button" above.
+- Concretely retained constraints:
+  - `posDraft` store role: table-switch context + read-only afterimage cache
+    only.
+  - FORBIDDEN: adding `addItem` / `removeItem` / `_persist` APIs.
+  - Authoritative display source remains `posOrders` (Livewire).
+  - Item creation: `submitAddLine` writes to DB immediately; never queued
+    in Alpine.
 
 ## [REFERENCE] Order System Ver1 (in-store guest order)
 

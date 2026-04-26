@@ -25,11 +25,16 @@
                         $tid = (int) $tile['restaurantTableId'];
                         $isFloorSel = $this->floorSelectedTakeawayTableId !== null && $this->floorSelectedTakeawayTableId === $tid;
                         $surface = $this->tileSurfaceClasses($tile);
+                        $previewTableName =
+                            (string) ($tile['restaurantTableName'] ?? '') !== ''
+                                ? (string) $tile['restaurantTableName']
+                                : (string) __('pos.table_name_fallback', ['id' => $tid]);
                     @endphp
                     <button
                         type="button"
                         wire:click="openModalForTable({{ $tid }})"
                         wire:key="takeaway-tile-{{ $tid }}"
+                        @pointerdown="window.dispatchEvent(new CustomEvent('show-local-skeleton', { detail: { tid: {{ $tid }}, token: Date.now(), tableName: @js($previewTableName) }, bubbles: true }))"
                         x-data="{ flash: false, flashTimer: null }"
                         x-on:click="
                             flash = true;
