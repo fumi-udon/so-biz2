@@ -20,6 +20,7 @@ use App\Models\OrderLine;
 use App\Models\PosOrder;
 use App\Models\RestaurantTable;
 use App\Models\TableSession;
+use App\Services\Pos\TableDashboardQueryService;
 use App\Services\Pos\TableSessionLifecycleService;
 use App\Services\StaffDirectoryService;
 use App\Services\StaffPinAuthenticationService;
@@ -272,12 +273,33 @@ class TableActionHost extends Component
         );
     }
 
+    /**
+     * Tile grid reads {@see TableDashboardQueryService} with a 1s cache; forget before refresh so uiStatus
+     * (e.g. unacked placed / red tiles) matches DB immediately after mutations.
+     */
+    private function dispatchPosRefreshTilesWithShopDashboardCacheForget(): void
+    {
+        if ($this->shopId > 0) {
+            app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+        }
+        $this->dispatch('pos-refresh-tiles');
+    }
+
     private function posDraftHostCloseJs(int $shopId, ?int $tableId, ?int $sessionId): string
     {
         $payload = Js::from([$shopId, $tableId, $sessionId])->toHtml();
 
         return '(function(){try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
             .'if(s&&typeof s.onHostClosed==="function"){s.onHostClosed(p[0],p[1],p[2]);}}catch(e){}})()';
+    }
+
+    /**
+     * Lets TableActionHost Alpine treat the next `pos-action-host-authoritative` as user-driven
+     * (switch afterimage → live). Dispatched before mutating server state.
+     */
+    private function markAfterimageSelfActionForBrowser(): void
+    {
+        $this->js('(function(){try{window.dispatchEvent(new CustomEvent(\'pos-afterimage-self-action\',{bubbles:true}));}catch(e){}})()');
     }
 
     /**
@@ -585,7 +607,7 @@ class TableActionHost extends Component
         }
         $this->forgetSessionOrderComputed();
         $this->dispatchAuthoritativeLinePayload();
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     /**
@@ -638,12 +660,12 @@ class TableActionHost extends Component
     {
         $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
         if ($sid < 1 || (int) $shop_id !== $this->shopId) {
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
 
             return;
         }
         if ($this->activeTableSessionId !== $sid) {
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
 
             return;
         }
@@ -653,7 +675,7 @@ class TableActionHost extends Component
             return;
         }
         $this->loadSessionData($sid);
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     private function applyPendingEchoReloadIfAny(): void
@@ -666,7 +688,7 @@ class TableActionHost extends Component
             return;
         }
         $this->loadSessionData((int) $this->activeTableSessionId);
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     public function ajouter(): void
@@ -797,6 +819,7 @@ class TableActionHost extends Component
         $qty = max(1, min(200, (int) $this->addQty));
         $this->addQty = $qty;
 
+        $this->markAfterimageSelfActionForBrowser();
         try {
             app(AddPosOrderFromStaffAction::class)->execute(
                 $this->shopId,
@@ -809,7 +832,7 @@ class TableActionHost extends Component
             );
             // 明示: 商品追加後も卓コンテキストを維持するため closeHost / pos-tile-interaction-ended を呼ばない。
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->closeAddModal();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
@@ -854,7 +877,7 @@ class TableActionHost extends Component
         if ($sessionId > 0) {
             $this->loadSessionData($sessionId);
         }
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     /**
@@ -1022,7 +1045,7 @@ class TableActionHost extends Component
         $this->previewIntent = PrintIntent::Addition->value;
         $this->previewSessionId = 0;
         $this->loadSessionData($sid);
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
         $this->closeHostIfSessionClosed();
     }
 
@@ -1055,6 +1078,7 @@ class TableActionHost extends Component
         if (! $this->hasUnackedPlaced) {
             return;
         }
+        $this->markAfterimageSelfActionForBrowser();
         $this->uiState = 'in_flight';
         try {
             app(RecuPlacedOrdersForSessionAction::class)->execute(
@@ -1065,7 +1089,7 @@ class TableActionHost extends Component
             $this->uiState = 'success';
             // 明示: KDS 送信後も卓コンテキストを維持するため closeHost / pos-tile-interaction-ended を呼ばない。
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
@@ -1075,7 +1099,7 @@ class TableActionHost extends Component
                 ->warning()
                 ->send();
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
             $this->uiState = 'failed';
@@ -1133,6 +1157,7 @@ class TableActionHost extends Component
             return;
         }
 
+        $this->markAfterimageSelfActionForBrowser();
         $this->uiState = 'in_flight';
         try {
             DB::transaction(function () use ($drafts): void {
@@ -1178,7 +1203,7 @@ class TableActionHost extends Component
 
             $this->uiState = 'success';
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
@@ -1188,7 +1213,7 @@ class TableActionHost extends Component
                 ->warning()
                 ->send();
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
             $this->uiState = 'failed';
@@ -1265,12 +1290,12 @@ class TableActionHost extends Component
             } else {
                 $this->closeHost();
             }
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
 
             return;
         }
 
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     #[On('pos-discount-applied')]
@@ -1280,7 +1305,7 @@ class TableActionHost extends Component
             return;
         }
         $this->loadSessionData((int) $this->activeTableSessionId);
-        $this->dispatch('pos-refresh-tiles');
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
     }
 
     public function openDiscountForCurrent(): void
@@ -1428,6 +1453,7 @@ class TableActionHost extends Component
         if ($this->activeTableSessionId === null) {
             return;
         }
+        $this->markAfterimageSelfActionForBrowser();
         try {
             app(DeleteOrderLineWithPolicyAction::class)->execute(
                 shopId: $this->shopId,
@@ -1439,7 +1465,7 @@ class TableActionHost extends Component
                 approverPin: $approverPin,
             );
             $this->loadSessionData((int) $this->activeTableSessionId);
-            $this->dispatch('pos-refresh-tiles');
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
         } catch (Throwable $e) {
             Notification::make()
                 ->title(__('pos.action_failed'))

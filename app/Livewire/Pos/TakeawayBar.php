@@ -210,6 +210,9 @@ class TakeawayBar extends Component
         $this->customerPhone = '';
         $this->floorSelectedTakeawayTableId = null;
         $this->loadTakeawayTiles();
+        if ($this->shopId > 0) {
+            app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+        }
         $this->dispatch('pos-refresh-tiles');
         $this->dispatch('pos-tile-interaction-ended');
 

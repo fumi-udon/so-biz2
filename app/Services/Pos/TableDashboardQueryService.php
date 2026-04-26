@@ -33,11 +33,28 @@ final class TableDashboardQueryService
             return new TableDashboardData([]);
         }
 
-        $cacheKey = "pos:table-dashboard:shop:{$shopId}";
+        $cacheKey = $this->dashboardCacheKey($shopId);
 
         return Cache::remember($cacheKey, 1, function () use ($shopId): TableDashboardData {
             return $this->buildDashboardData($shopId);
         });
+    }
+
+    /**
+     * Drop the 1s shop tile aggregate cache so the next {@see getDashboardData()} rebuilds from DB.
+     * Call after mutations that affect placed / tile uiStatus (add line, Recu, delete, settlement, etc.).
+     */
+    public function forgetCachedDashboard(int $shopId): void
+    {
+        if ($shopId < 1) {
+            return;
+        }
+        Cache::forget($this->dashboardCacheKey($shopId));
+    }
+
+    private function dashboardCacheKey(int $shopId): string
+    {
+        return "pos:table-dashboard:shop:{$shopId}";
     }
 
     private function buildDashboardData(int $shopId): TableDashboardData

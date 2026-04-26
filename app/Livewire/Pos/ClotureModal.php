@@ -15,6 +15,7 @@ use App\Exceptions\Pos\SessionAlreadySettledException;
 use App\Exceptions\RevisionConflictException;
 use App\Models\PosOrder;
 use App\Models\TableSession;
+use App\Services\Pos\TableDashboardQueryService;
 use App\Support\MenuItemMoney;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Filament\Notifications\Notification;
@@ -145,6 +146,9 @@ class ClotureModal extends Component
                 table_session_id: (int) $this->tableSessionId,
                 open_receipt_preview: true,
             );
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
             $this->dispatch('pos-refresh-tiles');
             $this->uiState = 'success';
             $this->closeModal();
@@ -161,6 +165,9 @@ class ClotureModal extends Component
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
             Notification::make()->title(__('pos.data_stale_title'))->body(__('pos.revision_conflict_reload'))->warning()->send();
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
             $this->dispatch('pos-refresh-tiles');
             $this->closeModal();
         } catch (Throwable $e) {

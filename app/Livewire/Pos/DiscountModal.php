@@ -9,6 +9,7 @@ use App\Actions\Pos\Discount\RecordStaffDiscountAction;
 use App\Exceptions\Pos\DiscountPinRejectedException;
 use App\Exceptions\Pos\SessionAlreadySettledException;
 use App\Models\Staff;
+use App\Services\Pos\TableDashboardQueryService;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
@@ -105,6 +106,7 @@ class DiscountModal extends Component
         if ($this->uiState === 'in_flight' || $this->targetId === null || $this->approverStaffId === null) {
             return;
         }
+        $this->js('(function(){try{window.dispatchEvent(new CustomEvent(\'pos-afterimage-self-action\',{bubbles:true}));}catch(e){}})()');
         $this->uiState = 'in_flight';
 
         try {
@@ -126,6 +128,9 @@ class DiscountModal extends Component
             };
 
             $this->dispatch('pos-discount-applied', scope: $this->scope, target_id: (int) $this->targetId);
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
             $this->dispatch('pos-refresh-tiles');
             $this->closeModal();
         } catch (DiscountPinRejectedException $e) {

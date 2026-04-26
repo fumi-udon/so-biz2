@@ -25,10 +25,12 @@
         previewSessionId: null,
         /**
          * Line list surface: skeleton (Phase1 pulse) | afterimage (LRU hit, HIT_STALE) | live (Livewire posOrders).
-         * Flow: tap → Hit/Miss → afterimage or skeleton → pos-action-host-ui-sync (clears skeleton chrome) → authoritative → live.
+         * Authoritative alone does not leave afterimage unless selfActionPending (own write / Sync / first-load skeleton).
          */
         lineSurfaceMode: 'live',
         afterimageLines: [],
+        /** Next authoritative may reveal Livewire lines (user/Sync/first skeleton load). */
+        selfActionPending: false,
         seenUnsentLineKeys: {},
         bulkSyncing: false,
         closeDrawer() {
@@ -41,6 +43,7 @@
             this.previewSessionId = null;
             this.lineSurfaceMode = 'live';
             this.afterimageLines = [];
+            this.selfActionPending = false;
             $wire.closeHost();
         },
         shouldAnimateUnsent(key, isFresh) {
@@ -107,6 +110,7 @@
             lineSurfaceMode = 'skeleton'
             isLocalSkeletonVisible = true
             afterimageLines = []
+            selfActionPending = true
         } else {
             const s = window.Alpine && typeof Alpine.store === 'function' ? Alpine.store('posDraft') : null
             const key = String(shopId) + ':' + String(tid) + ':' + String(previewSessionId)
@@ -114,6 +118,7 @@
             if (hit != null && Array.isArray(hit.lines)) {
                 lineSurfaceMode = 'afterimage'
                 isLocalSkeletonVisible = false
+                selfActionPending = false
                 afterimageLines = hit.lines.map(function (l) {
                     return {
                         id: l.id,
@@ -126,10 +131,14 @@
                 lineSurfaceMode = 'skeleton'
                 isLocalSkeletonVisible = true
                 afterimageLines = []
+                selfActionPending = true
             }
         }
     "
     x-on:pos-tile-interaction-started.window="
+        if (lineSurfaceMode === 'afterimage') {
+            return
+        }
         if (!isLocalSkeletonVisible) {
             localSkeletonToken = Date.now()
             isLocalSkeletonVisible = true
@@ -148,10 +157,39 @@
         } catch (e) {}
     "
     x-on:pos-action-host-authoritative.window="
+        const detail = $event.detail || {}
+        const incomingSid =
+            typeof detail.tableSessionId === 'number'
+            && Number.isFinite(detail.tableSessionId)
+            && detail.tableSessionId > 0
+                ? detail.tableSessionId
+                : null
+        if (selfActionPending) {
+            lineSurfaceMode = 'live'
+            afterimageLines = []
+            selfActionPending = false
+            isLocalSkeletonVisible = false
+            return
+        }
+        if (lineSurfaceMode === 'afterimage') {
+            return
+        }
+        const curRaw = $wire.activeTableSessionId
+        const curSid =
+            typeof curRaw === 'number' && Number.isFinite(curRaw) && curRaw > 0
+                ? curRaw
+                : (curRaw != null && curRaw !== '' && Number.isFinite(Number(curRaw)) && Number(curRaw) > 0
+                    ? Number(curRaw)
+                    : null)
+        if (incomingSid !== null && curSid !== null && incomingSid !== curSid) {
+            return
+        }
         lineSurfaceMode = 'live'
         afterimageLines = []
         isLocalSkeletonVisible = false
     "
+    x-on:pos-afterimage-self-action.window="selfActionPending = true"
+    x-on:pos-afterimage-sync-request.window="selfActionPending = true"
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
         localSkeletonToken = null
@@ -159,6 +197,7 @@
         previewSessionId = null
         lineSurfaceMode = 'live'
         afterimageLines = []
+        selfActionPending = false
     "
 >
     @if (! $open)
@@ -236,7 +275,11 @@
                             bulkSyncing = false;
                         });
                     "
-                    x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)"
+                    x-bind:disabled="
+                        isLocalSkeletonVisible
+                        || (lineSurfaceMode === 'afterimage' && !@js($this->hasUnackedPlaced))
+                        || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
+                    "
                     class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
                 >
                     {{ __('pos.action_recu_staff') }}
