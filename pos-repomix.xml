@@ -32,7 +32,7 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Only files matching these patterns are included: app/Livewire/Pos/**/*.php, resources/views/livewire/pos/**/*.blade.php, app/Models/**/*.php, app/Services/**/*.php, routes/web.php, routes/api.php, app/Http/Middleware/AppendServerTiming.php, app/Support/Http/ServerTimingCollector.php
+- Only files matching these patterns are included: app/Livewire/Pos/**/*.php, resources/views/livewire/pos/**/*.blade.php, app/Models/**/*.php, app/Services/**/*.php, routes/web.php, routes/api.php, resources/views/components/**/*.blade.php
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -42,9 +42,6 @@ The content is organized as follows:
 
 <directory_structure>
 app/
-  Http/
-    Middleware/
-      AppendServerTiming.php
   Livewire/
     Pos/
       ClotureModal.php
@@ -113,11 +110,23 @@ app/
     TimecardPunchService.php
     TipCalculationService.php
     WeeklyShiftGridService.php
-  Support/
-    Http/
-      ServerTimingCollector.php
 resources/
   views/
+    components/
+      guest-order/
+        cart-panel.blade.php
+        category-rail.blade.php
+        category-section.blade.php
+        customize-sheet.blade.php
+        floating-cart.blade.php
+        product-card.blade.php
+      pos/
+        footer-utility-menu.blade.php
+      client-nav.blade.php
+      mypage-entry-modal.blade.php
+      pos-speed-panel.blade.php
+      rad-table-tile.blade.php
+      staff-pin-auth-card.blade.php
     livewire/
       pos/
         cloture-modal.blade.php
@@ -1298,45 +1307,6 @@ class RoutineInventoryCompletionService
         }
 
         return $lines;
-    }
-}
-</file>
-
-<file path="app/Http/Middleware/AppendServerTiming.php">
-<?php
-
-namespace App\Http\Middleware;
-
-use App\Support\Http\ServerTimingCollector;
-use Closure;
-use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
-
-/**
- * Adds Server-Timing for wall / DB / remainder when app.server_timing is true.
- *
- * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Server-Timing
- */
-final class AppendServerTiming
-{
-    public function handle(Request $request, Closure $next): mixed
-    {
-        if (! config('app.server_timing')) {
-            return $next($request);
-        }
-
-        /** @var ServerTimingCollector $collector */
-        $collector = app(ServerTimingCollector::class);
-        $collector->begin();
-
-        /** @var Response $response */
-        $response = $next($request);
-
-        if ($response instanceof Response) {
-            $collector->attachToResponse($response);
-        }
-
-        return $response;
     }
 }
 </file>
@@ -3866,69 +3836,222 @@ class TipCalculationService
 }
 </file>
 
-<file path="app/Support/Http/ServerTimingCollector.php">
-<?php
+<file path="resources/views/components/pos/footer-utility-menu.blade.php">
+{{-- POS kiosk footer: low-frequency actions (change table, admin, logout). Used by table-dashboard. --}}
+<div
+    class="relative shrink-0"
+    x-data="{ posUtilityMenuOpen: false }"
+    x-on:keydown.escape.window="posUtilityMenuOpen = false"
+    x-on:click.outside="posUtilityMenuOpen = false"
+>
+    <button
+        type="button"
+        class="inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-md border border-slate-200 bg-white text-gray-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 active:scale-95 dark:border-slate-600 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-slate-500 dark:hover:bg-slate-800 dark:hover:text-gray-200"
+        x-on:click.stop="posUtilityMenuOpen = ! posUtilityMenuOpen"
+        x-bind:aria-expanded="posUtilityMenuOpen ? 'true' : 'false'"
+        aria-haspopup="menu"
+        aria-label="{{ __('pos.footer_utility_menu') }}"
+    >
+        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    </button>
 
-namespace App\Support\Http;
+    <div
+        x-cloak
+        x-show="posUtilityMenuOpen"
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-100"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed inset-0 z-[205] bg-slate-950/40 max-md:block md:hidden"
+        x-on:click="posUtilityMenuOpen = false"
+        aria-hidden="true"
+    ></div>
 
-use Symfony\Component\HttpFoundation\Response;
+    <div
+        x-cloak
+        x-show="posUtilityMenuOpen"
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-100"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed left-2 right-2 bottom-2 z-[210] flex max-h-[min(70dvh,28rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-gray-950 shadow-xl max-md:flex dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100 md:absolute md:bottom-full md:left-0 md:right-auto md:top-auto md:mb-1 md:max-h-none md:w-56 md:rounded-lg md:shadow-lg"
+        role="menu"
+        aria-label="{{ __('pos.footer_utility_menu') }}"
+        x-on:click.stop
+    >
+        <div class="flex max-h-[min(70dvh,28rem)] min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-1.5 md:max-h-none">
+            <button
+                type="button"
+                role="menuitem"
+                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                x-on:click="
+                    posUtilityMenuOpen = false;
+                    if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
+                        window.Livewire.dispatch('pos-tile-interaction-ended');
+                    }
+                "
+            >
+                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
+                </svg>
+                <span class="min-w-0">{{ __('pos.action_changer_table') }}</span>
+            </button>
 
-/**
- * Collects per-request timings for the Server-Timing header (Chrome DevTools → Network).
- * Activated per-request by {@see \App\Http\Middleware\AppendServerTiming}.
- */
-final class ServerTimingCollector
-{
-    private bool $active = false;
+            <a
+                href="{{ url('/admin') }}"
+                role="menuitem"
+                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                x-on:click="posUtilityMenuOpen = false"
+            >
+                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.37.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.377-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+                <span class="min-w-0">{{ __('pos.kiosk_open_admin') }}</span>
+            </a>
 
-    private float $startedAt = 0.0;
+            <form
+                x-ref="posFooterLogoutForm"
+                method="post"
+                action="{{ filament()->getLogoutUrl() }}"
+                role="none"
+            >
+                @csrf
+                <button
+                    type="button"
+                    role="menuitem"
+                    class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-rose-200 hover:bg-rose-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:text-gray-100 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30"
+                    x-on:click="if (confirm(@js(__('pos.logout_confirm')))) { $refs.posFooterLogoutForm.requestSubmit(); }"
+                >
+                    <svg class="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                    </svg>
+                    <span class="min-w-0">{{ __('pos.action_logout') }}</span>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+</file>
 
-    private float $dbMs = 0.0;
+<file path="resources/views/components/mypage-entry-modal.blade.php">
+{{-- 名前選択 → PIN（同一PINの複数人に対応）— Tailwind + Alpine（Bootstrap 不使用） --}}
+@props([
+    'buttonClass' => 'rounded-lg border-2 border-black bg-emerald-400 px-3 py-2 text-sm font-black text-gray-900 shadow-[0_4px_0_0_rgba(0,0,0,1)] hover:bg-emerald-300 active:translate-y-0.5 active:shadow-none dark:bg-emerald-500 dark:text-gray-950',
+])
 
-    private int $queryCount = 0;
+<div class="inline-block text-gray-900 dark:text-gray-100" x-data="{ open: false }">
+    <button type="button" @click="open = true" class="{{ $buttonClass }}">
+        マイページを開く
+    </button>
 
-    public function begin(): void
-    {
-        $this->active = true;
-        $this->startedAt = microtime(true);
-        $this->dbMs = 0.0;
-        $this->queryCount = 0;
-    }
+    <div
+        x-show="open"
+        x-cloak
+        x-transition.opacity
+        class="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-3"
+        @click.self="open = false"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mypage-pin-modal-title"
+    >
+        <div
+            class="w-full max-w-sm rounded-2xl border-4 border-black bg-white p-4 text-gray-900 shadow-[0_10px_0_0_rgba(0,0,0,1)] dark:bg-gray-950 dark:text-gray-100"
+            @click.stop
+        >
+            <div class="mb-3 flex items-start justify-between gap-2">
+                <h2 id="mypage-pin-modal-title" class="text-base font-black text-gray-900 dark:text-white">マイページを開く</h2>
+                <button
+                    type="button"
+                    class="rounded-md border border-gray-300 bg-gray-100 px-2 py-1 text-xs font-bold text-gray-700 hover:bg-gray-200 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    @click="open = false"
+                >
+                    閉じる
+                </button>
+            </div>
 
-    public function isActive(): bool
-    {
-        return $this->active;
-    }
+            <p class="mb-3 text-sm text-gray-600 dark:text-gray-300">名前を選んでから、4桁PINを入力してください。</p>
 
-    public function recordQueryMilliseconds(float $ms): void
-    {
-        if (! $this->active) {
-            return;
-        }
-        $this->dbMs += $ms;
-        $this->queryCount++;
-    }
+            <form method="post" action="{{ route('mypage.open') }}" class="space-y-2">
+                @csrf
+                <div>
+                    <label for="mypage_modal_staff_id" class="mb-1 block text-xs font-bold text-gray-800 dark:text-gray-200">名前</label>
+                    <div class="relative">
+                        <select
+                            name="staff_id"
+                            id="mypage_modal_staff_id"
+                            required
+                            class="block w-full appearance-none rounded-lg border-2 border-gray-300 bg-white px-3 py-2.5 pr-9 text-sm font-semibold text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                        >
+                            <option value="" disabled selected>— 選択 —</option>
+                            @foreach ($mypageStaffList as $s)
+                                <option value="{{ $s->id }}">{{ $s->name }}</option>
+                            @endforeach
+                        </select>
+                        <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-600 dark:text-gray-400">▾</span>
+                    </div>
+                    @if ($mypageStaffList->isEmpty())
+                        <p class="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400">アクティブなスタッフがありません。</p>
+                    @endif
+                </div>
+                <div>
+                    <label for="mypage_modal_pin" class="mb-1 block text-xs font-bold text-gray-800 dark:text-gray-200">PIN（4桁）</label>
+                    <input
+                        type="password"
+                        name="pin_code"
+                        id="mypage_modal_pin"
+                        inputmode="numeric"
+                        maxlength="4"
+                        required
+                        autocomplete="one-time-code"
+                        placeholder="••••"
+                        @disabled($mypageStaffList->isEmpty())
+                        class="block w-full rounded-lg border-2 border-gray-300 bg-white px-3 py-2.5 text-center font-mono text-lg tracking-widest text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    >
+                </div>
+                <button
+                    type="submit"
+                    @disabled($mypageStaffList->isEmpty())
+                    class="mt-2 w-full rounded-lg border-2 border-black bg-emerald-500 py-2.5 text-sm font-black text-gray-950 shadow-[0_4px_0_0_rgba(0,0,0,1)] hover:bg-emerald-400 active:translate-y-0.5 active:shadow-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-emerald-500 dark:text-gray-950"
+                >
+                    開く
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+</file>
 
-    public function attachToResponse(Response $response): void
-    {
-        if (! $this->active) {
-            return;
-        }
+<file path="resources/views/components/staff-pin-auth-card.blade.php">
+@props([
+    'title',
+    'subtitle' => '',
+    'note' => '',
+])
 
-        $wallMs = (microtime(true) - $this->startedAt) * 1000.0;
-        $nonDbMs = max(0.0, $wallMs - $this->dbMs);
+<div class="w-full max-w-md rounded-2xl border-4 border-black bg-white p-4 text-gray-900 shadow-[0_12px_0_0_rgba(0,0,0,1)] dark:bg-gray-950 dark:text-gray-100">
+    <h2 class="mb-1 text-xl font-black tracking-wider text-gray-900 dark:text-white">{{ $title }}</h2>
+    @if ($subtitle !== '')
+        <p class="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">{{ $subtitle }}</p>
+    @endif
+    @if ($note !== '')
+        <p class="-mt-2 mb-3 text-[10px] text-gray-400 dark:text-gray-500">{{ $note }}</p>
+    @endif
 
-        $metrics = [
-            sprintf('app;dur=%.2f', $wallMs),
-            sprintf('db;dur=%.2f;desc="%d q"', $this->dbMs, $this->queryCount),
-            sprintf('non-db;dur=%.2f', $nonDbMs),
-        ];
-
-        $response->headers->set('Server-Timing', implode(', ', $metrics), false);
-
-        $this->active = false;
-    }
-}
+    <div class="space-y-2">
+        {{ $slot }}
+    </div>
+</div>
 </file>
 
 <file path="resources/views/livewire/pos/printer-bridge.blade.php">
@@ -4212,237 +4335,6 @@ class TableSession extends Model
     public function posOrders(): HasMany
     {
         return $this->hasMany(PosOrder::class, 'table_session_id');
-    }
-}
-</file>
-
-<file path="app/Services/Pos/TableDashboardQueryService.php">
-<?php
-
-namespace App\Services\Pos;
-
-use App\Data\Pos\TableDashboardData;
-use App\Data\Pos\TableTileAggregate;
-use App\Domains\Pos\Tables\TableCategory;
-use App\Domains\Pos\Tables\TableUiStatusInput;
-use App\Domains\Pos\Tables\TableUiStatusResolver;
-use App\Enums\OrderLineStatus;
-use App\Enums\OrderStatus;
-use App\Enums\TableSessionStatus;
-use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\DB;
-use stdClass;
-
-/**
- * Single round-trip (one SQL) 卓集約. V4 scalar aliases: `agg_*`.
- * See `docs/technical_contract_v4.md` §2.1–2.2
- *
- * Phase 2: TableUiStatusResolver を結線し、UI ステータスを Service 層で確定させる。
- */
-final class TableDashboardQueryService
-{
-    public function __construct(
-        private readonly TableUiStatusResolver $resolver = new TableUiStatusResolver,
-    ) {}
-
-    public function getDashboardData(int $shopId): TableDashboardData
-    {
-        $p = (string) DB::connection()->getTablePrefix();
-        $active = TableSessionStatus::Active->value;
-        $placed = OrderStatus::Placed->value;
-        $confirmed = OrderStatus::Confirmed->value;
-        $voided = OrderStatus::Voided->value;
-        $linePlaced = OrderLineStatus::Placed->value;
-
-        $rt = $p.'restaurant_tables';
-        $ts = $p.'table_sessions';
-        $orders = $p.'orders';
-        $ol = $p.'order_lines';
-
-        $innerActiveSessionId = "(
-            SELECT ts_inner.id
-            FROM {$ts} AS ts_inner
-            WHERE ts_inner.restaurant_table_id = rt.id
-            AND ts_inner.status = '{$this->q($active)}'
-            ORDER BY ts_inner.id DESC
-            LIMIT 1
-        )";
-
-        $innerLastAdditionPrintedAt = "(
-            SELECT ts_p.last_addition_printed_at
-            FROM {$ts} AS ts_p
-            WHERE ts_p.restaurant_table_id = rt.id
-            AND ts_p.status = '{$this->q($active)}'
-            ORDER BY ts_p.id DESC
-            LIMIT 1
-        )";
-
-        $innerActiveSessionStaffName = "(
-            SELECT ts_sn.staff_name
-            FROM {$ts} AS ts_sn
-            WHERE ts_sn.id = ({$innerActiveSessionId})
-            LIMIT 1
-        )";
-
-        $innerActiveSessionCustomerName = "(
-            SELECT ts_cn.customer_name
-            FROM {$ts} AS ts_cn
-            WHERE ts_cn.id = ({$innerActiveSessionId})
-            LIMIT 1
-        )";
-
-        $sql = <<<SQL
-        SELECT
-            rt.id,
-            rt.name AS restaurant_table_name,
-            ({$innerActiveSessionId}) AS agg_active_table_session_id,
-            ({$innerActiveSessionStaffName}) AS agg_active_session_staff_name,
-            ({$innerActiveSessionCustomerName}) AS agg_active_session_customer_name,
-            (SELECT COALESCE((
-                SELECT COUNT(o1.id)
-                FROM {$orders} AS o1
-                INNER JOIN {$ts} AS ts1 ON o1.table_session_id = ts1.id
-                WHERE ts1.restaurant_table_id = rt.id
-                AND ts1.status = '{$this->q($active)}'
-                AND o1.status = '{$this->q($placed)}'
-            ), 0)) AS agg_unacked_placed_pos_order_count,
-            (SELECT CASE WHEN EXISTS(
-                SELECT 1
-                FROM {$ol} AS ol1
-                INNER JOIN {$orders} AS o2 ON o2.id = ol1.order_id
-                INNER JOIN {$ts} AS ts2 ON o2.table_session_id = ts2.id
-                WHERE ts2.restaurant_table_id = rt.id
-                AND ts2.status = '{$this->q($active)}'
-                AND o2.status IN ('{$this->q($placed)}', '{$this->q($confirmed)}')
-                AND ol1.status = '{$this->q($linePlaced)}'
-            ) THEN 1 ELSE 0 END) AS agg_unacked_placed_line_exists,
-            (SELECT MIN(o3.placed_at)
-                FROM {$orders} AS o3
-                INNER JOIN {$ts} AS ts3 ON o3.table_session_id = ts3.id
-                WHERE ts3.restaurant_table_id = rt.id
-                AND ts3.status = '{$this->q($active)}'
-                AND o3.status = '{$this->q($placed)}'
-            ) AS agg_oldest_relevant_placed_at,
-            (SELECT CASE WHEN ({$innerLastAdditionPrintedAt}) IS NULL THEN 0 ELSE 1 END
-            ) AS agg_addition_checkout_flag,
-            ({$innerLastAdditionPrintedAt}) AS agg_last_addition_printed_at,
-            (SELECT CASE
-                WHEN ({$innerLastAdditionPrintedAt}) IS NULL THEN 0
-                WHEN EXISTS(
-                    SELECT 1
-                    FROM {$orders} AS o7
-                    WHERE o7.table_session_id = ({$innerActiveSessionId})
-                    AND o7.status != '{$this->q($voided)}'
-                    AND o7.created_at > ({$innerLastAdditionPrintedAt})
-                ) THEN 1
-                WHEN EXISTS(
-                    SELECT 1
-                    FROM {$ol} AS ol2
-                    INNER JOIN {$orders} AS o8 ON o8.id = ol2.order_id
-                    WHERE o8.table_session_id = ({$innerActiveSessionId})
-                    AND o8.status != '{$this->q($voided)}'
-                    AND ol2.created_at > ({$innerLastAdditionPrintedAt})
-                ) THEN 1
-                ELSE 0
-            END) AS agg_has_order_after_addition_printed,
-            (SELECT COALESCE((
-                SELECT COUNT(o5.id)
-                FROM {$orders} AS o5
-                WHERE o5.table_session_id = ({$innerActiveSessionId})
-                AND o5.status != '{$this->q($voided)}'
-            ), 0)) AS agg_relevant_pos_order_count,
-            (SELECT COALESCE((
-                SELECT SUM(o6.total_price_minor)
-                FROM {$orders} AS o6
-                WHERE o6.table_session_id = ({$innerActiveSessionId})
-                AND o6.status != '{$this->q($voided)}'
-            ), 0)) AS agg_session_total_minor
-        FROM {$rt} AS rt
-        WHERE rt.shop_id = ?
-        AND rt.is_active = 1
-        ORDER BY rt.sort_order ASC, rt.id ASC
-        SQL;
-
-        $rows = DB::select($sql, [$shopId]);
-        $tiles = [];
-        $seen = [];
-        /** @var stdClass $r */
-        foreach ($rows as $r) {
-            $rid = (int) $r->id;
-            if (isset($seen[$rid])) {
-                throw new \RuntimeException('Table dashboard aggregate: duplicate restaurant_table_id '.$rid);
-            }
-            $seen[$rid] = true;
-            $tiles[] = $this->toTile($r);
-        }
-
-        return new TableDashboardData($tiles);
-    }
-
-    private function toTile(stdClass $r): TableTileAggregate
-    {
-        $at = $r->agg_oldest_relevant_placed_at;
-        $oldest = $at === null ? null : CarbonImmutable::parse((string) $at);
-
-        $printedAtRaw = $r->agg_last_addition_printed_at ?? null;
-        $lastAdditionPrintedAt = $printedAtRaw === null ? null : CarbonImmutable::parse((string) $printedAtRaw);
-
-        $hasActiveSession = $r->agg_active_table_session_id !== null;
-        $unackedOrderCount = (int) $r->agg_unacked_placed_pos_order_count;
-        $unackedLineExists = (int) $r->agg_unacked_placed_line_exists === 1;
-        $hasUnackedPlaced = $unackedOrderCount > 0 || $unackedLineExists;
-        $hasOrderAfterAdditionPrinted = (int) ($r->agg_has_order_after_addition_printed ?? 0) === 1;
-
-        $input = new TableUiStatusInput(
-            hasActiveSession: $hasActiveSession,
-            hasUnackedPlaced: $hasUnackedPlaced,
-            lastAdditionPrintedAt: $lastAdditionPrintedAt,
-            hasOrdersAfterLastAdditionPrintedAt: $hasOrderAfterAdditionPrinted,
-        );
-
-        $uiStatus = $this->resolver->resolve($input);
-        $category = TableCategory::tryResolveFromId((int) $r->id);
-        $snRaw = $r->agg_active_session_staff_name ?? null;
-        $sessionStaffName = is_string($snRaw) && trim($snRaw) !== '' ? trim($snRaw) : null;
-        $cnRaw = $r->agg_active_session_customer_name ?? null;
-        $sessionCustomerName = is_string($cnRaw) && trim($cnRaw) !== '' ? trim($cnRaw) : null;
-
-        $displayTableName = (string) $r->restaurant_table_name;
-        if ($category === TableCategory::Takeaway && $sessionCustomerName !== null) {
-            $displayTableName = $sessionCustomerName;
-        }
-
-        return new TableTileAggregate(
-            restaurantTableId: (int) $r->id,
-            restaurantTableName: $displayTableName,
-            activeSessionStaffName: $sessionStaffName,
-            activeSessionCustomerName: $sessionCustomerName,
-            activeTableSessionId: $r->agg_active_table_session_id === null
-                ? null
-                : (int) $r->agg_active_table_session_id,
-            unackedPlacedPosOrderCount: $unackedOrderCount,
-            unackedPlacedLineExists: $unackedLineExists,
-            oldestRelevantPlacedAt: $oldest,
-            additionOrCheckoutSignalActive: (int) $r->agg_addition_checkout_flag === 1,
-            relevantPosOrderCount: (int) $r->agg_relevant_pos_order_count,
-            sessionTotalMinor: (int) $r->agg_session_total_minor,
-            category: $category,
-            uiStatus: $uiStatus,
-            lastAdditionPrintedAt: $lastAdditionPrintedAt,
-            hasOrderAfterAdditionPrinted: $hasOrderAfterAdditionPrinted,
-        );
-    }
-
-    private function q(string $value): string
-    {
-        if (! preg_match('/^[a-z0-9_\\-]+$/i', $value) || $value === '') {
-            throw new \InvalidArgumentException('Unsafe enum / status value for SQL');
-        }
-        if (str_contains($value, "'") || str_contains($value, '\\')) {
-            throw new \InvalidArgumentException('Invalid SQL literal');
-        }
-
-        return $value;
     }
 }
 </file>
@@ -5427,128 +5319,375 @@ class WeeklyShiftGridService
 }
 </file>
 
-<file path="resources/views/livewire/pos/discount-modal.blade.php">
-@php
-    $locked = $this->uiState === 'in_flight';
-    $scopeLabel = match ($this->scope) {
-        'item' => __('pos.discount_scope_item'),
-        'order' => __('pos.discount_scope_order'),
-        'staff' => __('pos.discount_scope_staff'),
-        default => '',
-    };
-@endphp
+<file path="resources/views/components/guest-order/cart-panel.blade.php">
+{{--
+    Compact cart sheet — simple mobile-first layout (reference: clear header + lines + Commander).
+    State: Alpine.store('cart'). Ver2: submit → table POS API (see buildTransmissionDraft).
+--}}
 
-<div class="fi-no-print">
-    @if ($open)
-        <div
-            class="fixed inset-0 z-115 flex max-w-[100vw] items-end justify-center overflow-x-hidden sm:items-center"
-            role="dialog"
-            aria-modal="true"
-            wire:key="discount-modal"
-        >
-            <div class="absolute inset-0 bg-slate-950/70" wire:click="closeModal"></div>
+{{-- Backdrop --}}
+<div
+    x-show="$store.cart.cartPanelOpen"
+    x-transition:enter="transition duration-200 ease-out"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave="transition duration-150 ease-in"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    @click="$store.cart.closeCartPanel()"
+    class="fixed inset-0 z-55 max-w-[100vw] bg-black/50"
+    style="overscroll-behavior: none; touch-action: none;"
+    aria-hidden="true"
+    x-cloak
+></div>
 
-            <div
-                @click.stop
-                class="relative z-1 m-0 flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border-2 border-blue-400 bg-white text-gray-950 shadow-2xl sm:m-4 sm:rounded-2xl dark:border-blue-700 dark:bg-slate-900 dark:text-white"
-            >
-                <div class="flex shrink-0 items-center justify-between border-b-2 border-blue-300 bg-blue-50 px-3 py-2.5 dark:border-blue-700 dark:bg-blue-950/30">
-                    <h3 class="text-sm font-bold">
-                        {{ __('pos.discount_title') }} — {{ $scopeLabel }}
-                    </h3>
-                    <button type="button" wire:click="closeModal"
-                        wire:loading.attr="disabled"
-                        wire:target="closeModal,submit"
-                        class="rounded p-1 text-sm font-bold text-gray-900 hover:bg-blue-100 dark:text-gray-100 dark:hover:bg-blue-900/40">×</button>
-                </div>
+{{-- Panel --}}
+<div
+    x-show="$store.cart.cartPanelOpen"
+    x-transition:enter="transition duration-280 ease-out"
+    x-transition:enter-start="translate-y-full"
+    x-transition:enter-end="translate-y-0"
+    x-transition:leave="transition duration-200 ease-in"
+    x-transition:leave-start="translate-y-0"
+    x-transition:leave-end="translate-y-full"
+    @keydown.escape.window="$store.cart.cartPanelOpen && $store.cart.closeCartPanel()"
+    class="fixed inset-x-0 bottom-0 z-60 flex max-h-[min(92dvh,100%)] max-w-full flex-col overflow-x-hidden rounded-t-2xl bg-white text-gray-950 shadow-[0_-12px_40px_rgba(15,23,42,0.18)] dark:bg-gray-900 dark:text-white"
+    style="padding-top: env(safe-area-inset-top);"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="$store.cart.t('cart_modal_title')"
+    x-cloak
+>
+    {{-- Grab hint --}}
+    <div class="flex shrink-0 justify-center pt-2 pb-1" aria-hidden="true">
+        <div class="h-1 w-9 rounded-full bg-slate-200"></div>
+    </div>
 
-                <div class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white px-3 py-3 text-sm dark:bg-slate-900">
-                    {{-- Amount / percent --}}
-                    @if ($this->scope !== 'staff')
-                        <div class="flex gap-2 text-xs">
-                            <label class="inline-flex items-center gap-1 text-gray-900 dark:text-gray-100">
-                                <input type="radio" wire:model.live="mode" value="flat" wire:loading.attr="disabled" wire:target="mode" /> {{ __('pos.discount_flat') }}
-                            </label>
-                            <label class="inline-flex items-center gap-1 text-gray-900 dark:text-gray-100">
-                                <input type="radio" wire:model.live="mode" value="percent" wire:loading.attr="disabled" wire:target="mode" /> {{ __('pos.discount_percent') }}
-                            </label>
-                        </div>
-                        @if ($this->mode === 'flat')
-                            <div>
-                                <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
-                                    {{ __('pos.discount_flat_label') }}
-                                </label>
-                                <input type="number" min="0" step="100" wire:model="flatMinor"
-                                    wire:loading.attr="disabled" wire:target="submit"
-                                    class="mt-1 w-full rounded-md border-gray-300 px-3 py-2 text-right tabular-nums dark:border-gray-600 dark:bg-gray-800" />
-                            </div>
-                        @else
-                            <div>
-                                <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
-                                    {{ __('pos.discount_percent_label') }}
-                                </label>
-                                <input type="number" min="0" max="10000" wire:model="percentBasisPoints"
-                                    wire:loading.attr="disabled" wire:target="submit"
-                                    class="mt-1 w-full rounded-md border-gray-300 px-3 py-2 text-right tabular-nums dark:border-gray-600 dark:bg-gray-800" />
-                                <p class="mt-1 text-[10px] text-gray-500">/ 10000 ({{ __('pos.discount_bp_hint') }})</p>
-                            </div>
-                        @endif
-                    @else
-                        <p class="rounded-md bg-emerald-50 p-2 text-xs text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
-                            {{ __('pos.discount_staff_fixed_hint') }}
-                        </p>
-                    @endif
-
-                    {{-- Approver --}}
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
-                            {{ __('pos.discount_approver') }}
-                        </label>
-                        <select wire:model="approverStaffId" wire:loading.attr="disabled" wire:target="submit"
-                            class="mt-1 w-full rounded-md border-gray-300 px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800">
-                            <option value="">—</option>
-                            @foreach ($this->approverOptions as $opt)
-                                <option value="{{ $opt['id'] }}">{{ $opt['name'] }} (Lv{{ $opt['level'] }})</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
-                            {{ __('pos.discount_pin') }}
-                        </label>
-                        <input type="password" inputmode="numeric" wire:model="approverPin" wire:loading.attr="disabled" wire:target="submit"
-                            class="mt-1 w-full rounded-md border-gray-300 px-2 py-1.5 text-sm tracking-widest dark:border-gray-600 dark:bg-gray-800" />
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
-                            {{ __('pos.discount_reason') }}
-                        </label>
-                        <input type="text" wire:model="reason" maxlength="255" wire:loading.attr="disabled" wire:target="submit"
-                            class="mt-1 w-full rounded-md border-gray-300 px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800" />
-                    </div>
-                </div>
-
-                <div class="flex shrink-0 items-center justify-between gap-2 border-t-2 border-blue-300 bg-white px-3 py-2.5 dark:border-blue-700 dark:bg-slate-900">
-                    <button type="button" wire:click="closeModal" @disabled($locked)
-                        wire:loading.attr="disabled"
-                        wire:target="closeModal,submit"
-                        class="rounded-md border-2 border-slate-300 bg-white px-3 py-2 text-xs font-extrabold text-slate-800 hover:bg-slate-100 disabled:opacity-50 dark:bg-slate-800 dark:text-gray-100">
-                        {{ __('rad_table.cloture_cancel') }}
-                    </button>
-                    <button type="button" wire:click="submit" @disabled($locked)
-                        wire:loading.attr="disabled"
-                        wire:target="submit"
-                        class="rounded-md bg-blue-600 px-4 py-2 text-sm font-extrabold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-                        <span wire:loading.remove wire:target="submit">{{ __('pos.discount_apply') }}</span>
-                        <span wire:loading wire:target="submit">{{ __('pos.ui_working') }}</span>
-                    </button>
-                </div>
+    {{-- Header: title | total | close (reference-style) --}}
+    <header class="shrink-0 border-b border-slate-200 px-4 pb-2.5 pt-0.5">
+        <div class="flex items-center gap-3">
+            <h2 class="min-w-0 flex-1 text-lg font-bold leading-none text-slate-950" x-text="$store.cart.t('cart_modal_title')"></h2>
+            <div class="flex shrink-0 items-center gap-2">
+                <span
+                    id="guest-cart-fx-target"
+                    class="text-base font-bold tabular-nums text-slate-950 transition duration-300"
+                    :class="$store.cart.panelPulseTotal ? 'text-(--go-primary) scale-105' : ''"
+                    x-text="$store.cart.formatMinorToDisplay($store.cart.cartTotalMinor())"
+                ></span>
+                <button
+                    type="button"
+                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-slate-200 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                    @click="$store.cart.closeCartPanel()"
+                    :aria-label="$store.cart.t('close')"
+                >
+                    <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                        <line x1="3" y1="3" x2="13" y2="13" />
+                        <line x1="13" y1="3" x2="3" y2="13" />
+                    </svg>
+                </button>
             </div>
         </div>
-    @endif
+        <p
+            x-show="$store.cart.lines.length > 0"
+            class="mt-1.5 line-clamp-2 text-[11px] leading-snug text-slate-500"
+            x-text="$store.cart.t('order_flow_notice')"
+        ></p>
+    </header>
+
+    {{-- List --}}
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] px-4">
+        {{-- Empty --}}
+        <div
+            x-show="$store.cart.lines.length === 0"
+            class="flex flex-col items-center gap-2 py-12 text-center"
+        >
+            <p class="text-sm font-medium text-slate-600" x-text="$store.cart.t('empty_cart')"></p>
+            <button
+                type="button"
+                class="rounded-full px-4 py-2 text-sm font-semibold text-white shadow focus:outline-none focus-visible:ring-2"
+                :style="'background-color: var(--go-primary); color: var(--go-on-primary);'"
+                @click="$store.cart.continueShopping()"
+                x-text="$store.cart.t('continue_shopping')"
+            ></button>
+        </div>
+
+        <div class="mx-auto max-w-lg pb-2" x-show="$store.cart.lines.length > 0">
+            <template x-for="(line, index) in $store.cart.lines" :key="line.lineId">
+                <div
+                    class="go-cart-row-enter flex items-center gap-2 border-b border-slate-100 py-2.5 last:border-b-0"
+                    :style="'animation-delay:' + (index * 24) + 'ms'"
+                >
+                    <button
+                        type="button"
+                        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-50 hover:text-(--go-danger) focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                        @click="$store.cart.removeLine(line.lineId)"
+                        :aria-label="$store.cart.t('remove_line')"
+                    >
+                        <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                            <line x1="3" y1="3" x2="13" y2="13" />
+                            <line x1="13" y1="3" x2="3" y2="13" />
+                        </svg>
+                    </button>
+
+                    <div class="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200/80">
+                        <img
+                            :src="$store.cart.resolveItemImage(line.itemId) ?? ''"
+                            :alt="line.titleSnapshot"
+                            class="h-full w-full object-cover"
+                            x-show="$store.cart.resolveItemImage(line.itemId)"
+                        >
+                        <div
+                            class="flex h-full w-full items-center justify-center text-[10px] font-bold text-slate-400"
+                            x-show="!$store.cart.resolveItemImage(line.itemId)"
+                            x-text="(line.titleSnapshot || '?').slice(0, 1).toUpperCase()"
+                        ></div>
+                    </div>
+
+                    <div class="min-w-0 flex-1 py-px">
+                        <p
+                            class="text-sm font-semibold leading-tight text-slate-950"
+                            x-text="line.qty + ' ' + line.titleSnapshot"
+                        ></p>
+                        <p
+                            class="mt-px line-clamp-2 text-[11px] leading-tight text-slate-500"
+                            x-show="$store.cart.lineModifiersSummary(line).length > 0"
+                            x-text="$store.cart.lineModifiersSummary(line)"
+                        ></p>
+                    </div>
+
+                    <div class="flex shrink-0 flex-col items-end gap-1">
+                        <span class="text-sm font-semibold tabular-nums text-slate-950" x-text="$store.cart.formatMinorToDisplay(line.lineTotalMinor)"></span>
+                        <div class="flex items-center gap-0.5 rounded-full bg-slate-100 p-0.5">
+                            <button
+                                type="button"
+                                class="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-slate-700 transition hover:bg-white active:scale-90 focus:outline-none focus-visible:ring-1 focus-visible:ring-(--go-primary)"
+                                @click="$store.cart.decrementLineQty(line.lineId)"
+                                :aria-label="$store.cart.t('qty') + ' −'"
+                            >−</button>
+                            <span class="min-w-5 text-center text-[11px] font-bold tabular-nums text-slate-900" x-text="line.qty"></span>
+                            <button
+                                type="button"
+                                class="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-slate-700 transition hover:bg-white active:scale-90 focus:outline-none focus-visible:ring-1 focus-visible:ring-(--go-primary)"
+                                @click="$store.cart.incrementLineQty(line.lineId)"
+                                :aria-label="$store.cart.t('qty') + ' +'"
+                            >+</button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <button
+                type="button"
+                x-show="$store.cart.lines.length > 0"
+                class="mt-1 w-full py-2 text-center text-xs font-medium text-slate-400 transition hover:text-(--go-danger) focus:outline-none"
+                @click="$store.cart.clearCartTap()"
+                :class="$store.cart._clearCartStep === 1 ? 'animate-go-shake' : ''"
+            >
+                <span x-show="$store.cart._clearCartStep === 0" x-text="$store.cart.t('clear_cart')"></span>
+                <span x-show="$store.cart._clearCartStep === 1" x-text="$store.cart.t('clear_cart_tap_again')"></span>
+            </button>
+        </div>
+    </div>
+
+    {{-- Undo (compact) --}}
+    <div
+        x-show="$store.cart.toast && $store.cart.toast.type === 'removed'"
+        x-transition
+        class="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-70 flex justify-center px-4"
+        x-cloak
+    >
+        <div class="flex max-w-lg items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 shadow-lg">
+            <span class="flex-1 font-medium" x-text="$store.cart.t('item_removed')"></span>
+            <button
+                type="button"
+                class="shrink-0 rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                @click="$store.cart.undoRemoveLine()"
+                x-text="$store.cart.t('undo')"
+            ></button>
+        </div>
+    </div>
+
+    <div
+        x-show="$store.cart.clipboardBanner"
+        x-transition
+        class="pointer-events-none fixed inset-x-0 top-20 z-70 flex justify-center px-4"
+        x-cloak
+    >
+        <span class="rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-bold text-white shadow" x-text="$store.cart.t('copied')"></span>
+    </div>
+
+    {{-- Footer: Commander only --}}
+    <div
+        class="shrink-0 border-t border-slate-100 bg-white px-4 pt-2"
+        style="padding-bottom: max(0.65rem, env(safe-area-inset-bottom));"
+        x-show="$store.cart.lines.length > 0"
+    >
+        <button
+            type="button"
+            class="w-full rounded-xl py-3.5 text-sm font-bold text-white shadow-md transition active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+            :style="'background-color: var(--go-primary); color: var(--go-on-primary); --tw-ring-color: var(--go-primary);'"
+            @click="$store.cart.submitOrderDraft()"
+            x-text="$store.cart.t('order_submit')"
+        ></button>
+    </div>
 </div>
+</file>
+
+<file path="resources/views/components/guest-order/category-section.blade.php">
+{{--
+    Category section anchor + header pill.
+    Props:
+      $categoryId    – string  e.g. 'ramen'
+      $categoryLabel – string  e.g. 'RAMEN'
+    Default slot: product cards
+--}}
+@props(['categoryId', 'categoryLabel'])
+
+<section
+    id="cat-{{ $categoryId }}"
+    class="min-w-0 max-w-full pt-5 pb-2"
+    style="scroll-margin-top: 56px;"
+>
+    <div class="mb-3 max-w-full px-4">
+        <span
+            class="inline-flex max-w-full items-center rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold tracking-wide text-gray-950 dark:border-slate-600 dark:bg-gray-900 dark:text-white"
+        >
+            {{ $categoryLabel }}
+        </span>
+    </div>
+
+    <div class="flex max-w-full min-w-0 flex-col gap-3 px-3 sm:grid sm:grid-cols-2 md:grid-cols-3">
+        {{ $slot }}
+    </div>
+</section>
+</file>
+
+<file path="resources/views/components/client-nav.blade.php">
+@props([
+    'variant' => 'light',
+    'showLogout' => false,
+])
+
+@php $isDark = $variant === 'dark'; @endphp
+
+<nav x-data="{ open: false }" class="sticky top-0 z-40 border-b-4 border-black bg-gradient-to-r from-slate-950 via-indigo-900 to-slate-950 text-white">
+    <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-3 py-2.5">
+        <a href="{{ route('home') }}" class="text-lg font-black tracking-wide text-amber-300">{{ config('app.name', 'So-biz') }}</a>
+        <div class="hidden items-center gap-2 md:flex">
+            <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Accueil</a>
+            <a href="{{ route('timecard.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Pointage</a>
+            <a href="{{ route('mypage.reauth') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Mon espace</a>
+            <a href="{{ route('inventory.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Inventory</a>
+            <a href="{{ route('close-check.index') }}" class="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-sm font-bold">Clôture tâches</a>
+            @if ($showLogout)
+                <a href="{{ route('timecard.index') }}" class="rounded-md border border-rose-200/60 bg-rose-500/80 px-2 py-1 text-xs font-black">Deconnexion</a>
+            @endif
+        </div>
+        <button type="button" class="rounded-md border border-white/30 bg-white/10 px-2 py-1 text-sm md:hidden" @click="open = !open" :aria-expanded="open ? 'true' : 'false'" aria-label="Ouvrir le menu">
+            ☰
+        </button>
+    </div>
+    <div x-show="open" x-cloak class="border-t border-white/20 bg-slate-900/95 px-3 py-2 md:hidden">
+        <div class="grid grid-cols-2 gap-2">
+            <a href="{{ route('home') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Accueil</a>
+            <a href="{{ route('timecard.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Pointage</a>
+            <a href="{{ route('mypage.reauth') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Mon espace</a>
+            <a href="{{ route('inventory.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Inventory</a>
+            <a href="{{ route('close-check.index') }}" class="rounded-md border border-white/30 bg-white/10 px-2 py-1.5 text-center text-sm font-bold">Clôture tâches</a>
+            @if ($showLogout)
+                <a href="{{ route('timecard.index') }}" class="col-span-2 rounded-md border border-rose-200/60 bg-rose-500/80 px-2 py-1.5 text-center text-sm font-black">Deconnexion</a>
+            @endif
+        </div>
+    </div>
+</nav>
+</file>
+
+<file path="resources/views/components/rad-table-tile.blade.php">
+@props([
+    'tile' => [],
+])
+
+@php
+    $color = $tile['color'] ?? 'white';
+    $wrap = match ($color) {
+        'red' => 'border-slate-200 bg-red-50 border-l-4 border-l-red-500 text-gray-950 dark:border-slate-600 dark:bg-red-950/40 dark:text-white dark:border-l-red-500',
+        'green' => 'border-slate-200 bg-emerald-50 border-l-4 border-l-emerald-500 text-gray-950 dark:border-slate-600 dark:bg-emerald-950/40 dark:text-white dark:border-l-emerald-500',
+        'yellow' => 'border-slate-200 bg-amber-50 border-l-4 border-l-amber-400 text-gray-950 dark:border-slate-600 dark:bg-amber-950/40 dark:text-amber-100 dark:border-l-amber-400',
+        default => 'border-slate-200 bg-slate-100 border-l-4 border-l-slate-400 text-gray-950 dark:border-slate-600 dark:bg-slate-900 dark:text-white dark:border-l-slate-500',
+    };
+    $badge = match ($color) {
+        'red' => 'bg-red-600 text-white',
+        'green' => 'bg-emerald-600 text-white',
+        'yellow' => 'bg-amber-500 text-amber-950 dark:bg-amber-400 dark:text-amber-950',
+        default => 'bg-slate-600 text-white dark:bg-slate-500 dark:text-white',
+    };
+    $sessionId = $tile['session_id'] ?? null;
+@endphp
+
+<x-filament::section
+    :compact="true"
+    :heading="(string) ($tile['table_name'] ?? '')"
+    class="rounded-2xl shadow-sm {{ $wrap }}"
+>
+    <x-slot name="headerEnd">
+        <x-filament::badge class="{{ $badge }}">
+            {{ $tile['badge_label'] ?? '' }}
+        </x-filament::badge>
+    </x-slot>
+
+    <div class="space-y-1">
+        <p class="text-2xl font-semibold tabular-nums text-gray-950 dark:text-white">
+            {{ $tile['total_label'] ?? '0.000 TND' }}
+        </p>
+        <p class="text-sm text-gray-800 dark:text-gray-200">
+            {{ $tile['dwell_label'] ?? '—' }}
+        </p>
+    </div>
+
+    @if ($sessionId)
+        <div class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <x-filament::button
+                size="lg"
+                color="success"
+                class="min-h-[48px] w-full justify-center"
+                wire:click="recu({{ (int) $sessionId }})"
+                wire:loading.attr="disabled"
+                wire:target="recu"
+                :disabled="! ($tile['can_recu'] ?? false)"
+            >
+                <span wire:loading.remove wire:target="recu">{{ __('rad_table.recu') }}</span>
+                <span wire:loading wire:target="recu">…</span>
+            </x-filament::button>
+
+            <x-filament::button
+                size="lg"
+                color="warning"
+                class="min-h-[48px] w-full justify-center"
+                wire:click="addition({{ (int) $sessionId }})"
+                wire:loading.attr="disabled"
+                wire:target="addition"
+                :disabled="! ($tile['can_addition'] ?? false)"
+            >
+                <span wire:loading.remove wire:target="addition">{{ __('rad_table.addition') }}</span>
+                <span wire:loading wire:target="addition">…</span>
+            </x-filament::button>
+
+            <x-filament::button
+                size="lg"
+                color="danger"
+                outlined
+                class="min-h-[48px] w-full justify-center"
+                wire:click="checkout({{ (int) $sessionId }})"
+                wire:loading.attr="disabled"
+                wire:target="checkout"
+                :disabled="! ($tile['can_checkout'] ?? false)"
+            >
+                <span wire:loading.remove wire:target="checkout">{{ __('rad_table.checkout') }}</span>
+                <span wire:loading wire:target="checkout">…</span>
+            </x-filament::button>
+        </div>
+    @endif
+</x-filament::section>
 </file>
 
 <file path="app/Models/User.php">
@@ -5652,6 +5791,754 @@ class User extends Authenticatable implements FilamentUser
         ];
     }
 }
+</file>
+
+<file path="app/Services/Pos/TableDashboardQueryService.php">
+<?php
+
+namespace App\Services\Pos;
+
+use App\Data\Pos\TableDashboardData;
+use App\Data\Pos\TableTileAggregate;
+use App\Domains\Pos\Tables\TableCategory;
+use App\Domains\Pos\Tables\TableUiStatusInput;
+use App\Domains\Pos\Tables\TableUiStatusResolver;
+use App\Enums\OrderLineStatus;
+use App\Enums\OrderStatus;
+use App\Enums\TableSessionStatus;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use stdClass;
+
+/**
+ * Single round-trip (one SQL) 卓集約. V4 scalar aliases: `agg_*`.
+ * See `docs/technical_contract_v4.md` §2.1–2.2
+ *
+ * Phase 2: TableUiStatusResolver を結線し、UI ステータスを Service 層で確定させる。
+ */
+final class TableDashboardQueryService
+{
+    public function __construct(
+        private readonly TableUiStatusResolver $resolver = new TableUiStatusResolver,
+    ) {}
+
+    public function getDashboardData(int $shopId): TableDashboardData
+    {
+        if ($shopId < 1) {
+            return new TableDashboardData([]);
+        }
+
+        $cacheKey = "pos:table-dashboard:shop:{$shopId}";
+
+        return Cache::remember($cacheKey, 1, function () use ($shopId): TableDashboardData {
+            return $this->buildDashboardData($shopId);
+        });
+    }
+
+    private function buildDashboardData(int $shopId): TableDashboardData
+    {
+        $p = (string) DB::connection()->getTablePrefix();
+        $active = TableSessionStatus::Active->value;
+        $placed = OrderStatus::Placed->value;
+        $confirmed = OrderStatus::Confirmed->value;
+        $voided = OrderStatus::Voided->value;
+        $linePlaced = OrderLineStatus::Placed->value;
+
+        $rt = $p.'restaurant_tables';
+        $ts = $p.'table_sessions';
+        $orders = $p.'orders';
+        $ol = $p.'order_lines';
+
+        $innerActiveSessionId = "(
+            SELECT ts_inner.id
+            FROM {$ts} AS ts_inner
+            WHERE ts_inner.restaurant_table_id = rt.id
+            AND ts_inner.status = '{$this->q($active)}'
+            ORDER BY ts_inner.id DESC
+            LIMIT 1
+        )";
+
+        $innerLastAdditionPrintedAt = "(
+            SELECT ts_p.last_addition_printed_at
+            FROM {$ts} AS ts_p
+            WHERE ts_p.restaurant_table_id = rt.id
+            AND ts_p.status = '{$this->q($active)}'
+            ORDER BY ts_p.id DESC
+            LIMIT 1
+        )";
+
+        $innerActiveSessionStaffName = "(
+            SELECT ts_sn.staff_name
+            FROM {$ts} AS ts_sn
+            WHERE ts_sn.id = ({$innerActiveSessionId})
+            LIMIT 1
+        )";
+
+        $innerActiveSessionCustomerName = "(
+            SELECT ts_cn.customer_name
+            FROM {$ts} AS ts_cn
+            WHERE ts_cn.id = ({$innerActiveSessionId})
+            LIMIT 1
+        )";
+
+        $sql = <<<SQL
+        SELECT
+            rt.id,
+            rt.name AS restaurant_table_name,
+            ({$innerActiveSessionId}) AS agg_active_table_session_id,
+            ({$innerActiveSessionStaffName}) AS agg_active_session_staff_name,
+            ({$innerActiveSessionCustomerName}) AS agg_active_session_customer_name,
+            (SELECT COALESCE((
+                SELECT COUNT(o1.id)
+                FROM {$orders} AS o1
+                INNER JOIN {$ts} AS ts1 ON o1.table_session_id = ts1.id
+                WHERE ts1.restaurant_table_id = rt.id
+                AND ts1.status = '{$this->q($active)}'
+                AND o1.status = '{$this->q($placed)}'
+            ), 0)) AS agg_unacked_placed_pos_order_count,
+            (SELECT CASE WHEN EXISTS(
+                SELECT 1
+                FROM {$ol} AS ol1
+                INNER JOIN {$orders} AS o2 ON o2.id = ol1.order_id
+                INNER JOIN {$ts} AS ts2 ON o2.table_session_id = ts2.id
+                WHERE ts2.restaurant_table_id = rt.id
+                AND ts2.status = '{$this->q($active)}'
+                AND o2.status IN ('{$this->q($placed)}', '{$this->q($confirmed)}')
+                AND ol1.status = '{$this->q($linePlaced)}'
+            ) THEN 1 ELSE 0 END) AS agg_unacked_placed_line_exists,
+            (SELECT MIN(o3.placed_at)
+                FROM {$orders} AS o3
+                INNER JOIN {$ts} AS ts3 ON o3.table_session_id = ts3.id
+                WHERE ts3.restaurant_table_id = rt.id
+                AND ts3.status = '{$this->q($active)}'
+                AND o3.status = '{$this->q($placed)}'
+            ) AS agg_oldest_relevant_placed_at,
+            (SELECT CASE WHEN ({$innerLastAdditionPrintedAt}) IS NULL THEN 0 ELSE 1 END
+            ) AS agg_addition_checkout_flag,
+            ({$innerLastAdditionPrintedAt}) AS agg_last_addition_printed_at,
+            (SELECT CASE
+                WHEN ({$innerLastAdditionPrintedAt}) IS NULL THEN 0
+                WHEN EXISTS(
+                    SELECT 1
+                    FROM {$orders} AS o7
+                    WHERE o7.table_session_id = ({$innerActiveSessionId})
+                    AND o7.status != '{$this->q($voided)}'
+                    AND o7.created_at > ({$innerLastAdditionPrintedAt})
+                ) THEN 1
+                WHEN EXISTS(
+                    SELECT 1
+                    FROM {$ol} AS ol2
+                    INNER JOIN {$orders} AS o8 ON o8.id = ol2.order_id
+                    WHERE o8.table_session_id = ({$innerActiveSessionId})
+                    AND o8.status != '{$this->q($voided)}'
+                    AND ol2.created_at > ({$innerLastAdditionPrintedAt})
+                ) THEN 1
+                ELSE 0
+            END) AS agg_has_order_after_addition_printed,
+            (SELECT COALESCE((
+                SELECT COUNT(o5.id)
+                FROM {$orders} AS o5
+                WHERE o5.table_session_id = ({$innerActiveSessionId})
+                AND o5.status != '{$this->q($voided)}'
+            ), 0)) AS agg_relevant_pos_order_count,
+            (SELECT COALESCE((
+                SELECT SUM(o6.total_price_minor)
+                FROM {$orders} AS o6
+                WHERE o6.table_session_id = ({$innerActiveSessionId})
+                AND o6.status != '{$this->q($voided)}'
+            ), 0)) AS agg_session_total_minor
+        FROM {$rt} AS rt
+        WHERE rt.shop_id = ?
+        AND rt.is_active = 1
+        ORDER BY rt.sort_order ASC, rt.id ASC
+        SQL;
+
+        $rows = DB::select($sql, [$shopId]);
+        $tiles = [];
+        $seen = [];
+        /** @var stdClass $r */
+        foreach ($rows as $r) {
+            $rid = (int) $r->id;
+            if (isset($seen[$rid])) {
+                throw new \RuntimeException('Table dashboard aggregate: duplicate restaurant_table_id '.$rid);
+            }
+            $seen[$rid] = true;
+            $tiles[] = $this->toTile($r);
+        }
+
+        return new TableDashboardData($tiles);
+    }
+
+    private function toTile(stdClass $r): TableTileAggregate
+    {
+        $at = $r->agg_oldest_relevant_placed_at;
+        $oldest = $at === null ? null : CarbonImmutable::parse((string) $at);
+
+        $printedAtRaw = $r->agg_last_addition_printed_at ?? null;
+        $lastAdditionPrintedAt = $printedAtRaw === null ? null : CarbonImmutable::parse((string) $printedAtRaw);
+
+        $hasActiveSession = $r->agg_active_table_session_id !== null;
+        $unackedOrderCount = (int) $r->agg_unacked_placed_pos_order_count;
+        $unackedLineExists = (int) $r->agg_unacked_placed_line_exists === 1;
+        $hasUnackedPlaced = $unackedOrderCount > 0 || $unackedLineExists;
+        $hasOrderAfterAdditionPrinted = (int) ($r->agg_has_order_after_addition_printed ?? 0) === 1;
+
+        $input = new TableUiStatusInput(
+            hasActiveSession: $hasActiveSession,
+            hasUnackedPlaced: $hasUnackedPlaced,
+            lastAdditionPrintedAt: $lastAdditionPrintedAt,
+            hasOrdersAfterLastAdditionPrintedAt: $hasOrderAfterAdditionPrinted,
+        );
+
+        $uiStatus = $this->resolver->resolve($input);
+        $category = TableCategory::tryResolveFromId((int) $r->id);
+        $snRaw = $r->agg_active_session_staff_name ?? null;
+        $sessionStaffName = is_string($snRaw) && trim($snRaw) !== '' ? trim($snRaw) : null;
+        $cnRaw = $r->agg_active_session_customer_name ?? null;
+        $sessionCustomerName = is_string($cnRaw) && trim($cnRaw) !== '' ? trim($cnRaw) : null;
+
+        $displayTableName = (string) $r->restaurant_table_name;
+        if ($category === TableCategory::Takeaway && $sessionCustomerName !== null) {
+            $displayTableName = $sessionCustomerName;
+        }
+
+        return new TableTileAggregate(
+            restaurantTableId: (int) $r->id,
+            restaurantTableName: $displayTableName,
+            activeSessionStaffName: $sessionStaffName,
+            activeSessionCustomerName: $sessionCustomerName,
+            activeTableSessionId: $r->agg_active_table_session_id === null
+                ? null
+                : (int) $r->agg_active_table_session_id,
+            unackedPlacedPosOrderCount: $unackedOrderCount,
+            unackedPlacedLineExists: $unackedLineExists,
+            oldestRelevantPlacedAt: $oldest,
+            additionOrCheckoutSignalActive: (int) $r->agg_addition_checkout_flag === 1,
+            relevantPosOrderCount: (int) $r->agg_relevant_pos_order_count,
+            sessionTotalMinor: (int) $r->agg_session_total_minor,
+            category: $category,
+            uiStatus: $uiStatus,
+            lastAdditionPrintedAt: $lastAdditionPrintedAt,
+            hasOrderAfterAdditionPrinted: $hasOrderAfterAdditionPrinted,
+        );
+    }
+
+    private function q(string $value): string
+    {
+        if (! preg_match('/^[a-z0-9_\\-]+$/i', $value) || $value === '') {
+            throw new \InvalidArgumentException('Unsafe enum / status value for SQL');
+        }
+        if (str_contains($value, "'") || str_contains($value, '\\')) {
+            throw new \InvalidArgumentException('Invalid SQL literal');
+        }
+
+        return $value;
+    }
+}
+</file>
+
+<file path="resources/views/components/guest-order/category-rail.blade.php">
+{{--
+    Category tab rail: fixed under header on small screens, sticky sidebar on md+.
+    Props:
+      $categories  – array of ['id' => string, 'label' => string]
+--}}
+@props(['categories'])
+
+<nav
+    class="max-md:fixed max-md:inset-x-0 max-md:top-14 max-md:z-30 max-md:max-w-full md:sticky md:top-0 md:z-20 max-w-full border-b border-slate-200 bg-white/95 text-gray-950 backdrop-blur-sm dark:border-slate-700 dark:bg-gray-900/95 dark:text-white md:w-52 md:max-w-full md:shrink-0 md:self-start md:border-b-0 md:border-r md:overflow-hidden"
+    aria-label="{{ __('guest-order.your_order') }}"
+>
+    <div
+        class="[scrollbar-width:none] [&::-webkit-scrollbar]:hidden scrollbar-none flex gap-0 overflow-x-auto px-1 md:max-h-[calc(100dvh-3.5rem)] md:flex-col md:gap-0.5 md:overflow-y-auto md:overflow-x-hidden md:px-2 md:py-2"
+        style="-webkit-overflow-scrolling: touch; scroll-snap-type: x proximity;"
+    >
+        @foreach ($categories as $cat)
+            <button
+                type="button"
+                @click="$store.cart.scrollToCategory('{{ $cat['id'] }}')"
+                :class="$store.cart.activeCategoryId === '{{ $cat['id'] }}'
+                    ? 'border-b-2 font-semibold text-slate-900 md:border-b-0 md:border-l-2 dark:text-white'
+                    : 'border-b-2 border-transparent text-slate-500 font-medium hover:text-slate-700 md:border-b-0 md:border-l-2 md:border-transparent dark:text-slate-400 dark:hover:text-slate-200'"
+                :style="$store.cart.activeCategoryId === '{{ $cat['id'] }}'
+                    ? 'border-color: var(--go-accent);'
+                    : ''"
+                class="shrink-0 snap-start whitespace-nowrap px-4 py-3 text-sm transition-colors duration-150 focus:outline-none md:w-full md:whitespace-normal md:rounded-lg md:px-3 md:py-2.5 md:text-left"
+                style="scroll-snap-align: start;"
+            >
+                {{ $cat['label'] }}
+            </button>
+        @endforeach
+    </div>
+</nav>
+</file>
+
+<file path="resources/views/components/guest-order/customize-sheet.blade.php">
+{{--
+    Bottom-sheet modal for customizing a product (style + toppings).
+    Reads entirely from Alpine.store('cart') — no props needed.
+    Safe-Area and overscroll handled here.
+--}}
+
+{{-- Backdrop --}}
+<div
+    x-show="$store.cart.sheetOpen"
+    x-transition:enter="transition duration-200"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave="transition duration-150"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    @click="$store.cart.closeSheet()"
+    class="fixed inset-0 z-40 max-w-[100vw] bg-black/50"
+    style="overscroll-behavior: none; touch-action: none;"
+    aria-hidden="true"
+    x-cloak
+></div>
+
+{{-- Sheet panel --}}
+<div
+    x-show="$store.cart.sheetOpen"
+    x-transition:enter="transition duration-300 ease-out"
+    x-transition:enter-start="translate-y-full"
+    x-transition:enter-end="translate-y-0"
+    x-transition:leave="transition duration-200 ease-in"
+    x-transition:leave-start="translate-y-0"
+    x-transition:leave-end="translate-y-full"
+    class="fixed inset-x-0 bottom-0 z-50 flex max-h-[90dvh] max-w-full flex-col overflow-x-hidden rounded-t-2xl bg-white text-gray-950 shadow-2xl dark:bg-gray-900 dark:text-white"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="$store.cart.editingItem?.name ?? ''"
+    x-cloak
+>
+    {{-- Drag handle --}}
+    <div class="flex justify-center pt-3 pb-1 shrink-0">
+        <div class="w-10 h-1 rounded-full bg-slate-300"></div>
+    </div>
+
+    {{-- Hero image --}}
+    <div
+        x-show="$store.cart.editingItem?.image"
+        class="w-full h-32 sm:h-36 overflow-hidden shrink-0"
+    >
+        <img
+            :src="$store.cart.editingItem?.image ?? ''"
+            :alt="$store.cart.editingItem?.name ?? ''"
+            class="w-full h-full object-cover"
+        >
+    </div>
+
+    {{-- Close button --}}
+    <button
+        type="button"
+        @click="$store.cart.closeSheet()"
+        class="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/40 flex items-center justify-center text-white focus:outline-none"
+        :aria-label="$store.cart.t('close')"
+    >
+        <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="3" y1="3" x2="13" y2="13"/>
+            <line x1="13" y1="3" x2="3" y2="13"/>
+        </svg>
+    </button>
+
+    {{-- Scrollable content --}}
+    <div
+        class="flex-1 overflow-y-auto px-4 pt-3 pb-1"
+        style="overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;"
+    >
+        {{-- Product title & description --}}
+        <h2
+            class="text-xl font-bold text-slate-900 leading-tight"
+            x-text="$store.cart.editingItem?.name ?? ''"
+        ></h2>
+        <p
+            x-show="$store.cart.editingItem?.description"
+            class="mt-1 text-sm text-slate-500"
+            x-text="$store.cart.editingItem?.description ?? ''"
+        ></p>
+
+        {{-- SELECT STYLE --}}
+        <div
+            x-show="($store.cart.editingItem?.styles?.length ?? 0) > 0"
+            class="mt-4"
+        >
+            <p class="mb-2 text-xs font-bold tracking-widest text-slate-700 uppercase">
+                <span x-text="$store.cart.t('select_style')"></span>
+                <span
+                    x-show="$store.cart.editingItem?.rules?.style_required"
+                    class="ml-1 text-(--go-danger) font-bold"
+                >*</span>
+            </p>
+
+            <div class="flex flex-col gap-1.5">
+                <template x-for="style in ($store.cart.editingItem?.styles ?? [])" :key="style.id">
+                    <label
+                        class="flex items-center justify-between gap-3 border rounded-xl px-3 py-2.5 cursor-pointer transition"
+                        :class="$store.cart.selectedStyleId === style.id
+                            ? 'border-(--go-primary) bg-blue-50/60'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'"
+                    >
+                        <span class="flex items-center gap-3 min-w-0">
+                            <span
+                                class="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition"
+                                :class="$store.cart.selectedStyleId === style.id
+                                    ? 'border-(--go-primary)'
+                                    : 'border-slate-300'"
+                            >
+                                <span
+                                    x-show="$store.cart.selectedStyleId === style.id"
+                                    class="w-2.5 h-2.5 rounded-full"
+                                    :style="'background-color: var(--go-primary);'"
+                                ></span>
+                            </span>
+                            <span class="text-sm text-slate-800 truncate" x-text="style.name"></span>
+                        </span>
+                        <span
+                            class="text-sm font-semibold tabular-nums shrink-0"
+                            :class="$store.cart.selectedStyleId === style.id
+                                ? 'text-slate-900'
+                                : 'text-slate-500'"
+                            x-text="$store.cart.formatMinorToDisplay(style.price_minor)"
+                        ></span>
+                        <input
+                            type="radio"
+                            class="sr-only"
+                            :value="style.id"
+                            :checked="$store.cart.selectedStyleId === style.id"
+                            @change="$store.cart.selectedStyleId = style.id"
+                        >
+                    </label>
+                </template>
+            </div>
+
+            {{-- Validation hint --}}
+            <p
+                x-show="!$store.cart.canAddToCart() && $store.cart.editingItem?.rules?.style_required"
+                class="mt-2 text-xs font-medium text-(--go-danger)"
+                x-text="$store.cart.t('please_select_style')"
+            ></p>
+        </div>
+
+        {{-- TOPPINGS --}}
+        <div
+            x-show="($store.cart.editingItem?.toppings?.length ?? 0) > 0"
+            class="mt-4"
+        >
+            <p class="mb-2 text-xs font-bold tracking-widest text-slate-700 uppercase"
+               x-text="$store.cart.t('toppings')">
+            </p>
+
+            <div class="flex flex-col gap-1">
+                <template x-for="topping in ($store.cart.editingItem?.toppings ?? [])" :key="topping.id">
+                    <label
+                        class="flex items-center justify-between gap-3 px-1 py-1.5 cursor-pointer"
+                    >
+                        <span class="flex items-center gap-3 min-w-0">
+                            <span
+                                class="w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition"
+                                :class="$store.cart.selectedToppingIds.includes(topping.id)
+                                    ? 'border-(--go-primary) bg-(--go-primary)'
+                                    : 'border-slate-300 bg-white'"
+                            >
+                                <svg
+                                    x-show="$store.cart.selectedToppingIds.includes(topping.id)"
+                                    class="w-3 h-3 text-white"
+                                    viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                                >
+                                    <polyline points="1.5,6 4.5,9 10.5,3"/>
+                                </svg>
+                            </span>
+                            <span class="text-sm text-slate-800" x-text="topping.name"></span>
+                        </span>
+                        <span
+                            class="text-sm text-slate-500 tabular-nums shrink-0"
+                            x-text="'+ ' + $store.cart.formatMinorToDisplay(topping.price_delta_minor)"
+                        ></span>
+                        <input
+                            type="checkbox"
+                            class="sr-only"
+                            :value="topping.id"
+                            :checked="$store.cart.selectedToppingIds.includes(topping.id)"
+                            @change="$store.cart.toggleTopping(topping.id)"
+                        >
+                    </label>
+                </template>
+            </div>
+        </div>
+
+        {{-- Spacer for CTA --}}
+        <div class="h-3"></div>
+    </div>
+
+    {{-- CTA Bar (sticky bottom, safe-area aware) --}}
+    <div
+        class="shrink-0 px-4 pt-2 bg-white border-t border-slate-100"
+        style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));"
+    >
+        <button
+            type="button"
+            @click="$store.cart.addToCart($event)"
+            :disabled="!$store.cart.canAddToCart()"
+            class="w-full py-3.5 rounded-(--go-radius-button) text-sm font-bold tracking-wide transition active:scale-[0.98] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+            :style="'background-color: var(--go-primary); color: var(--go-on-primary);'"
+            x-text="$store.cart.t('add_to_order', { total: $store.cart.formatMinorToDisplay($store.cart.sheetUnitTotalMinor()) })"
+        ></button>
+    </div>
+</div>
+</file>
+
+<file path="resources/views/components/guest-order/floating-cart.blade.php">
+{{--
+    Floating cart bar — visible only when lineCount > 0.
+    iOS Safe Area applied to bottom padding.
+--}}
+
+<div
+    x-show="$store.cart.lineCount() > 0 && !$store.cart.cartPanelOpen"
+    x-transition:enter="transition duration-200 ease-out"
+    x-transition:enter-start="opacity-0 translate-y-4 md:translate-y-0"
+    x-transition:enter-end="opacity-100 translate-y-0"
+    x-transition:leave="transition duration-150 ease-in"
+    x-transition:leave-start="opacity-100 translate-y-0"
+    x-transition:leave-end="opacity-0 translate-y-4 md:translate-y-0"
+    class="fixed inset-x-0 bottom-0 z-30 max-w-full px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:static md:inset-auto md:z-10 md:w-72 md:max-w-full md:shrink-0 md:self-start md:sticky md:top-3 md:border-l md:border-slate-200 md:bg-transparent md:px-4 md:pt-4 md:pb-3 md:dark:border-slate-700"
+    x-cloak
+>
+    <button
+        id="guest-cart-cta"
+        type="button"
+        @click.stop="$store.cart.openCartPanel()"
+        class="flex w-full max-w-full items-center justify-between gap-3 rounded-(--go-radius-button) px-5 py-4 text-white shadow-2xl transition focus:outline-none active:scale-[0.98] md:flex-col md:items-stretch md:gap-3 md:py-5"
+        :class="$store.cart.cartGlow ? 'ring-4 ring-blue-300/60' : ''"
+        :style="`
+            background-color: var(--go-cart-bg);
+            box-shadow: ${$store.cart.cartGlow
+                ? '0 0 0 2px rgba(147,197,253,.45), 0 0 24px rgba(59,130,246,.75), 0 10px 24px rgba(15,23,42,.45)'
+                : '0 12px 24px rgba(15,23,42,.45)'};
+        `"
+        aria-live="polite"
+    >
+        {{-- Left: item count badge + label --}}
+        <span class="flex min-w-0 items-center gap-2">
+            <span
+                class="flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold"
+                :style="'background-color: var(--go-primary); color: var(--go-on-primary);'"
+                x-text="$store.cart.lineCount()"
+            ></span>
+            <span class="text-sm font-semibold" x-text="$store.cart.t('to_cart')"></span>
+        </span>
+
+        {{-- Right: total --}}
+        <span class="flex items-center gap-1.5">
+            <span class="text-xs font-medium text-white/70" x-text="$store.cart.t('total')"></span>
+            <span
+                class="text-base font-bold tabular-nums"
+                x-text="$store.cart.formatMinorToDisplay($store.cart.cartTotalMinor())"
+            ></span>
+            <svg class="w-4 h-4 opacity-80" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="5,3 11,8 5,13"/>
+            </svg>
+        </span>
+    </button>
+</div>
+</file>
+
+<file path="resources/views/components/guest-order/product-card.blade.php">
+{{--
+    Single product card.
+    Props:
+      $item – array with keys: id, name, description, image, from_price_minor, styles[], toppings[], rules{}
+--}}
+@props(['item'])
+
+@php
+    $styleCount = count($item['styles'] ?? []);
+    $priceFormatted = \App\Support\MenuItemMoney::formatMinorForDisplay((int) ($item['from_price_minor'] ?? 0));
+@endphp
+
+<article
+    class="flex min-h-0 min-w-0 max-w-full items-center gap-3 rounded-[length:var(--go-radius-card)] bg-white p-3 text-gray-950 shadow-sm dark:bg-gray-900 dark:text-white"
+>
+    {{-- Thumbnail --}}
+    <div class="h-20 w-20 max-w-full shrink-0 overflow-hidden rounded-xl bg-slate-100 dark:bg-gray-800">
+        @if (!empty($item['image']))
+            <img
+                src="{{ $item['image'] }}"
+                alt="{{ $item['name'] }}"
+                class="w-full h-full object-cover"
+                loading="lazy"
+                onerror="this.style.display='none'"
+            >
+        @endif
+    </div>
+
+    {{-- Info --}}
+    <div class="flex-1 min-w-0">
+        <h3 class="line-clamp-2 text-sm font-semibold leading-tight text-slate-900 dark:text-white">
+            {{ $item['name'] }}
+        </h3>
+
+        @if (!empty($item['description']))
+            <p class="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-500 dark:text-slate-300">
+                {{ $item['description'] }}
+            </p>
+        @endif
+
+        @if ($styleCount > 0)
+            <span class="mt-1.5 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-gray-800 dark:text-slate-200">
+                {{ trans_choice('guest-order.styles_badge', $styleCount, ['count' => $styleCount]) }}
+            </span>
+        @endif
+    </div>
+
+    {{-- Price + add button --}}
+    <div class="flex flex-col items-end gap-2 shrink-0">
+        <span class="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+            {{ $priceFormatted }}
+        </span>
+
+        <button
+            type="button"
+            @click="$store.cart.openSheet('{{ $item['id'] }}')"
+            class="flex h-8 w-8 max-w-full items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-1 active:scale-95 dark:border-slate-600 dark:bg-gray-800 dark:text-slate-200 dark:hover:bg-gray-700"
+            :style="'focus-ring-color: var(--go-accent);'"
+            aria-label="{{ __('guest-order.add_to_order', ['total' => '']) }}"
+        >
+            <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <line x1="8" y1="2" x2="8" y2="14"/>
+                <line x1="2" y1="8" x2="14" y2="8"/>
+            </svg>
+        </button>
+    </div>
+</article>
+</file>
+
+<file path="resources/views/livewire/pos/discount-modal.blade.php">
+@php
+    $locked = $this->uiState === 'in_flight';
+    $scopeLabel = match ($this->scope) {
+        'item' => __('pos.discount_scope_item'),
+        'order' => __('pos.discount_scope_order'),
+        'staff' => __('pos.discount_scope_staff'),
+        default => '',
+    };
+@endphp
+
+<div class="fi-no-print">
+    @if ($open)
+        <div
+            class="fixed inset-0 z-115 flex max-w-[100vw] items-end justify-center overflow-x-hidden sm:items-center"
+            role="dialog"
+            aria-modal="true"
+            wire:key="discount-modal"
+            x-data="{ optimisticClosing: false }"
+            x-show="!optimisticClosing"
+        >
+            <div class="absolute inset-0 bg-slate-950/70" wire:click="closeModal"></div>
+
+            <div
+                @click.stop
+                class="relative z-1 m-0 flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border-2 border-blue-400 bg-white text-gray-950 shadow-2xl sm:m-4 sm:rounded-2xl dark:border-blue-700 dark:bg-slate-900 dark:text-white"
+            >
+                <div class="flex shrink-0 items-center justify-between border-b-2 border-blue-300 bg-blue-50 px-3 py-2.5 dark:border-blue-700 dark:bg-blue-950/30">
+                    <h3 class="text-sm font-bold">
+                        {{ __('pos.discount_title') }} — {{ $scopeLabel }}
+                    </h3>
+                    <button type="button" wire:click="closeModal"
+                        wire:loading.attr="disabled"
+                        wire:target="closeModal,submit"
+                        class="rounded p-1 text-sm font-bold text-gray-900 hover:bg-blue-100 dark:text-gray-100 dark:hover:bg-blue-900/40">×</button>
+                </div>
+
+                <div class="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white px-3 py-3 text-sm dark:bg-slate-900">
+                    {{-- Amount / percent --}}
+                    @if ($this->scope !== 'staff')
+                        <div class="flex gap-2 text-xs">
+                            <label class="inline-flex items-center gap-1 text-gray-900 dark:text-gray-100">
+                                <input type="radio" wire:model.live="mode" value="flat" wire:loading.attr="disabled" wire:target="mode" /> {{ __('pos.discount_flat') }}
+                            </label>
+                            <label class="inline-flex items-center gap-1 text-gray-900 dark:text-gray-100">
+                                <input type="radio" wire:model.live="mode" value="percent" wire:loading.attr="disabled" wire:target="mode" /> {{ __('pos.discount_percent') }}
+                            </label>
+                        </div>
+                        @if ($this->mode === 'flat')
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
+                                    {{ __('pos.discount_flat_label') }}
+                                </label>
+                                <input type="number" min="0" step="100" wire:model.blur="flatMinor"
+                                    wire:loading.attr="disabled" wire:target="submit"
+                                    class="mt-1 w-full rounded-md border-gray-300 px-3 py-2 text-right tabular-nums dark:border-gray-600 dark:bg-gray-800" />
+                            </div>
+                        @else
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
+                                    {{ __('pos.discount_percent_label') }}
+                                </label>
+                                <input type="number" min="0" max="10000" wire:model.blur="percentBasisPoints"
+                                    wire:loading.attr="disabled" wire:target="submit"
+                                    class="mt-1 w-full rounded-md border-gray-300 px-3 py-2 text-right tabular-nums dark:border-gray-600 dark:bg-gray-800" />
+                                <p class="mt-1 text-[10px] text-gray-500">/ 10000 ({{ __('pos.discount_bp_hint') }})</p>
+                            </div>
+                        @endif
+                    @else
+                        <p class="rounded-md bg-emerald-50 p-2 text-xs text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">
+                            {{ __('pos.discount_staff_fixed_hint') }}
+                        </p>
+                    @endif
+
+                    {{-- Approver --}}
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
+                            {{ __('pos.discount_approver') }}
+                        </label>
+                        <select wire:model="approverStaffId" wire:loading.attr="disabled" wire:target="submit"
+                            class="mt-1 w-full rounded-md border-gray-300 px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800">
+                            <option value="">—</option>
+                            @foreach ($this->approverOptions as $opt)
+                                <option value="{{ $opt['id'] }}">{{ $opt['name'] }} (Lv{{ $opt['level'] }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
+                            {{ __('pos.discount_pin') }}
+                        </label>
+                        <input type="password" inputmode="numeric" wire:model.debounce.500ms="approverPin" wire:loading.attr="disabled" wire:target="submit"
+                            class="mt-1 w-full rounded-md border-gray-300 px-2 py-1.5 text-sm tracking-widest dark:border-gray-600 dark:bg-gray-800" />
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 dark:text-gray-200">
+                            {{ __('pos.discount_reason') }}
+                        </label>
+                        <input type="text" wire:model.debounce.500ms="reason" maxlength="255" wire:loading.attr="disabled" wire:target="submit"
+                            class="mt-1 w-full rounded-md border-gray-300 px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800" />
+                    </div>
+                </div>
+
+                <div class="flex shrink-0 items-center justify-between gap-2 border-t-2 border-blue-300 bg-white px-3 py-2.5 dark:border-blue-700 dark:bg-slate-900">
+                    <button type="button" wire:click="closeModal" @disabled($locked)
+                        wire:loading.attr="disabled"
+                        wire:target="closeModal,submit"
+                        class="rounded-md border-2 border-slate-300 bg-white px-3 py-2 text-xs font-extrabold text-slate-800 hover:bg-slate-100 disabled:opacity-50 dark:bg-slate-800 dark:text-gray-100">
+                        {{ __('rad_table.cloture_cancel') }}
+                    </button>
+                    <button type="button" wire:click="submit" @disabled($locked)
+                        x-on:click="optimisticClosing = true"
+                        wire:loading.attr="disabled"
+                        wire:target="submit"
+                        class="rounded-md bg-blue-600 px-4 py-2 text-sm font-extrabold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                        <span wire:loading.remove wire:target="submit">{{ __('pos.discount_apply') }}</span>
+                        <span wire:loading wire:target="submit">{{ __('pos.ui_working') }}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+</div>
 </file>
 
 <file path="app/Livewire/Pos/ClotureModal.php">
@@ -6658,190 +7545,6 @@ class TakeawayBar extends Component
 }
 </file>
 
-<file path="resources/views/livewire/pos/takeaway-bar.blade.php">
-<div
-    @class([
-        'w-full shrink-0 border-t border-yellow-200 bg-yellow-50/90 dark:border-yellow-800 dark:bg-yellow-900/30',
-    ])
-    x-data="{ peerTakeawayTid: null }"
-    x-on:pos-floor-peer-sync.window="peerTakeawayTid = ($event.detail && $event.detail.takeawayFloorTid != null) ? Number($event.detail.takeawayFloorTid) : null"
-    x-on:pos-tile-interaction-ended.window="peerTakeawayTid = null"
-    data-takeaway-bar="true"
-    role="region"
-    aria-label="{{ __('pos.takeaway_region_label') }}"
->
-    <div class="max-w-full px-2 py-2 sm:px-6 sm:py-5">
-        <p class="mb-0.5 text-[12px] font-extrabold uppercase tracking-wider text-yellow-900 dark:text-yellow-100 sm:text-[10px]">
-            {{ __('pos.takeaway_heading') }}
-        </p>
-        @if (count($takeawayTiles) === 0)
-            <p class="text-[10px] text-yellow-950/80 dark:text-yellow-100/90">
-                {{ __('pos.takeaway_no_tables') }}
-            </p>
-        @else
-            {{-- 6 卓固定・1 行。選択: amber 反転 + scale / クリックフラッシュ: app.css --}}
-            <div class="flex w-full min-w-0 flex-nowrap gap-px overflow-visible py-px sm:gap-0.5 sm:py-0.5 md:gap-1">
-                @foreach ($takeawayTiles as $tile)
-                    @php
-                        $tid = (int) $tile['restaurantTableId'];
-                        $isFloorSel = $this->floorSelectedTakeawayTableId !== null && $this->floorSelectedTakeawayTableId === $tid;
-                        $surface = $this->tileSurfaceClasses($tile);
-                    @endphp
-                    <button
-                        type="button"
-                        wire:click="openModalForTable({{ $tid }})"
-                        wire:key="takeaway-tile-{{ $tid }}"
-                        x-data="{ flash: false, flashTimer: null }"
-                        x-on:click="
-                            flash = true;
-                            if (flashTimer) clearTimeout(flashTimer);
-                            flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);
-                        "
-                        x-bind:class="{ 'pos-tile-select-flash': flash }"
-                        data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
-                        title="{{ $this->tileLabel($tile) }}"
-                        @class([
-                            'relative z-0 inline-flex min-h-8 min-w-0 flex-1 basis-0 items-center justify-center rounded border px-1 py-1 text-[9px] font-semibold leading-none shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 sm:min-h-[3rem] sm:px-0.5 sm:py-1 sm:text-[9px] '.$surface,
-                            '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isFloorSel,
-                            'font-semibold' => ! $isFloorSel,
-                            'font-black' => $isFloorSel,
-                        ])
-                        x-bind:class="(peerTakeawayTid === {{ $tid }} && ! @js($isFloorSel)) ? '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400 font-black' : ''"
-                    >
-                        <span @class(['truncate', 'font-black' => $isFloorSel])>{{ $this->tileLabel($tile) }}</span>
-                    </button>
-                @endforeach
-            </div>
-        @endif
-    </div>
-
-    @if ($modalOpen && $selectedTableId !== null)
-        @teleport('body')
-            <div
-                data-pos-takeaway-guest-modal="true"
-                wire:key="takeaway-guest-modal-shell-{{ $selectedTableId }}"
-                x-data
-                x-init="
-                    $nextTick(() => {
-                        window.dispatchEvent(
-                            new CustomEvent('open-modal', {
-                                detail: { id: 'pos-takeaway-guest-modal' },
-                                bubbles: true,
-                            }),
-                        )
-                    })
-                "
-                x-on:close-modal.window="
-                    if ($event.detail && $event.detail.id === 'pos-takeaway-guest-modal') {
-                        $wire.closeModal()
-                    }
-                "
-            >
-                <x-filament::modal
-                    id="pos-takeaway-guest-modal"
-                    :heading="__('pos.takeaway_modal_title', ['id' => $selectedTableId])"
-                    :description="__('pos.takeaway_modal_subtitle')"
-                    width="md"
-                    display-classes="block"
-                    :close-button="true"
-                    :close-by-clicking-away="true"
-                    :close-by-escaping="true"
-                >
-                    <div class="space-y-4">
-                        <div
-                            class="fi-fo-field-wrp"
-                            data-field-wrapper
-                        >
-                            <div
-                                class="grid gap-y-2"
-                            >
-                                <label
-                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
-                                    for="takeaway-customer-name-{{ $selectedTableId }}"
-                                >
-                                    {{ __('pos.takeaway_customer_name') }}
-                                </label>
-                                <x-filament::input.wrapper
-                                    :valid="! $errors->has('customerName')"
-                                >
-                                    <x-filament::input
-                                        id="takeaway-customer-name-{{ $selectedTableId }}"
-                                        type="text"
-                                        wire:model="customerName"
-                                        autocomplete="name"
-                                    />
-                                </x-filament::input.wrapper>
-                                @error('customerName')
-                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
-                                        {{ $message }}
-                                    </p>
-                                @enderror
-                            </div>
-                        </div>
-
-                        <div
-                            class="fi-fo-field-wrp"
-                            data-field-wrapper
-                        >
-                            <div
-                                class="grid gap-y-2"
-                            >
-                                <label
-                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
-                                    for="takeaway-customer-phone-{{ $selectedTableId }}"
-                                >
-                                    {{ __('pos.takeaway_customer_phone') }}
-                                </label>
-                                <x-filament::input.wrapper
-                                    :valid="! $errors->has('customerPhone')"
-                                >
-                                    <x-filament::input
-                                        id="takeaway-customer-phone-{{ $selectedTableId }}"
-                                        type="tel"
-                                        wire:model="customerPhone"
-                                        inputmode="tel"
-                                        autocomplete="tel"
-                                    />
-                                </x-filament::input.wrapper>
-                                @error('customerPhone')
-                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
-                                        {{ $message }}
-                                    </p>
-                                @enderror
-                            </div>
-                        </div>
-                    </div>
-
-                    <x-slot name="footer">
-                        <div
-                            class="fi-modal-footer-actions flex flex-wrap items-center gap-3"
-                        >
-                            <x-filament::button
-                                type="button"
-                                color="gray"
-                                outlined
-                                wire:click="closeModal"
-                            >
-                                {{ __('pos.takeaway_cancel') }}
-                            </x-filament::button>
-                            <x-filament::button
-                                type="button"
-                                color="warning"
-                                wire:click="confirmTakeawayGuest"
-                                wire:loading.attr="disabled"
-                                wire:target="confirmTakeawayGuest"
-                            >
-                                {{ __('pos.takeaway_confirm') }}
-                            </x-filament::button>
-                        </div>
-                    </x-slot>
-                </x-filament::modal>
-            </div>
-        @endteleport
-    @endif
-</div>
-</file>
-
 <file path="app/Livewire/Pos/StaffMealBar.php">
 <?php
 
@@ -6995,248 +7698,801 @@ class StaffMealBar extends Component
 }
 </file>
 
-<file path="resources/views/livewire/pos/cloture-modal.blade.php">
-@php
-    $locked = $this->uiState === 'in_flight';
-    $clotureModalWindowAttrs = (new \Illuminate\View\ComponentAttributeBag)->class([
-        'max-h-[min(92dvh,720px)] max-w-full overflow-hidden',
-    ]);
-    /** 近似値ボタンは最大3個（ぴったり1 + proche 最大2） */
-    $procheMinorForButtons = array_slice($this->procheMinor, 0, 2);
-@endphp
-
-<div class="fi-no-print">
-    @if ($open)
-        @teleport('body')
-            <div
-                data-pos-cloture-modal="true"
-                wire:key="cloture-modal-{{ $this->tableSessionId }}"
-                x-data="{
-                    inputDt: $wire.entangle('tenderedDtInput'),
-                    finalMinor: {{ (int) $this->finalTotalMinor }},
-                    changeMinor() {
-                        const parsed = Number.parseFloat(this.inputDt || 0)
-                        const normalized = Number.isFinite(parsed) ? parsed : 0
-
-                        return Math.round(normalized * 1000) - this.finalMinor
-                    },
-                    setFromMinor(minor) {
-                        this.inputDt = (minor / 1000).toFixed(3)
-                    },
-                    formattedChange() {
-                        return (this.changeMinor() / 1000).toFixed(3) + ' DT'
-                    },
-                }"
-                x-init="
-                    $nextTick(() => {
-                        if (!inputDt) {
-                            inputDt = ''
-                        }
-
-                        window.dispatchEvent(
-                            new CustomEvent('open-modal', {
-                                detail: { id: 'pos-cloture-checkout-modal' },
-                                bubbles: true,
-                            }),
-                        )
-                    })
-                "
-                x-on:close-modal.window="
-                    if ($event.detail && $event.detail.id === 'pos-cloture-checkout-modal') {
-                        $wire.closeModal()
-                    }
-                "
-            >
-                <x-filament::modal
-                    id="pos-cloture-checkout-modal"
-                    aria-labelledby="pos-cloture-checkout-modal-title"
-                    width="sm"
-                    alignment="center"
-                    display-classes="block"
-                    :close-button="true"
-                    :close-by-clicking-away="true"
-                    :close-by-escaping="true"
-                    :sticky-footer="true"
-                    :extra-modal-window-attribute-bag="$clotureModalWindowAttrs"
-                >
-                    <div
-                        class="pos-cloture-checkout -mx-6 -mt-2 max-h-[min(58dvh,420px)] min-h-0 overflow-y-auto overscroll-contain px-4 pb-2 pt-1 text-center text-[12px] font-medium leading-snug text-slate-800 antialiased dark:text-slate-200 sm:px-5"
-                    >
-                        <h2
-                            id="pos-cloture-checkout-modal-title"
-                            class="sr-only"
-                        >
-                            {{ __('rad_table.cloture_title') }}
-                        </h2>
-
-                        <div class="space-y-2">
-                            <div
-                                class="rounded-md border border-red-600/80 bg-red-50/70 px-2 py-1.5 dark:border-red-500/80 dark:bg-red-950/40"
-                                title="{{ $this->tableLabel }}"
-                            >
-                                <div class="flex items-center justify-center gap-1.5">
-                                    <x-filament::icon
-                                        icon="heroicon-o-table-cells"
-                                        class="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
-                                        aria-hidden="true"
-                                    />
-                                    <p
-                                        class="min-w-0 flex-1 break-words text-[12px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300"
-                                        aria-label="{{ $this->tableLabel }}"
-                                    >
-                                        {{ $this->tableLabel }}
-                                    </p>
-                                    <x-filament::icon
-                                        icon="heroicon-o-table-cells"
-                                        class="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
-                                        aria-hidden="true"
-                                    />
-                                </div>
-                            </div>
-
-                            <div
-                                class="rounded-md border border-sky-600/70 bg-sky-50/60 px-2 py-1.5 dark:border-sky-500/70 dark:bg-sky-950/30"
-                                aria-label="{{ __('rad_table.cloture_total') }}"
-                            >
-                                <p class="text-[12px] font-semibold uppercase tracking-wider text-sky-800 dark:text-sky-200">
-                                    {{ __('rad_table.cloture_total') }}
-                                </p>
-                                <p
-                                    class="mt-0.5 text-[12px] font-bold tabular-nums tracking-wide text-slate-900 underline decoration-slate-400 dark:text-white dark:decoration-slate-500"
-                                    aria-live="polite"
-                                >
-                                    {{ $this->formatMinor($this->finalTotalMinor) }}
-                                </p>
-                            </div>
-
-                            @if ($this->discountAppliedMinor > 0 || $this->roundingAdjustmentMinor > 0)
-                                <div class="space-y-1 border-y border-amber-500/80 py-1.5 dark:border-amber-400/80">
-                                    @if ($this->discountAppliedMinor > 0)
-                                        <div class="flex justify-between gap-2 text-[12px] text-slate-700 dark:text-slate-300">
-                                            <span>{{ __('rad_table.cloture_discount') }}</span>
-                                            <span class="tabular-nums">− {{ $this->formatMinor($this->discountAppliedMinor) }}</span>
-                                        </div>
-                                    @endif
-                                    @if ($this->roundingAdjustmentMinor > 0)
-                                        <div class="flex justify-between gap-2 text-[12px] text-slate-600 dark:text-slate-400">
-                                            <span>{{ __('rad_table.cloture_rounding') }}</span>
-                                            <span class="tabular-nums">− {{ $this->formatMinor($this->roundingAdjustmentMinor) }}</span>
-                                        </div>
-                                    @endif
-                                </div>
-                            @endif
-
-                            <div class="flex w-full gap-1.5">
-                                <x-filament::button
-                                    type="button"
-                                    size="xs"
-                                    outlined
-                                    x-on:click="setFromMinor({{ (int) $this->justeMinor }})"
-                                    wire:key="cloture-sugg-juste-{{ $this->tableSessionId }}"
-                                    :disabled="$locked"
-                                    wire:loading.attr="disabled"
-                                    wire:target="confirm"
-                                    class="min-w-0 flex-1 !h-auto !px-1.5 !py-1.5 !text-[12px] !font-semibold !leading-tight"
-                                >
-                                    <span class="block text-center leading-tight">
-                                        <span class="block text-[12px] font-semibold uppercase tracking-wide">
-                                            {{ __('rad_table.cloture_juste') }}
-                                        </span>
-                                        <span class="mt-0.5 block tabular-nums">
-                                            {{ $this->formatMinor($this->justeMinor) }}
-                                        </span>
-                                    </span>
-                                </x-filament::button>
-                                @foreach ($procheMinorForButtons as $p)
-                                    <x-filament::button
-                                        type="button"
-                                        size="xs"
-                                        outlined
-                                        x-on:click="setFromMinor({{ (int) $p }})"
-                                        wire:key="cloture-sugg-{{ $this->tableSessionId }}-{{ (int) $p }}"
-                                        :disabled="$locked"
-                                        wire:loading.attr="disabled"
-                                        wire:target="confirm"
-                                        class="min-w-0 flex-1 !h-auto !px-1.5 !py-1.5 !text-[12px] !font-semibold tabular-nums !leading-tight"
-                                    >
-                                        {{ $this->formatMinor((int) $p) }}
-                                    </x-filament::button>
-                                @endforeach
-                            </div>
-
-                            <div class="border-t border-sky-500/70 pt-1.5 dark:border-sky-400/70">
-                                <x-filament::input.wrapper
-                                    :disabled="$locked"
-                                    suffix="DT"
-                                    prefix-icon="heroicon-o-banknotes"
-                                    prefix-icon-color="success"
-                                    class="!ring-1 !ring-emerald-600/80 dark:!ring-emerald-400/80"
-                                >
-                                    <x-filament::input
-                                        id="cloture-tendered-dt-{{ $this->tableSessionId }}"
-                                        type="text"
-                                        inputmode="decimal"
-                                        autocomplete="off"
-                                        x-model="inputDt"
-                                        :disabled="$locked"
-                                        wire:loading.attr="disabled"
-                                        wire:target="confirm"
-                                        aria-label="{{ __('rad_table.cloture_tendered') }}"
-                                        class="!py-2 !text-[12px] !font-semibold !leading-snug tabular-nums text-center !text-blue-950 !placeholder:text-blue-600/40 disabled:!text-blue-950/50 disabled:[-webkit-text-fill-color:theme(colors.blue.950)] dark:!text-blue-100 dark:!placeholder:text-blue-300/40 dark:disabled:!text-blue-100/50 dark:disabled:[-webkit-text-fill-color:theme(colors.blue.100)]"
-                                    />
-                                </x-filament::input.wrapper>
-                            </div>
-
-                            <div
-                                class="rounded-md border border-slate-300/90 bg-slate-50/80 px-2 py-1.5 text-center dark:border-slate-600 dark:bg-slate-900/50"
-                                aria-live="polite"
-                            >
-                                <p class="text-[12px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-                                    {{ __('rad_table.cloture_change') }}
-                                </p>
-                                <p class="mt-0.5 text-[12px] font-semibold tabular-nums text-neutral-950 dark:text-neutral-100" x-text="formattedChange()">
-                                    0.000 DT
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <x-slot name="footer">
-                        <div class="fi-modal-footer-actions flex flex-wrap items-center justify-center gap-2 text-[12px]">
-                            <x-filament::button
-                                type="button"
-                                color="gray"
-                                size="sm"
-                                outlined
-                                wire:click="closeModal"
-                                :disabled="$locked"
-                                wire:loading.attr="disabled"
-                                wire:target="closeModal,confirm"
-                                class="!min-h-9 !px-4 !text-[12px] !font-semibold"
-                            >
-                                {{ __('rad_table.cloture_cancel') }}
-                            </x-filament::button>
-                            <x-filament::button
-                                type="button"
-                                color="danger"
-                                size="sm"
-                                x-on:click="$wire.set('tenderedDtInput', inputDt); $wire.confirm()"
-                                x-bind:disabled="@js($locked) || changeMinor() < 0"
-                                wire:loading.attr="disabled"
-                                wire:target="confirm"
-                                :loading-indicator="false"
-                                class="!min-h-9 !px-4 !text-[12px] !font-semibold"
-                            >
-                                <span wire:loading.remove wire:target="confirm">{{ __('rad_table.cloture_confirm') }}</span>
-                                <span wire:loading wire:target="confirm">{{ __('pos.ui_working') }}</span>
-                            </x-filament::button>
-                        </div>
-                    </x-slot>
-                </x-filament::modal>
-            </div>
-        @endteleport
-    @endif
+<file path="resources/views/components/pos-speed-panel.blade.php">
+@if (config('app.speed_test'))
+{{-- POS Livewire profiling panel (SPEED_TEST / app.speed_test). All logic self-contained; wire:ignore. --}}
+<div
+    id="pos-speed-panel-root"
+    wire:ignore
+    class="fi-pos-speed-panel flex w-full flex-none flex-col border-t border-zinc-600 bg-zinc-950 px-2 py-2 font-mono text-[9px] leading-snug text-zinc-100 shadow-[0_-4px_14px_rgba(0,0,0,0.25)] sm:px-3"
+    role="status"
+    aria-label="POS Livewire profiling"
+>
+    <div class="mb-1 flex flex-wrap items-center justify-between gap-1">
+        <span class="text-[9px] font-bold uppercase tracking-wide text-amber-300">POS profile</span>
+        <span id="pos-sp-health-strip" class="flex flex-wrap items-center gap-1 text-[8px]"></span>
+    </div>
+    <div
+        id="pos-sp-phase-row"
+        class="grid w-full max-w-full grid-cols-2 gap-x-2 gap-y-0.5 border-b border-zinc-800 pb-1.5 sm:grid-cols-4"
+    >
+        <div><span class="text-zinc-500">wire</span> <span id="pos-sp-total" class="font-semibold text-zinc-100">—</span></div>
+        <div><span class="text-zinc-500">TTFBΔ</span> <span id="pos-sp-ttfb" class="font-semibold">—</span></div>
+        <div><span class="text-zinc-500">dl~</span> <span id="pos-sp-dl" class="font-semibold">—</span></div>
+        <div><span class="text-zinc-500">morph</span> <span id="pos-sp-morph" class="font-semibold">—</span></div>
+    </div>
+    <div class="mt-1 grid w-full max-w-full grid-cols-2 gap-x-2 gap-y-0.5 sm:grid-cols-4">
+        <div><span class="text-zinc-500">mergeΣ</span> <span id="pos-sp-commit" class="text-zinc-200">—</span></div>
+        <div><span class="text-zinc-500">HTTP/手</span> <span id="pos-sp-http-n" class="text-zinc-200">—</span></div>
+        <div><span class="text-zinc-500">JSON</span> <span id="pos-sp-json-kb" class="text-zinc-200">—</span></div>
+        <div><span class="text-zinc-500">htmlΣ</span> <span id="pos-sp-html-k" class="text-zinc-200">—</span></div>
+    </div>
+    <div class="mt-0.5 text-[8px] text-zinc-500">memoΣ <span id="pos-sp-memo-k" class="text-zinc-300">—</span></div>
+    <div
+        id="pos-sp-detail"
+        class="mt-1.5 max-h-44 w-full max-w-full space-y-1 overflow-y-auto overscroll-contain border-t border-zinc-800 pt-1.5 text-[8px]"
+    >
+        <div>
+            <span class="text-zinc-500">RT (last)</span>
+            <span id="pos-sp-rt" class="block whitespace-pre-wrap break-all text-zinc-300">—</span>
+        </div>
+        <div>
+            <span class="text-zinc-500">wire split</span>
+            <span id="pos-sp-wire-split" class="block break-words text-zinc-300">—</span>
+        </div>
+        <div>
+            <span class="text-zinc-500">HTTP batch</span>
+            <span id="pos-sp-http-batch" class="block break-words text-zinc-300">—</span>
+        </div>
+        <div>
+            <span class="text-zinc-500">merge (comps)</span>
+            <span id="pos-sp-commit-list" class="block break-words text-zinc-300">—</span>
+        </div>
+        <div>
+            <span class="text-zinc-500">morphed</span>
+            <span id="pos-sp-morphed-list" class="block break-words text-zinc-300">—</span>
+        </div>
+        <div>
+            <span class="text-zinc-500">dispatches</span>
+            <span id="pos-sp-dispatch-list" class="block break-words text-zinc-300">—</span>
+        </div>
+        <div>
+            <span class="text-zinc-500">wire comps</span>
+            <span id="pos-sp-comp-list" class="block break-words text-zinc-300">—</span>
+        </div>
+    </div>
+    <div id="pos-sp-hint" class="mt-1 border-t border-zinc-800 pt-1 text-[7px] leading-tight text-zinc-600">
+        TTFBΔ=ResourceTiming responseStart−requestStart（サーバ＋待ちの近似）。dl~=responseEnd−responseStart。mergeΣ=各 commit の respond→succeed（snapshot merge + processEffects 等のメイン同期コスト）。wire split: hook→request.respond（fetch 完了）→hook.succeed（本文＋parse＋handleSuccess）。緑/黄/赤は wire&lt;180 / 320 / 以上の目安。PHP 純粋時間は Server-Timing が無いと TTFB 内に埋没。
+    </div>
 </div>
+
+@once
+    @push('scripts')
+        <script>
+            (function () {
+                try {
+                    if (!document.getElementById('pos-speed-panel-root')) {
+                        return;
+                    }
+
+                    const TH = { wireOk: 180, wireWarn: 320, ttfbOk: 160, ttfbWarn: 280, jsonKbWarn: 80, htmlKWarn: 400 };
+
+                    const $ = (id) => document.getElementById(id);
+
+                    function fmt(ms) {
+                        if (ms == null || Number.isNaN(ms)) {
+                            return '—';
+                        }
+                        return Math.round(ms) + 'ms';
+                    }
+
+                    function badge(label, level) {
+                        const c =
+                            level === 'ok'
+                                ? 'bg-emerald-700 text-white'
+                                : level === 'warn'
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-rose-700 text-white';
+                        return '<span class="inline-flex items-center rounded px-1 py-px ' + c + '">' + label + '</span>';
+                    }
+
+                    function healthStrip(wireMs, ttfbMs, morphMs, jsonKb) {
+                        try {
+                            const el = $('pos-sp-health-strip');
+                            if (!el) {
+                                return;
+                            }
+                            const wL = wireMs == null || wireMs < TH.wireOk ? 'ok' : wireMs < TH.wireWarn ? 'warn' : 'bad';
+                            const tL = ttfbMs == null || ttfbMs < TH.ttfbOk ? 'ok' : ttfbMs < TH.ttfbWarn ? 'warn' : 'bad';
+                            const mL =
+                                morphMs == null
+                                    ? 'warn'
+                                    : morphMs < 80
+                                      ? 'ok'
+                                      : morphMs < 200
+                                        ? 'warn'
+                                        : 'bad';
+                            const jL = jsonKb == null || jsonKb < TH.jsonKbWarn ? 'ok' : jsonKb < 150 ? 'warn' : 'bad';
+                            el.innerHTML =
+                                badge('wire', wL) +
+                                badge('TTFB', tL) +
+                                badge('morph', mL) +
+                                badge('JSON', jL);
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
+
+                    function findLastLivewireResourceEntry() {
+                        try {
+                            const entries = performance.getEntriesByType('resource');
+                            for (let i = entries.length - 1; i >= 0; i--) {
+                                const e = entries[i];
+                                if (
+                                    e.initiatorType === 'fetch' &&
+                                    typeof e.name === 'string' &&
+                                    (e.name.toLowerCase().indexOf('livewire') !== -1 || /\/livewire\//i.test(e.name))
+                                ) {
+                                    return e;
+                                }
+                            }
+                        } catch (e) {
+                            /* ignore */
+                        }
+                        return null;
+                    }
+
+                    function formatResourceTiming(e) {
+                        if (!e) {
+                            return '—';
+                        }
+                        try {
+                            const parts = [];
+                            const push = (k, a, b) => {
+                                if (a > 0 && b > 0 && b >= a) {
+                                    parts.push(k + ':' + Math.round(b - a) + 'ms');
+                                }
+                            };
+                            push('dns', e.domainLookupStart, e.domainLookupEnd);
+                            push('tcp', e.connectStart, e.connectEnd);
+                            push('req→TTFB', e.requestStart, e.responseStart);
+                            push('TTFB→end', e.responseStart, e.responseEnd);
+                            push('total', e.startTime, e.responseEnd);
+                            if (e.transferSize > 0) {
+                                parts.push('xfer:' + e.transferSize + 'B');
+                            }
+                            return parts.join(' ');
+                        } catch (err) {
+                            return '—';
+                        }
+                    }
+
+                    function extractDispatchNamesFromJson(json) {
+                        const names = [];
+                        try {
+                            const comps = json && json.components;
+                            if (!Array.isArray(comps)) {
+                                return names;
+                            }
+                            for (let i = 0; i < comps.length; i++) {
+                                const eff = comps[i] && comps[i].effects;
+                                if (!eff || !Array.isArray(eff.dispatches)) {
+                                    continue;
+                                }
+                                for (let k = 0; k < eff.dispatches.length; k++) {
+                                    const d = eff.dispatches[k];
+                                    if (d && d.name) {
+                                        names.push(String(d.name));
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            /* ignore */
+                        }
+                        return names;
+                    }
+
+                    function analyzeJsonPayload(json) {
+                        const out = {
+                            jsonKb: null,
+                            htmlChars: 0,
+                            memoChars: 0,
+                            names: [],
+                        };
+                        try {
+                            if (json == null) {
+                                return out;
+                            }
+                            const s = JSON.stringify(json);
+                            out.jsonKb = s.length / 1024;
+                            const comps = json.components;
+                            if (!Array.isArray(comps)) {
+                                return out;
+                            }
+                            for (let i = 0; i < comps.length; i++) {
+                                const c = comps[i];
+                                if (!c) {
+                                    continue;
+                                }
+                                const eff = c.effects || {};
+                                if (typeof eff.html === 'string') {
+                                    out.htmlChars += eff.html.length;
+                                } else if (Array.isArray(eff.html)) {
+                                    for (let h = 0; h < eff.html.length; h++) {
+                                        if (typeof eff.html[h] === 'string') {
+                                            out.htmlChars += eff.html[h].length;
+                                        }
+                                    }
+                                }
+                                if (c.snapshot != null) {
+                                    try {
+                                        const snap = typeof c.snapshot === 'string' ? JSON.parse(c.snapshot) : c.snapshot;
+                                        const memo = snap && snap.memo ? snap.memo : {};
+                                        out.memoChars += JSON.stringify(memo).length;
+                                        const nm = memo && memo.name != null ? String(memo.name) : '?';
+                                        out.names.push(nm);
+                                    } catch (e) {
+                                        out.names.push('?');
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            /* ignore */
+                        }
+                        return out;
+                    }
+
+                    function resetDetailPlaceholders() {
+                        try {
+                            [
+                                'pos-sp-rt',
+                                'pos-sp-wire-split',
+                                'pos-sp-http-batch',
+                                'pos-sp-commit-list',
+                                'pos-sp-morphed-list',
+                                'pos-sp-dispatch-list',
+                                'pos-sp-comp-list',
+                            ].forEach(function (id) {
+                                const n = $(id);
+                                if (n) {
+                                    n.textContent = '…';
+                                }
+                            });
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
+
+                    function clearDetail() {
+                        try {
+                            [
+                                'pos-sp-rt',
+                                'pos-sp-wire-split',
+                                'pos-sp-http-batch',
+                                'pos-sp-commit-list',
+                                'pos-sp-morphed-list',
+                                'pos-sp-dispatch-list',
+                                'pos-sp-comp-list',
+                            ].forEach(function (id) {
+                                const n = $(id);
+                                if (n) {
+                                    n.textContent = '—';
+                                }
+                            });
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
+
+                    /** Gesture-scoped HTTP batch (POS dispatches these without touching this file). */
+                    let gestureBatch = null;
+                    const GESTURE_MS = 3200;
+
+                    function touchGestureBatch() {
+                        try {
+                            gestureBatch = { t0: performance.now(), items: [] };
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
+
+                    try {
+                        window.addEventListener(
+                            'show-local-skeleton',
+                            function () {
+                                try {
+                                    touchGestureBatch();
+                                } catch (e) {
+                                    /* ignore */
+                                }
+                            },
+                            true,
+                        );
+                        window.addEventListener('pos-tile-interaction-started', function () {
+                            try {
+                                touchGestureBatch();
+                            } catch (e) {
+                                /* ignore */
+                            }
+                        });
+                    } catch (e) {
+                        /* ignore */
+                    }
+
+                    let clientMergeStack = { active: false, mergeMs: 0, names: [] };
+
+                    /** Outgoing Livewire pool: method hints + component memo names (best-effort). */
+                    function sniffOutgoing(bodyStr) {
+                        try {
+                            const o = typeof bodyStr === 'string' ? JSON.parse(bodyStr) : bodyStr;
+                            const comps = o && o.components;
+                            if (!Array.isArray(comps)) {
+                                return '';
+                            }
+                            const parts = [];
+                            for (let i = 0; i < comps.length; i++) {
+                                const c = comps[i];
+                                if (!c) {
+                                    continue;
+                                }
+                                const calls = c.calls || [];
+                                const m = calls.length && calls[0].method ? String(calls[0].method) : '∅';
+                                let name = '?';
+                                try {
+                                    if (typeof c.snapshot === 'string') {
+                                        const s = JSON.parse(c.snapshot);
+                                        if (s && s.memo && s.memo.name) {
+                                            name = String(s.memo.name);
+                                        }
+                                    }
+                                } catch (e) {
+                                    /* ignore */
+                                }
+                                parts.push(name + ':' + m);
+                            }
+                            return parts.join(' + ');
+                        } catch (e) {
+                            return '';
+                        }
+                    }
+
+                    const inflightByRid = {};
+
+                    let httpInFlight = 0;
+                    let lastWire = null;
+                    let lastTtfb = null;
+                    let lastDl = null;
+                    let lastMorph = null;
+                    let lastMergeSum = null;
+                    let activeRound = null;
+                    let requestSeq = 0;
+
+                    function paintCore() {
+                        try {
+                            $('pos-sp-total').textContent = fmt(lastWire);
+                            $('pos-sp-ttfb').textContent = fmt(lastTtfb);
+                            $('pos-sp-dl').textContent = fmt(lastDl);
+                            $('pos-sp-morph').textContent = fmt(lastMorph);
+                            $('pos-sp-commit').textContent = fmt(lastMergeSum);
+                            const jk = $('pos-sp-json-kb');
+                            const hk = $('pos-sp-html-k');
+                            const mk = $('pos-sp-memo-k');
+                            if (jk && window.__posSpeedLastPayload) {
+                                jk.textContent = window.__posSpeedLastPayload.jsonKb.toFixed(2) + 'KB';
+                                hk.textContent = Math.round(window.__posSpeedLastPayload.htmlChars / 1000) + 'k chars';
+                                mk.textContent = Math.round(window.__posSpeedLastPayload.memoChars / 1000) + 'k chars';
+                            } else {
+                                if (jk) {
+                                    jk.textContent = '—';
+                                }
+                                if (hk) {
+                                    hk.textContent = '—';
+                                }
+                                if (mk) {
+                                    mk.textContent = '—';
+                                }
+                            }
+                            healthStrip(lastWire, lastTtfb, lastMorph, window.__posSpeedLastPayload ? window.__posSpeedLastPayload.jsonKb : null);
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
+
+                    function scheduleMorphPaintDone(tFirstMorph) {
+                        try {
+                            if (tFirstMorph == null) {
+                                lastMorph = null;
+                                paintCore();
+                                return;
+                            }
+                            queueMicrotask(function () {
+                                try {
+                                    setTimeout(function () {
+                                        try {
+                                            requestAnimationFrame(function () {
+                                                requestAnimationFrame(function () {
+                                                    try {
+                                                        lastMorph = performance.now() - tFirstMorph;
+                                                        paintCore();
+                                                    } catch (e) {
+                                                        /* ignore */
+                                                    }
+                                                });
+                                            });
+                                        } catch (e) {
+                                            /* ignore */
+                                        }
+                                    }, 0);
+                                } catch (e) {
+                                    /* ignore */
+                                }
+                            });
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
+
+                    function installPosSpeedHooks() {
+                        try {
+                            if (window.__posSpeedPanelHooksInstalled) {
+                                return;
+                            }
+                            const lw = window.Livewire;
+                            if (!lw || typeof lw.hook !== 'function') {
+                                return;
+                            }
+                            window.__posSpeedPanelHooksInstalled = true;
+
+                            /** Per-commit client work: respond() → succeed() inside handleResponse (merge snapshot + processEffects, etc.). */
+                            lw.hook('commit', function (ref) {
+                                let tAfterRespond = null;
+                                try {
+                                    const resp = ref.respond;
+                                    const succ = ref.succeed;
+                                    if (typeof resp === 'function') {
+                                        resp(function () {
+                                            try {
+                                                if (clientMergeStack.active) {
+                                                    tAfterRespond = performance.now();
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                        });
+                                    }
+                                    if (typeof succ === 'function') {
+                                        succ(function () {
+                                            try {
+                                                if (clientMergeStack.active && tAfterRespond != null) {
+                                                    clientMergeStack.mergeMs += performance.now() - tAfterRespond;
+                                                    tAfterRespond = null;
+                                                }
+                                                const comp = ref.component;
+                                                if (clientMergeStack.active && comp && comp.name) {
+                                                    clientMergeStack.names.push(String(comp.name));
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                        });
+                                    }
+                                } catch (e) {
+                                    /* ignore */
+                                }
+                            });
+
+                            lw.hook('request', function (_ref) {
+                                try {
+                                    const succeed = _ref.succeed;
+                                    const fail = _ref.fail;
+                                    const respond = _ref.respond;
+                                    if (typeof succeed !== 'function') {
+                                        return;
+                                    }
+
+                                    resetDetailPlaceholders();
+
+                                    const rid = ++requestSeq;
+                                    const round = {
+                                        rid: rid,
+                                        morphed: new Map(),
+                                        tRequest: performance.now(),
+                                        tFetchDone: null,
+                                    };
+                                    activeRound = round;
+
+                                    clientMergeStack = { active: true, mergeMs: 0, names: [] };
+
+                                    try {
+                                        const hint = sniffOutgoing(_ref.payload);
+                                        const method = (_ref.options && _ref.options.method) || 'POST';
+                                        inflightByRid[rid] = { method: method, hint: hint, t: round.tRequest };
+                                        const ids = Object.keys(inflightByRid);
+                                        round.concurrentSummary =
+                                            ids.length > 1
+                                                ? ids
+                                                      .map(function (k) {
+                                                          const v = inflightByRid[k];
+                                                          return '#' + k + ' ' + v.method + ' ' + (v.hint || '—');
+                                                      })
+                                                      .join(' │ ')
+                                                : '';
+                                    } catch (e) {
+                                        round.concurrentSummary = '';
+                                    }
+
+                                    if (gestureBatch && performance.now() - gestureBatch.t0 < GESTURE_MS) {
+                                        gestureBatch.items.push({
+                                            rid: rid,
+                                            t: round.tRequest,
+                                            hint: inflightByRid[rid] ? inflightByRid[rid].hint : '',
+                                        });
+                                    }
+
+                                    if (typeof respond === 'function') {
+                                        respond(function () {
+                                            try {
+                                                round.tFetchDone = performance.now();
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                        });
+                                    }
+
+                                    httpInFlight++;
+                                    const morphSlot = { t0: null };
+                                    let morphPairStart = null;
+                                    let offMorph = null;
+                                    let offMorphed = null;
+
+                                    function teardownMorphHooks() {
+                                        try {
+                                            if (typeof offMorph === 'function') {
+                                                offMorph();
+                                                offMorph = null;
+                                            }
+                                            if (typeof offMorphed === 'function') {
+                                                offMorphed();
+                                                offMorphed = null;
+                                            }
+                                        } catch (e) {
+                                            /* ignore */
+                                        }
+                                    }
+
+                                    function endHttp() {
+                                        httpInFlight = Math.max(0, httpInFlight - 1);
+                                        teardownMorphHooks();
+                                    }
+
+                                    try {
+                                        offMorph = lw.hook('morph', function () {
+                                            try {
+                                                const r = activeRound;
+                                                if (r && r.rid === rid) {
+                                                    morphPairStart = performance.now();
+                                                    if (httpInFlight === 1 && morphSlot.t0 === null) {
+                                                        morphSlot.t0 = morphPairStart;
+                                                    }
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                        });
+                                    } catch (e) {
+                                        offMorph = null;
+                                    }
+
+                                    try {
+                                        offMorphed = lw.hook('morphed', function (detail) {
+                                            try {
+                                                const r = activeRound;
+                                                if (!r || !detail || r.rid !== rid) {
+                                                    return;
+                                                }
+                                                if (morphPairStart != null) {
+                                                    r.morphSyncMs = (r.morphSyncMs || 0) + (performance.now() - morphPairStart);
+                                                    morphPairStart = null;
+                                                }
+                                                const c = detail.component;
+                                                if (!c) {
+                                                    return;
+                                                }
+                                                const id = c.id != null ? String(c.id) : '';
+                                                const nm = c.name != null ? String(c.name) : '?';
+                                                if (id !== '') {
+                                                    r.morphed.set(id, nm);
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                        });
+                                    } catch (e) {
+                                        offMorphed = null;
+                                    }
+
+                                    succeed(function (fwd) {
+                                        try {
+                                            endHttp();
+                                            const tDone = performance.now();
+                                            lastWire = tDone - round.tRequest;
+                                            lastMergeSum = clientMergeStack.mergeMs;
+                                            clientMergeStack.active = false;
+                                            try {
+                                                delete inflightByRid[rid];
+                                            } catch (eDel) {
+                                                /* ignore */
+                                            }
+
+                                            const rt = findLastLivewireResourceEntry();
+                                            let ttfb = null;
+                                            let dl = null;
+                                            try {
+                                                if (rt && rt.requestStart > 0 && rt.responseStart > 0) {
+                                                    ttfb = rt.responseStart - rt.requestStart;
+                                                }
+                                                if (rt && rt.responseStart > 0 && rt.responseEnd > 0) {
+                                                    dl = rt.responseEnd - rt.responseStart;
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                            lastTtfb = ttfb;
+                                            lastDl = dl;
+
+                                            const j = fwd && fwd.json != null ? fwd.json : null;
+                                            const analysis = analyzeJsonPayload(j);
+                                            window.__posSpeedLastPayload = analysis;
+
+                                            const morphedMap = round.morphed || new Map();
+                                            const disp = extractDispatchNamesFromJson(j);
+
+                                            try {
+                                                $('pos-sp-rt').textContent = formatResourceTiming(rt);
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                            try {
+                                                const gb = gestureBatch;
+                                                let batchLine = '—';
+                                                if (gb && gb.items && gb.items.length > 0) {
+                                                    const recent = gb.items.filter(function (it) {
+                                                        return performance.now() - it.t < GESTURE_MS;
+                                                    });
+                                                    batchLine = recent.length + ' req';
+                                                }
+                                                $('pos-sp-http-n').textContent = batchLine;
+                                                const bEl = $('pos-sp-http-batch');
+                                                if (bEl) {
+                                                    const parts = [];
+                                                    if (round.concurrentSummary) {
+                                                        parts.push('同時: ' + round.concurrentSummary);
+                                                    }
+                                                    if (gestureBatch && gestureBatch.items && gestureBatch.items.length) {
+                                                        parts.push(
+                                                            gestureBatch.items
+                                                                .map(function (x) {
+                                                                    return '#' + x.rid + (x.hint ? ' ' + x.hint : '');
+                                                                })
+                                                                .join(' · '),
+                                                        );
+                                                    }
+                                                    bEl.textContent = parts.length ? parts.join(' | ') : '—';
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+
+                                            try {
+                                                const wEl = $('pos-sp-wire-split');
+                                                if (wEl) {
+                                                    const a = round.tFetchDone != null ? Math.round(round.tFetchDone - round.tRequest) : null;
+                                                    const b =
+                                                        round.tFetchDone != null ? Math.round(tDone - round.tFetchDone) : null;
+                                                    wEl.textContent =
+                                                        (a != null ? 'hook→fetch ' + a + 'ms' : 'hook→fetch —') +
+                                                        ' · ' +
+                                                        (b != null ? 'fetch→done ' + b + 'ms' : 'fetch→done —');
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+
+                                            try {
+                                                const cel = $('pos-sp-commit-list');
+                                                if (cel) {
+                                                    cel.textContent = clientMergeStack.names.length
+                                                        ? clientMergeStack.names.join(', ')
+                                                        : '（なし）';
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                            try {
+                                                const mel = $('pos-sp-morphed-list');
+                                                if (mel) {
+                                                    const names = morphedMap.size ? Array.from(morphedMap.values()).join(', ') : '（なし）';
+                                                    const ms = round.morphSyncMs != null ? Math.round(round.morphSyncMs) : null;
+                                                    mel.textContent = names + (ms != null ? ' · morphΣ ' + ms + 'ms' : '');
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                            try {
+                                                const del = $('pos-sp-dispatch-list');
+                                                if (del) {
+                                                    del.textContent = disp.length ? disp.join(', ') : '（なし）';
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                            try {
+                                                const wel = $('pos-sp-comp-list');
+                                                if (wel) {
+                                                    wel.textContent = analysis.names.length ? analysis.names.join(', ') : '（なし）';
+                                                }
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+
+                                            activeRound = null;
+                                            clientMergeStack = { active: false, mergeMs: 0, names: [] };
+
+                                            queueMicrotask(function () {
+                                                try {
+                                                    paintCore();
+                                                } catch (e) {
+                                                    /* ignore */
+                                                }
+                                            });
+                                            paintCore();
+                                            scheduleMorphPaintDone(morphSlot.t0);
+                                        } catch (e) {
+                                            /* ignore */
+                                        }
+                                    });
+
+                                    if (typeof fail === 'function') {
+                                        fail(function () {
+                                            try {
+                                                endHttp();
+                                                lastMorph = null;
+                                                activeRound = null;
+                                                try {
+                                                    delete inflightByRid[rid];
+                                                } catch (e2) {
+                                                    /* ignore */
+                                                }
+                                                clientMergeStack = { active: false, mergeMs: 0, names: [] };
+                                                clearDetail();
+                                                paintCore();
+                                            } catch (e) {
+                                                /* ignore */
+                                            }
+                                        });
+                                    }
+                                } catch (e) {
+                                    /* ignore */
+                                }
+                            });
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
+
+                    if (window.Livewire && typeof window.Livewire.hook === 'function') {
+                        installPosSpeedHooks();
+                    } else {
+                        document.addEventListener('livewire:init', installPosSpeedHooks);
+                    }
+                } catch (e) {
+                    /* never break POS */
+                }
+            })();
+        </script>
+    @endpush
+@endonce
+@endif
 </file>
 
 <file path="resources/views/livewire/pos/receipt-preview.blade.php">
@@ -7445,6 +8701,192 @@ class StaffMealBar extends Component
 </div>
 </file>
 
+<file path="resources/views/livewire/pos/takeaway-bar.blade.php">
+<div
+    @class([
+        'w-full shrink-0 border-t border-yellow-200 bg-yellow-50/90 dark:border-yellow-800 dark:bg-yellow-900/30',
+    ])
+    x-data="{ peerTakeawayTid: null }"
+    x-on:pos-floor-peer-sync.window="peerTakeawayTid = ($event.detail && $event.detail.takeawayFloorTid != null) ? Number($event.detail.takeawayFloorTid) : null"
+    x-on:pos-tile-interaction-ended.window="peerTakeawayTid = null"
+    data-takeaway-bar="true"
+    role="region"
+    aria-label="{{ __('pos.takeaway_region_label') }}"
+>
+    <div class="max-w-full px-2 py-2 sm:px-6 sm:py-5">
+        <p class="mb-0.5 text-[12px] font-extrabold uppercase tracking-wider text-yellow-900 dark:text-yellow-100 sm:text-[10px]">
+            {{ __('pos.takeaway_heading') }}
+        </p>
+        @if (count($takeawayTiles) === 0)
+            <p class="text-[10px] text-yellow-950/80 dark:text-yellow-100/90">
+                {{ __('pos.takeaway_no_tables') }}
+            </p>
+        @else
+            {{-- 6 卓固定・1 行。選択: amber 反転 + scale / クリックフラッシュ: app.css --}}
+            <div class="flex w-full min-w-0 flex-nowrap gap-px overflow-visible py-px sm:gap-0.5 sm:py-0.5 md:gap-1">
+                @foreach ($takeawayTiles as $tile)
+                    @php
+                        $tid = (int) $tile['restaurantTableId'];
+                        $isFloorSel = $this->floorSelectedTakeawayTableId !== null && $this->floorSelectedTakeawayTableId === $tid;
+                        $surface = $this->tileSurfaceClasses($tile);
+                    @endphp
+                    <button
+                        type="button"
+                        wire:click="openModalForTable({{ $tid }})"
+                        wire:key="takeaway-tile-{{ $tid }}"
+                        x-data="{ flash: false, flashTimer: null }"
+                        x-on:click="
+                            flash = true;
+                            if (flashTimer) clearTimeout(flashTimer);
+                            flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);
+                        "
+                        x-bind:class="{ 'pos-tile-select-flash': flash }"
+                        data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
+                        title="{{ $this->tileLabel($tile) }}"
+                        @class([
+                            'relative z-0 inline-flex min-h-8 min-w-0 flex-1 basis-0 items-center justify-center rounded border px-1 py-1 text-[9px] font-semibold leading-none shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 sm:min-h-[3rem] sm:px-0.5 sm:py-1 sm:text-[9px] '.$surface,
+                            '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400' => $isFloorSel,
+                            'font-semibold' => ! $isFloorSel,
+                            'font-black' => $isFloorSel,
+                        ])
+                        x-bind:class="(peerTakeawayTid === {{ $tid }} && ! @js($isFloorSel)) ? '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 dark:ring-amber-400 font-black' : ''"
+                    >
+                        <span @class(['truncate', 'font-black' => $isFloorSel])>{{ $this->tileLabel($tile) }}</span>
+                    </button>
+                @endforeach
+            </div>
+        @endif
+    </div>
+
+    @if ($modalOpen && $selectedTableId !== null)
+        @teleport('body')
+            <div
+                data-pos-takeaway-guest-modal="true"
+                wire:key="takeaway-guest-modal-shell-{{ $selectedTableId }}"
+                x-data="{ optimisticClosing: false }"
+                x-show="!optimisticClosing"
+                x-init="
+                    $nextTick(() => {
+                        window.dispatchEvent(
+                            new CustomEvent('open-modal', {
+                                detail: { id: 'pos-takeaway-guest-modal' },
+                                bubbles: true,
+                            }),
+                        )
+                    })
+                "
+                x-on:close-modal.window="
+                    if ($event.detail && $event.detail.id === 'pos-takeaway-guest-modal') {
+                        $wire.closeModal()
+                    }
+                "
+            >
+                <x-filament::modal
+                    id="pos-takeaway-guest-modal"
+                    :heading="__('pos.takeaway_modal_title', ['id' => $selectedTableId])"
+                    :description="__('pos.takeaway_modal_subtitle')"
+                    width="md"
+                    display-classes="block"
+                    :close-button="true"
+                    :close-by-clicking-away="true"
+                    :close-by-escaping="true"
+                >
+                    <div class="space-y-4">
+                        <div
+                            class="fi-fo-field-wrp"
+                            data-field-wrapper
+                        >
+                            <div
+                                class="grid gap-y-2"
+                            >
+                                <label
+                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
+                                    for="takeaway-customer-name-{{ $selectedTableId }}"
+                                >
+                                    {{ __('pos.takeaway_customer_name') }}
+                                </label>
+                                <x-filament::input.wrapper
+                                    :valid="! $errors->has('customerName')"
+                                >
+                                    <x-filament::input
+                                        id="takeaway-customer-name-{{ $selectedTableId }}"
+                                        type="text"
+                                        wire:model.blur="customerName"
+                                        autocomplete="name"
+                                    />
+                                </x-filament::input.wrapper>
+                                @error('customerName')
+                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
+                                        {{ $message }}
+                                    </p>
+                                @enderror
+                            </div>
+                        </div>
+
+                        <div
+                            class="fi-fo-field-wrp"
+                            data-field-wrapper
+                        >
+                            <div
+                                class="grid gap-y-2"
+                            >
+                                <label
+                                    class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 text-sm font-medium leading-6 text-gray-950 dark:text-white"
+                                    for="takeaway-customer-phone-{{ $selectedTableId }}"
+                                >
+                                    {{ __('pos.takeaway_customer_phone') }}
+                                </label>
+                                <x-filament::input.wrapper
+                                    :valid="! $errors->has('customerPhone')"
+                                >
+                                    <x-filament::input
+                                        id="takeaway-customer-phone-{{ $selectedTableId }}"
+                                        type="tel"
+                                        wire:model.blur="customerPhone"
+                                        inputmode="tel"
+                                        autocomplete="tel"
+                                    />
+                                </x-filament::input.wrapper>
+                                @error('customerPhone')
+                                    <p class="fi-fo-field-wrp-error-message text-sm text-danger-600 dark:text-danger-400">
+                                        {{ $message }}
+                                    </p>
+                                @enderror
+                            </div>
+                        </div>
+                    </div>
+
+                    <x-slot name="footer">
+                        <div
+                            class="fi-modal-footer-actions flex flex-wrap items-center gap-3"
+                        >
+                            <x-filament::button
+                                type="button"
+                                color="gray"
+                                outlined
+                                wire:click="closeModal"
+                            >
+                                {{ __('pos.takeaway_cancel') }}
+                            </x-filament::button>
+                            <x-filament::button
+                                type="button"
+                                color="warning"
+                                wire:click="confirmTakeawayGuest"
+                                x-on:click="optimisticClosing = true"
+                                wire:loading.attr="disabled"
+                                wire:target="confirmTakeawayGuest"
+                            >
+                                {{ __('pos.takeaway_confirm') }}
+                            </x-filament::button>
+                        </div>
+                    </x-slot>
+                </x-filament::modal>
+            </div>
+        @endteleport
+    @endif
+</div>
+</file>
+
 <file path="app/Services/Kds/KdsQueryService.php">
 <?php
 
@@ -7593,6 +9035,252 @@ final class KdsQueryService
             ->get();
     }
 }
+</file>
+
+<file path="resources/views/livewire/pos/cloture-modal.blade.php">
+@php
+    $locked = $this->uiState === 'in_flight';
+    $clotureModalWindowAttrs = (new \Illuminate\View\ComponentAttributeBag)->class([
+        'max-h-[min(92dvh,720px)] max-w-full overflow-hidden',
+    ]);
+    /** 近似値ボタンは最大3個（ぴったり1 + proche 最大2） */
+    $procheMinorForButtons = array_slice($this->procheMinor, 0, 2);
+@endphp
+
+<div class="fi-no-print">
+    @if ($open)
+        @teleport('body')
+            <div
+                data-pos-cloture-modal="true"
+                wire:key="cloture-modal-{{ $this->tableSessionId }}"
+                x-data="{
+                    optimisticClosing: false,
+                    inputDt: $wire.entangle('tenderedDtInput'),
+                    finalMinor: {{ (int) $this->finalTotalMinor }},
+                    changeMinor() {
+                        const parsed = Number.parseFloat(this.inputDt || 0)
+                        const normalized = Number.isFinite(parsed) ? parsed : 0
+
+                        return Math.round(normalized * 1000) - this.finalMinor
+                    },
+                    setFromMinor(minor) {
+                        this.inputDt = (minor / 1000).toFixed(3)
+                    },
+                    formattedChange() {
+                        return (this.changeMinor() / 1000).toFixed(3) + ' DT'
+                    },
+                }"
+                x-init="
+                    $nextTick(() => {
+                        if (!inputDt) {
+                            inputDt = ''
+                        }
+
+                        window.dispatchEvent(
+                            new CustomEvent('open-modal', {
+                                detail: { id: 'pos-cloture-checkout-modal' },
+                                bubbles: true,
+                            }),
+                        )
+                    })
+                "
+                x-on:close-modal.window="
+                    if ($event.detail && $event.detail.id === 'pos-cloture-checkout-modal') {
+                        $wire.closeModal()
+                    }
+                "
+                x-show="!optimisticClosing"
+            >
+                <x-filament::modal
+                    id="pos-cloture-checkout-modal"
+                    aria-labelledby="pos-cloture-checkout-modal-title"
+                    width="sm"
+                    alignment="center"
+                    display-classes="block"
+                    :close-button="true"
+                    :close-by-clicking-away="true"
+                    :close-by-escaping="true"
+                    :sticky-footer="true"
+                    :extra-modal-window-attribute-bag="$clotureModalWindowAttrs"
+                >
+                    <div
+                        class="pos-cloture-checkout -mx-6 -mt-2 max-h-[min(58dvh,420px)] min-h-0 overflow-y-auto overscroll-contain px-4 pb-2 pt-1 text-center text-[12px] font-medium leading-snug text-slate-800 antialiased dark:text-slate-200 sm:px-5"
+                    >
+                        <h2
+                            id="pos-cloture-checkout-modal-title"
+                            class="sr-only"
+                        >
+                            {{ __('rad_table.cloture_title') }}
+                        </h2>
+
+                        <div class="space-y-2">
+                            <div
+                                class="rounded-md border border-red-600/80 bg-red-50/70 px-2 py-1.5 dark:border-red-500/80 dark:bg-red-950/40"
+                                title="{{ $this->tableLabel }}"
+                            >
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <x-filament::icon
+                                        icon="heroicon-o-table-cells"
+                                        class="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
+                                        aria-hidden="true"
+                                    />
+                                    <p
+                                        class="min-w-0 flex-1 break-words text-[12px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300"
+                                        aria-label="{{ $this->tableLabel }}"
+                                    >
+                                        {{ $this->tableLabel }}
+                                    </p>
+                                    <x-filament::icon
+                                        icon="heroicon-o-table-cells"
+                                        class="h-4 w-4 shrink-0 text-red-600 dark:text-red-400"
+                                        aria-hidden="true"
+                                    />
+                                </div>
+                            </div>
+
+                            <div
+                                class="rounded-md border border-sky-600/70 bg-sky-50/60 px-2 py-1.5 dark:border-sky-500/70 dark:bg-sky-950/30"
+                                aria-label="{{ __('rad_table.cloture_total') }}"
+                            >
+                                <p class="text-[12px] font-semibold uppercase tracking-wider text-sky-800 dark:text-sky-200">
+                                    {{ __('rad_table.cloture_total') }}
+                                </p>
+                                <p
+                                    class="mt-0.5 text-[12px] font-bold tabular-nums tracking-wide text-slate-900 underline decoration-slate-400 dark:text-white dark:decoration-slate-500"
+                                    aria-live="polite"
+                                >
+                                    {{ $this->formatMinor($this->finalTotalMinor) }}
+                                </p>
+                            </div>
+
+                            @if ($this->discountAppliedMinor > 0 || $this->roundingAdjustmentMinor > 0)
+                                <div class="space-y-1 border-y border-amber-500/80 py-1.5 dark:border-amber-400/80">
+                                    @if ($this->discountAppliedMinor > 0)
+                                        <div class="flex justify-between gap-2 text-[12px] text-slate-700 dark:text-slate-300">
+                                            <span>{{ __('rad_table.cloture_discount') }}</span>
+                                            <span class="tabular-nums">− {{ $this->formatMinor($this->discountAppliedMinor) }}</span>
+                                        </div>
+                                    @endif
+                                    @if ($this->roundingAdjustmentMinor > 0)
+                                        <div class="flex justify-between gap-2 text-[12px] text-slate-600 dark:text-slate-400">
+                                            <span>{{ __('rad_table.cloture_rounding') }}</span>
+                                            <span class="tabular-nums">− {{ $this->formatMinor($this->roundingAdjustmentMinor) }}</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
+
+                            <div class="flex w-full gap-1.5">
+                                <x-filament::button
+                                    type="button"
+                                    size="xs"
+                                    outlined
+                                    x-on:click="setFromMinor({{ (int) $this->justeMinor }})"
+                                    wire:key="cloture-sugg-juste-{{ $this->tableSessionId }}"
+                                    :disabled="$locked"
+                                    wire:loading.attr="disabled"
+                                    wire:target="confirm"
+                                    class="min-w-0 flex-1 !h-auto !px-1.5 !py-1.5 !text-[12px] !font-semibold !leading-tight"
+                                >
+                                    <span class="block text-center leading-tight">
+                                        <span class="block text-[12px] font-semibold uppercase tracking-wide">
+                                            {{ __('rad_table.cloture_juste') }}
+                                        </span>
+                                        <span class="mt-0.5 block tabular-nums">
+                                            {{ $this->formatMinor($this->justeMinor) }}
+                                        </span>
+                                    </span>
+                                </x-filament::button>
+                                @foreach ($procheMinorForButtons as $p)
+                                    <x-filament::button
+                                        type="button"
+                                        size="xs"
+                                        outlined
+                                        x-on:click="setFromMinor({{ (int) $p }})"
+                                        wire:key="cloture-sugg-{{ $this->tableSessionId }}-{{ (int) $p }}"
+                                        :disabled="$locked"
+                                        wire:loading.attr="disabled"
+                                        wire:target="confirm"
+                                        class="min-w-0 flex-1 !h-auto !px-1.5 !py-1.5 !text-[12px] !font-semibold tabular-nums !leading-tight"
+                                    >
+                                        {{ $this->formatMinor((int) $p) }}
+                                    </x-filament::button>
+                                @endforeach
+                            </div>
+
+                            <div class="border-t border-sky-500/70 pt-1.5 dark:border-sky-400/70">
+                                <x-filament::input.wrapper
+                                    :disabled="$locked"
+                                    suffix="DT"
+                                    prefix-icon="heroicon-o-banknotes"
+                                    prefix-icon-color="success"
+                                    class="!ring-1 !ring-emerald-600/80 dark:!ring-emerald-400/80"
+                                >
+                                    <x-filament::input
+                                        id="cloture-tendered-dt-{{ $this->tableSessionId }}"
+                                        type="text"
+                                        inputmode="decimal"
+                                        autocomplete="off"
+                                        x-model="inputDt"
+                                        :disabled="$locked"
+                                        wire:loading.attr="disabled"
+                                        wire:target="confirm"
+                                        aria-label="{{ __('rad_table.cloture_tendered') }}"
+                                        class="!py-2 !text-[12px] !font-semibold !leading-snug tabular-nums text-center !text-blue-950 !placeholder:text-blue-600/40 disabled:!text-blue-950/50 disabled:[-webkit-text-fill-color:theme(colors.blue.950)] dark:!text-blue-100 dark:!placeholder:text-blue-300/40 dark:disabled:!text-blue-100/50 dark:disabled:[-webkit-text-fill-color:theme(colors.blue.100)]"
+                                    />
+                                </x-filament::input.wrapper>
+                            </div>
+
+                            <div
+                                class="rounded-md border border-slate-300/90 bg-slate-50/80 px-2 py-1.5 text-center dark:border-slate-600 dark:bg-slate-900/50"
+                                aria-live="polite"
+                            >
+                                <p class="text-[12px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                                    {{ __('rad_table.cloture_change') }}
+                                </p>
+                                <p class="mt-0.5 text-[12px] font-semibold tabular-nums text-neutral-950 dark:text-neutral-100" x-text="formattedChange()">
+                                    0.000 DT
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <x-slot name="footer">
+                        <div class="fi-modal-footer-actions flex flex-wrap items-center justify-center gap-2 text-[12px]">
+                            <x-filament::button
+                                type="button"
+                                color="gray"
+                                size="sm"
+                                outlined
+                                wire:click="closeModal"
+                                :disabled="$locked"
+                                wire:loading.attr="disabled"
+                                wire:target="closeModal,confirm"
+                                class="!min-h-9 !px-4 !text-[12px] !font-semibold"
+                            >
+                                {{ __('rad_table.cloture_cancel') }}
+                            </x-filament::button>
+                            <x-filament::button
+                                type="button"
+                                color="danger"
+                                size="sm"
+                                x-on:click="optimisticClosing = true; $wire.set('tenderedDtInput', inputDt); $wire.confirm()"
+                                x-bind:disabled="@js($locked) || changeMinor() < 0"
+                                wire:loading.attr="disabled"
+                                wire:target="confirm"
+                                :loading-indicator="false"
+                                class="!min-h-9 !px-4 !text-[12px] !font-semibold"
+                            >
+                                <span wire:loading.remove wire:target="confirm">{{ __('rad_table.cloture_confirm') }}</span>
+                                <span wire:loading wire:target="confirm">{{ __('pos.ui_working') }}</span>
+                            </x-filament::button>
+                        </div>
+                    </x-slot>
+                </x-filament::modal>
+            </div>
+        @endteleport
+    @endif
+</div>
 </file>
 
 <file path="routes/web.php">
@@ -8468,6 +10156,7 @@ class TableActionHost extends Component
         if ($sid === null) {
             $this->isOrdersLoaded = true;
             $this->dispatchBrowserPeerSyncForOpenedTable($tid);
+            $this->posDraftSyncContextToBrowser();
 
             return;
         }
@@ -8477,7 +10166,49 @@ class TableActionHost extends Component
             $this->loadOrderDetails($sid);
         }
         $this->dispatchBrowserPeerSyncForOpenedTable($tid);
+        $this->posDraftSyncContextToBrowser();
         // 賄い卓: セッションは PIN 成功時（confirmStaffMealAuth）まで作らない。ここで ensure しないと Leave 後に空セッションが残りタイルが Active になる。
+    }
+
+    public function updatedActiveTableSessionId(mixed $value = null): void
+    {
+        $this->posDraftSyncContextToBrowser();
+    }
+
+    public function updatedActiveRestaurantTableId(mixed $value = null): void
+    {
+        $this->posDraftSyncContextToBrowser();
+    }
+
+    /**
+     * Keep Alpine.store('posDraft') aligned with Livewire host context (not x-init alone).
+     */
+    private function posDraftSyncContextToBrowser(): void
+    {
+        if ($this->shopId < 1) {
+            return;
+        }
+        $payload = Js::from([
+            (int) $this->shopId,
+            $this->activeTableSessionId !== null && (int) $this->activeTableSessionId > 0
+                ? (int) $this->activeTableSessionId
+                : null,
+            $this->activeRestaurantTableId !== null && (int) $this->activeRestaurantTableId > 0
+                ? (int) $this->activeRestaurantTableId
+                : null,
+        ])->toHtml();
+        $this->js(
+            'try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
+            .'if(s&&typeof s.switchContext==="function"){s.switchContext(p[0],p[1],p[2]);}}catch(e){}'
+        );
+    }
+
+    private function posDraftHostCloseJs(int $shopId, ?int $tableId, ?int $sessionId): string
+    {
+        $payload = Js::from([$shopId, $tableId, $sessionId])->toHtml();
+
+        return 'try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
+            .'if(s&&typeof s.onHostClosed==="function"){s.onHostClosed(p[0],p[1],p[2]);}}catch(e){}';
     }
 
     /**
@@ -8717,6 +10448,13 @@ class TableActionHost extends Component
 
     public function closeHost(): void
     {
+        $draftShopId = (int) $this->shopId;
+        $draftTableId = $this->activeRestaurantTableId;
+        $draftSessionId = $this->activeTableSessionId;
+        if ($draftShopId > 0 && ($draftTableId !== null || $draftSessionId !== null)) {
+            $this->js($this->posDraftHostCloseJs($draftShopId, $draftTableId, $draftSessionId));
+        }
+
         $this->memoSessionPricing = null;
         $this->memoStaffMealPreDiscountTaxSum = null;
         $this->activeRestaurantTableId = null;
@@ -9200,6 +10938,119 @@ class TableActionHost extends Component
     }
 
     /**
+     * Bulk draft submit (Alpine local cart) + Recu staff.
+     *
+     * @param  list<array<string, mixed>>  $drafts
+     */
+    public function bulkAddAndConfirm(array $drafts): void
+    {
+        if ($this->requiresStaffMealAuth) {
+            return;
+        }
+        if ($this->uiState === 'in_flight') {
+            return;
+        }
+        if ($this->activeRestaurantTableId === null || $this->activeRestaurantTableId < 1) {
+            return;
+        }
+        if ($this->activeTableSessionId === null) {
+            $this->ensureTableSession();
+        }
+        if ($this->activeTableSessionId === null || $this->session === null) {
+            Notification::make()
+                ->title(__('pos.detail_pick_table'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $anyValidDraft = false;
+        foreach ($drafts as $draft) {
+            if (! is_array($draft)) {
+                continue;
+            }
+            $mid = $draft['menu_item_id'] ?? null;
+            if (is_numeric($mid) && (int) $mid > 0) {
+                $anyValidDraft = true;
+                break;
+            }
+        }
+        if (! $anyValidDraft && ! $this->hasUnackedPlaced) {
+            return;
+        }
+
+        $this->uiState = 'in_flight';
+        try {
+            DB::transaction(function () use ($drafts): void {
+                foreach ($drafts as $draft) {
+                    if (! is_array($draft)) {
+                        continue;
+                    }
+                    $menuItemId = is_numeric($draft['menu_item_id'] ?? null) ? (int) $draft['menu_item_id'] : 0;
+                    if ($menuItemId < 1) {
+                        continue;
+                    }
+                    $qty = max(1, min(200, (int) ($draft['qty'] ?? 1)));
+                    $style = isset($draft['styleId']) && is_string($draft['styleId']) && trim($draft['styleId']) !== ''
+                        ? (string) $draft['styleId']
+                        : null;
+                    $toppings = is_array($draft['toppings'] ?? null) ? array_values($draft['toppings']) : [];
+                    $note = isset($draft['note']) ? (string) $draft['note'] : '';
+
+                    app(AddPosOrderFromStaffAction::class)->execute(
+                        $this->shopId,
+                        (int) $this->activeRestaurantTableId,
+                        $menuItemId,
+                        $qty,
+                        $style,
+                        $toppings,
+                        $note
+                    );
+                }
+
+                $sessionId = (int) $this->activeTableSessionId;
+                $revisionAfterAdds = (int) TableSession::query()
+                    ->where('shop_id', $this->shopId)
+                    ->whereKey($sessionId)
+                    ->lockForUpdate()
+                    ->value('session_revision');
+
+                app(RecuPlacedOrdersForSessionAction::class)->execute(
+                    $this->shopId,
+                    $sessionId,
+                    $revisionAfterAdds
+                );
+            });
+
+            $this->uiState = 'success';
+            $this->loadSessionData((int) $this->activeTableSessionId);
+            $this->dispatch('pos-refresh-tiles');
+            $this->refocusAjouterButtonIfTakeaway();
+        } catch (RevisionConflictException $e) {
+            $this->uiState = 'failed';
+            Notification::make()
+                ->title(__('pos.data_stale_title'))
+                ->body(__('pos.revision_conflict_reload'))
+                ->warning()
+                ->send();
+            $this->loadSessionData((int) $this->activeTableSessionId);
+            $this->dispatch('pos-refresh-tiles');
+            $this->refocusAjouterButtonIfTakeaway();
+        } catch (Throwable $e) {
+            $this->uiState = 'failed';
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        } finally {
+            $this->applyPendingEchoReloadIfAny();
+            $this->uiState = 'idle';
+        }
+    }
+
+    /**
      * Cloture entry point. Instead of running the settlement inline (the
      * pre-Phase-3 behaviour that directly called CheckoutTableSessionAction),
      * we hand off to the ClotureModal Livewire component, which owns the
@@ -9245,6 +11096,14 @@ class TableActionHost extends Component
     {
         $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
         $openPreview = $open_receipt_preview === true;
+
+        if ($sid > 0 && $this->shopId > 0) {
+            $clearPayload = Js::from([(int) $this->shopId, $sid])->toHtml();
+            $this->js(
+                'try{const p='.$clearPayload.';const s=window.Alpine?.store?.("posDraft");'
+                .'if(s&&typeof s.clearSession==="function"){s.clearSession(p[0],p[1],true);}}catch(e){}'
+            );
+        }
 
         if ($sid > 0 && $this->activeTableSessionId === $sid) {
             if ($openPreview) {
@@ -9813,6 +11672,7 @@ class TableActionHost extends Component
         isLocalSkeletonVisible: false,
         localSkeletonToken: null,
         seenUnsentLineKeys: {},
+        bulkSyncing: false,
         closeDrawer() {
             if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
                 window.Livewire.dispatch('pos-tile-interaction-ended');
@@ -9982,10 +11842,19 @@ class TableActionHost extends Component
                 </button>
                 <button
                     type="button"
-                    wire:click="confirmOrders"
+                    x-on:click="
+                        if (bulkSyncing || $wire.uiState === 'in_flight') { return; }
+                        bulkSyncing = true;
+                        const s = Alpine.store('posDraft');
+                        $wire.bulkAddAndConfirm([]).then(() => {
+                            if (s && s.shopId && s.sessionId) {
+                                s.clearSession(s.shopId, s.sessionId, true);
+                            }
+                        }).finally(() => {
+                            bulkSyncing = false;
+                        });
+                    "
                     @disabled(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
-                    wire:loading.attr="disabled"
-                    wire:target="confirmOrders"
                     class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
                 >
                     {{ __('pos.action_recu_staff') }}
@@ -10357,7 +12226,7 @@ class TableActionHost extends Component
         <div
             class="grid grid-cols-1 gap-1"
             wire:loading.class="opacity-60"
-            wire:target="printAddition,confirmOrders,checkoutSession"
+            wire:target="printAddition,confirmOrders,bulkAddAndConfirm,checkoutSession"
         >
             <button
                 type="button"
@@ -10530,7 +12399,7 @@ class TableActionHost extends Component
                                 <input
                                     type="text"
                                     class="w-full min-h-10 rounded border border-gray-300 bg-white px-2 text-sm text-gray-950 focus:ring-2 focus:ring-amber-500 dark:border-gray-500 dark:bg-gray-800 dark:text-white"
-                                    wire:model="addNote"
+                                    wire:model.debounce.500ms="addNote"
                                 />
                             </div>
                         </div>
@@ -10588,13 +12457,15 @@ class TableActionHost extends Component
                             wire:target="backToAddList"
                             class="min-h-10 flex-1 rounded-md border-2 border-slate-600 bg-white py-2 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
                         >{{ __('pos.add_back') }}</button>
-                        <button
-                            type="button"
-                            wire:click="submitAddLine"
-                            wire:loading.attr="disabled"
-                            wire:target="submitAddLine"
-                            class="min-h-10 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-2 text-sm font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600"
-                        >{{ __('pos.add_submit') }}</button>
+                        @if ($this->addItemForConfig)
+                            <button
+                                type="button"
+                                wire:click="submitAddLine"
+                                wire:loading.attr="disabled"
+                                wire:target="submitAddLine"
+                                class="min-h-10 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-2 text-sm font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600"
+                            >{{ __('pos.add_submit') }}</button>
+                        @endif
                     @endif
                 </div>
             </div>

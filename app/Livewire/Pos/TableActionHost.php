@@ -224,6 +224,7 @@ class TableActionHost extends Component
         if ($sid === null) {
             $this->isOrdersLoaded = true;
             $this->dispatchBrowserPeerSyncForOpenedTable($tid);
+            $this->posDraftSyncContextToBrowser();
 
             return;
         }
@@ -233,7 +234,49 @@ class TableActionHost extends Component
             $this->loadOrderDetails($sid);
         }
         $this->dispatchBrowserPeerSyncForOpenedTable($tid);
+        $this->posDraftSyncContextToBrowser();
         // 賄い卓: セッションは PIN 成功時（confirmStaffMealAuth）まで作らない。ここで ensure しないと Leave 後に空セッションが残りタイルが Active になる。
+    }
+
+    public function updatedActiveTableSessionId(mixed $value = null): void
+    {
+        $this->posDraftSyncContextToBrowser();
+    }
+
+    public function updatedActiveRestaurantTableId(mixed $value = null): void
+    {
+        $this->posDraftSyncContextToBrowser();
+    }
+
+    /**
+     * Keep Alpine.store('posDraft') aligned with Livewire host context (not x-init alone).
+     */
+    private function posDraftSyncContextToBrowser(): void
+    {
+        if ($this->shopId < 1) {
+            return;
+        }
+        $payload = Js::from([
+            (int) $this->shopId,
+            $this->activeTableSessionId !== null && (int) $this->activeTableSessionId > 0
+                ? (int) $this->activeTableSessionId
+                : null,
+            $this->activeRestaurantTableId !== null && (int) $this->activeRestaurantTableId > 0
+                ? (int) $this->activeRestaurantTableId
+                : null,
+        ])->toHtml();
+        $this->js(
+            'try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
+            .'if(s&&typeof s.switchContext==="function"){s.switchContext(p[0],p[1],p[2]);}}catch(e){}'
+        );
+    }
+
+    private function posDraftHostCloseJs(int $shopId, ?int $tableId, ?int $sessionId): string
+    {
+        $payload = Js::from([$shopId, $tableId, $sessionId])->toHtml();
+
+        return 'try{const p='.$payload.';const s=window.Alpine?.store?.("posDraft");'
+            .'if(s&&typeof s.onHostClosed==="function"){s.onHostClosed(p[0],p[1],p[2]);}}catch(e){}';
     }
 
     /**
@@ -473,6 +516,13 @@ class TableActionHost extends Component
 
     public function closeHost(): void
     {
+        $draftShopId = (int) $this->shopId;
+        $draftTableId = $this->activeRestaurantTableId;
+        $draftSessionId = $this->activeTableSessionId;
+        if ($draftShopId > 0 && ($draftTableId !== null || $draftSessionId !== null)) {
+            $this->js($this->posDraftHostCloseJs($draftShopId, $draftTableId, $draftSessionId));
+        }
+
         $this->memoSessionPricing = null;
         $this->memoStaffMealPreDiscountTaxSum = null;
         $this->activeRestaurantTableId = null;
@@ -662,7 +712,6 @@ class TableActionHost extends Component
         $qty = max(1, min(200, (int) $this->addQty));
         $this->addQty = $qty;
 
-        $this->uiState = 'in_flight';
         try {
             app(AddPosOrderFromStaffAction::class)->execute(
                 $this->shopId,
@@ -684,8 +733,6 @@ class TableActionHost extends Component
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
-        } finally {
-            $this->uiState = 'idle';
         }
     }
 
@@ -959,6 +1006,119 @@ class TableActionHost extends Component
     }
 
     /**
+     * Bulk draft submit (Alpine local cart) + Recu staff.
+     *
+     * @param  list<array<string, mixed>>  $drafts
+     */
+    public function bulkAddAndConfirm(array $drafts): void
+    {
+        if ($this->requiresStaffMealAuth) {
+            return;
+        }
+        if ($this->uiState === 'in_flight') {
+            return;
+        }
+        if ($this->activeRestaurantTableId === null || $this->activeRestaurantTableId < 1) {
+            return;
+        }
+        if ($this->activeTableSessionId === null) {
+            $this->ensureTableSession();
+        }
+        if ($this->activeTableSessionId === null || $this->session === null) {
+            Notification::make()
+                ->title(__('pos.detail_pick_table'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $anyValidDraft = false;
+        foreach ($drafts as $draft) {
+            if (! is_array($draft)) {
+                continue;
+            }
+            $mid = $draft['menu_item_id'] ?? null;
+            if (is_numeric($mid) && (int) $mid > 0) {
+                $anyValidDraft = true;
+                break;
+            }
+        }
+        if (! $anyValidDraft && ! $this->hasUnackedPlaced) {
+            return;
+        }
+
+        $this->uiState = 'in_flight';
+        try {
+            DB::transaction(function () use ($drafts): void {
+                foreach ($drafts as $draft) {
+                    if (! is_array($draft)) {
+                        continue;
+                    }
+                    $menuItemId = is_numeric($draft['menu_item_id'] ?? null) ? (int) $draft['menu_item_id'] : 0;
+                    if ($menuItemId < 1) {
+                        continue;
+                    }
+                    $qty = max(1, min(200, (int) ($draft['qty'] ?? 1)));
+                    $style = isset($draft['styleId']) && is_string($draft['styleId']) && trim($draft['styleId']) !== ''
+                        ? (string) $draft['styleId']
+                        : null;
+                    $toppings = is_array($draft['toppings'] ?? null) ? array_values($draft['toppings']) : [];
+                    $note = isset($draft['note']) ? (string) $draft['note'] : '';
+
+                    app(AddPosOrderFromStaffAction::class)->execute(
+                        $this->shopId,
+                        (int) $this->activeRestaurantTableId,
+                        $menuItemId,
+                        $qty,
+                        $style,
+                        $toppings,
+                        $note
+                    );
+                }
+
+                $sessionId = (int) $this->activeTableSessionId;
+                $revisionAfterAdds = (int) TableSession::query()
+                    ->where('shop_id', $this->shopId)
+                    ->whereKey($sessionId)
+                    ->lockForUpdate()
+                    ->value('session_revision');
+
+                app(RecuPlacedOrdersForSessionAction::class)->execute(
+                    $this->shopId,
+                    $sessionId,
+                    $revisionAfterAdds
+                );
+            });
+
+            $this->uiState = 'success';
+            $this->loadSessionData((int) $this->activeTableSessionId);
+            $this->dispatch('pos-refresh-tiles');
+            $this->refocusAjouterButtonIfTakeaway();
+        } catch (RevisionConflictException $e) {
+            $this->uiState = 'failed';
+            Notification::make()
+                ->title(__('pos.data_stale_title'))
+                ->body(__('pos.revision_conflict_reload'))
+                ->warning()
+                ->send();
+            $this->loadSessionData((int) $this->activeTableSessionId);
+            $this->dispatch('pos-refresh-tiles');
+            $this->refocusAjouterButtonIfTakeaway();
+        } catch (Throwable $e) {
+            $this->uiState = 'failed';
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        } finally {
+            $this->applyPendingEchoReloadIfAny();
+            $this->uiState = 'idle';
+        }
+    }
+
+    /**
      * Cloture entry point. Instead of running the settlement inline (the
      * pre-Phase-3 behaviour that directly called CheckoutTableSessionAction),
      * we hand off to the ClotureModal Livewire component, which owns the
@@ -1004,6 +1164,14 @@ class TableActionHost extends Component
     {
         $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
         $openPreview = $open_receipt_preview === true;
+
+        if ($sid > 0 && $this->shopId > 0) {
+            $clearPayload = Js::from([(int) $this->shopId, $sid])->toHtml();
+            $this->js(
+                'try{const p='.$clearPayload.';const s=window.Alpine?.store?.("posDraft");'
+                .'if(s&&typeof s.clearSession==="function"){s.clearSession(p[0],p[1],true);}}catch(e){}'
+            );
+        }
 
         if ($sid > 0 && $this->activeTableSessionId === $sid) {
             if ($openPreview) {

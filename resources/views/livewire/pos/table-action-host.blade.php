@@ -22,6 +22,7 @@
         isLocalSkeletonVisible: false,
         localSkeletonToken: null,
         seenUnsentLineKeys: {},
+        bulkSyncing: false,
         closeDrawer() {
             if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
                 window.Livewire.dispatch('pos-tile-interaction-ended');
@@ -191,10 +192,19 @@
                 </button>
                 <button
                     type="button"
-                    wire:click="confirmOrders"
+                    x-on:click="
+                        if (bulkSyncing || $wire.uiState === 'in_flight') { return; }
+                        bulkSyncing = true;
+                        const s = Alpine.store('posDraft');
+                        $wire.bulkAddAndConfirm([]).then(() => {
+                            if (s && s.shopId && s.sessionId) {
+                                s.clearSession(s.shopId, s.sessionId, true);
+                            }
+                        }).finally(() => {
+                            bulkSyncing = false;
+                        });
+                    "
                     @disabled(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
-                    wire:loading.attr="disabled"
-                    wire:target="confirmOrders"
                     class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
                 >
                     {{ __('pos.action_recu_staff') }}
@@ -223,6 +233,12 @@
                     {{ __('pos.drawer_no_orders') }}
                 </p>
             @else
+                {{--
+                  商品表示の情報源：posOrders（Livewire / DB）のみ
+                  Alpine store（posDraft）は表示に使わない。
+                  理由：submitAddLineでDB即書きするためstoreは不要。
+                  switchContextはテーブル切替の高速化のみに使用。
+                --}}
                 <div class="space-y-0.5">
                     <section>
                         @if ($this->unsentLines->isNotEmpty())
@@ -566,7 +582,7 @@
         <div
             class="grid grid-cols-1 gap-1"
             wire:loading.class="opacity-60"
-            wire:target="printAddition,confirmOrders,checkoutSession"
+            wire:target="printAddition,confirmOrders,bulkAddAndConfirm,checkoutSession"
         >
             <button
                 type="button"
@@ -600,8 +616,6 @@
             style="isolation: isolate"
             role="dialog"
             aria-modal="true"
-            x-data="{ optimisticClosing: false }"
-            x-show="!optimisticClosing"
         >
             <div
                 class="absolute inset-0 bg-slate-950/70"
@@ -799,14 +813,15 @@
                             wire:target="backToAddList"
                             class="min-h-10 flex-1 rounded-md border-2 border-slate-600 bg-white py-2 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
                         >{{ __('pos.add_back') }}</button>
-                        <button
-                            type="button"
-                            wire:click="submitAddLine"
-                            x-on:click="optimisticClosing = true"
-                            wire:loading.attr="disabled"
-                            wire:target="submitAddLine"
-                            class="min-h-10 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-2 text-sm font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600"
-                        >{{ __('pos.add_submit') }}</button>
+                        @if ($this->addItemForConfig)
+                            <button
+                                type="button"
+                                wire:click="submitAddLine"
+                                wire:loading.attr="disabled"
+                                wire:target="submitAddLine"
+                                class="min-h-10 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-2 text-sm font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600"
+                            >{{ __('pos.add_submit') }}</button>
+                        @endif
                     @endif
                 </div>
             </div>

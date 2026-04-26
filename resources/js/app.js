@@ -1,6 +1,7 @@
 import './bootstrap';
 import './echo';
 import './order-store';
+import './pos-draft-store';
 import { PosPrintController } from './pos/printer/index.js';
 
 // Install the POS print controller once Alpine/Livewire are present.
