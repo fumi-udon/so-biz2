@@ -26,3 +26,6 @@ Thumbs.db
 .cursor/
 repomix-output.xml
 repomix-kds.xml
+
+# 本番ビルドはFTPで配置するため除外
+public/build/
