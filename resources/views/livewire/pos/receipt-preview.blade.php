@@ -7,13 +7,13 @@
     x-on:pos-print-lifecycle.window="if ($event.detail && $event.detail.phase === 'start') { isPrinting = true } else if ($event.detail && $event.detail.phase === 'end') { isPrinting = false }"
 >
     <header class="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900">
-        <button
+        <!-- <button
             type="button"
             wire:click="closePreview"
             class="inline-flex min-h-9 shrink-0 items-center rounded border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
         >
             ← {{ __('pos.add_back') }}
-        </button>
+        </button> -->
 
         <div class="min-w-0 flex-1 text-center">
             <p class="truncate text-xs font-black uppercase tracking-wide text-blue-800 dark:text-blue-300">

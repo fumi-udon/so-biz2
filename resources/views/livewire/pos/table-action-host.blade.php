@@ -411,11 +411,20 @@
                 </div>
                 <template x-for="row in afterimageLines" :key="row.id">
                     <div
-                        class="rounded-md border px-2 py-1 text-[12px] shadow-sm"
+                        class="grid grid-cols-[auto_1fr] items-start gap-x-1 rounded-md border px-2 py-1 text-[12px] shadow-sm"
                         :class="row.is_unsent
                             ? 'border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/20'
                             : 'border-slate-200 bg-slate-100 opacity-90 dark:border-slate-700 dark:bg-slate-900/60'"
                     >
+                        <button
+                            type="button"
+                            x-on:click="$wire.promptRemoveLine(Number(row.id || 0))"
+                            x-bind:disabled="!row.id || @js($footerLocked)"
+                            class="row-span-1 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                            title="{{ __('pos.remove_line') }}"
+                        >
+                            ×
+                        </button>
                         <div
                             class="leading-tight"
                             :class="row.is_unsent
@@ -764,8 +773,23 @@
         <div class="grid grid-cols-2 items-center gap-1.5 sm:gap-2">
             <button
                 type="button"
-                wire:click="printAddition"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
+                x-on:click="
+                    if ($wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)) { return; }
+                    const hasItems = lineSurfaceMode === 'afterimage'
+                        ? afterimageLines.length > 0
+                        : {{ (int) $this->posOrders->count() }} > 0;
+                    if (!hasItems) {
+                        alert('商品がありません');
+                        return;
+                    }
+                    const url = new URL(@js(route('pos.receipt-preview.page')), window.location.origin);
+                    url.searchParams.set('shop_id', String({{ (int) $this->shopId }}));
+                    url.searchParams.set('table_session_id', String($wire.activeTableSessionId));
+                    url.searchParams.set('expected_revision', String($wire.expectedSessionRevision || 0));
+                    url.searchParams.set('intent', 'addition');
+                    window.open(url.toString(), '_blank', 'noopener');
+                "
+                x-bind:disabled="$wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
@@ -781,8 +805,23 @@
             </button>
             <button
                 type="button"
-                wire:click="checkoutSession"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canCloture || $footerLocked)"
+                x-on:click="
+                    if ($wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)) { return; }
+                    const hasItems = lineSurfaceMode === 'afterimage'
+                        ? afterimageLines.length > 0
+                        : {{ (int) $this->posOrders->count() }} > 0;
+                    if (!hasItems) {
+                        alert('商品がありません');
+                        return;
+                    }
+                    const url = new URL(@js(route('pos.receipt-preview.page')), window.location.origin);
+                    url.searchParams.set('shop_id', String({{ (int) $this->shopId }}));
+                    url.searchParams.set('table_session_id', String($wire.activeTableSessionId));
+                    url.searchParams.set('expected_revision', String($wire.expectedSessionRevision || 0));
+                    url.searchParams.set('intent', 'receipt');
+                    window.open(url.toString(), '_blank', 'noopener');
+                "
+                x-bind:disabled="$wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"
@@ -811,8 +850,23 @@
         >
             <button
                 type="button"
-                wire:click="printAddition"
-                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
+                x-on:click="
+                    if ($wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)) { return; }
+                    const hasItems = lineSurfaceMode === 'afterimage'
+                        ? afterimageLines.length > 0
+                        : {{ (int) $this->posOrders->count() }} > 0;
+                    if (!hasItems) {
+                        alert('商品がありません');
+                        return;
+                    }
+                    const url = new URL(@js(route('pos.receipt-preview.page')), window.location.origin);
+                    url.searchParams.set('shop_id', String({{ (int) $this->shopId }}));
+                    url.searchParams.set('table_session_id', String($wire.activeTableSessionId));
+                    url.searchParams.set('expected_revision', String($wire.expectedSessionRevision || 0));
+                    url.searchParams.set('intent', 'addition');
+                    window.open(url.toString(), '_blank', 'noopener');
+                "
+                x-bind:disabled="$wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="min-h-9 rounded-md border-2 border-sky-900 bg-sky-100 py-1 text-center text-[10px] font-extrabold uppercase tracking-wide text-sky-950 shadow-sm hover:bg-sky-200 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-[11px]"
@@ -1066,11 +1120,21 @@
                                             >
                                                 <span
                                                     @class([
-                                                        'min-w-0 flex-1 leading-snug',
+                                                        'min-w-0 flex flex-1 items-center gap-2 leading-snug',
                                                         'font-extrabold' => $tChecked,
                                                         'font-semibold' => ! $tChecked,
                                                     ])
-                                                >{{ $tChecked ? '☑' : '☐' }} {{ $t['name'] }}</span>
+                                                >
+                                                    <span
+                                                        @class([
+                                                            'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 text-[20px] font-black leading-none',
+                                                            'border-amber-700 bg-amber-300 text-amber-950 dark:border-amber-300 dark:bg-amber-200 dark:text-amber-950' => $tChecked,
+                                                            'border-slate-500 bg-white text-slate-700 dark:border-slate-400 dark:bg-slate-800 dark:text-slate-200' => ! $tChecked,
+                                                        ])
+                                                        aria-hidden="true"
+                                                    >{{ $tChecked ? '✓' : '□' }}</span>
+                                                    <span class="min-w-0 flex-1">{{ $t['name'] }}</span>
+                                                </span>
                                                 <span
                                                     class="shrink-0 text-sm font-semibold tabular-nums text-gray-800 dark:text-gray-200"
                                                 >+{{ $t['price_label'] }}</span>

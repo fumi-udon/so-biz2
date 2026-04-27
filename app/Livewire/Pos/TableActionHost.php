@@ -1564,6 +1564,24 @@ class TableActionHost extends Component
         if ($this->activeTableSessionId === null) {
             return;
         }
+        $lineExists = OrderLine::query()
+            ->whereKey($orderLineId)
+            ->whereHas('order', function ($q): void {
+                $q->where('shop_id', $this->shopId)
+                    ->where('table_session_id', (int) $this->activeTableSessionId);
+            })
+            ->exists();
+        if (! $lineExists) {
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body(__('pos.line_not_found'))
+                ->warning()
+                ->send();
+
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
+
+            return;
+        }
         $this->markAfterimageSelfActionForBrowser();
         try {
             app(DeleteOrderLineWithPolicyAction::class)->execute(

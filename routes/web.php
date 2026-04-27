@@ -21,6 +21,7 @@ use App\Support\StoreHolidaySetting;
 use App\Support\TipAttendanceScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function (Request $request) {
@@ -206,3 +207,21 @@ Route::middleware(SetGuestLocale::class)
 Route::get('/printer-test', function () {
     return view('printer-test');
 })->name('printer-test');
+
+Route::get('/pos/receipt-preview', function (Request $request) {
+    abort_unless(Auth::check(), 403);
+
+    $shopId = max(0, (int) $request->query('shop_id', 0));
+    $tableSessionId = max(0, (int) $request->query('table_session_id', 0));
+    $expectedRevision = max(0, (int) $request->query('expected_revision', 0));
+    $intent = (string) $request->query('intent', 'addition');
+
+    abort_unless($shopId > 0 && $tableSessionId > 0, 404);
+
+    return view('pos.receipt-preview-page', [
+        'shopId' => $shopId,
+        'tableSessionId' => $tableSessionId,
+        'expectedRevision' => $expectedRevision,
+        'intent' => $intent,
+    ]);
+})->name('pos.receipt-preview.page');
