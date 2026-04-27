@@ -21,16 +21,18 @@
                 'flex min-h-0 w-full max-w-full min-w-0 flex-1 flex-col overflow-x-hidden max-md:overflow-y-visible md:flex-row md:overflow-y-hidden',
             ])
         >
+            {{-- 左カラム（旧クラス）: flex min-h-0 … max-md:max-h-[45vh] max-md:flex-none max-md:overflow-y-hidden md:border-e … --}}
             <div
                 @class([
-                    'flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden border-b border-gray-200 dark:border-gray-600 max-md:max-h-[45vh] max-md:flex-none max-md:overflow-y-hidden md:border-e md:border-b-0 md:overflow-y-hidden',
+                    'flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden border-b border-gray-200 dark:border-gray-600 md:border-e md:border-b-0 md:overflow-y-hidden',
                     'w-full',
                     'max-md:min-h-0',
                     'md:h-full md:w-1/2 md:flex-none md:shrink-0' => $shopId > 0,
                 ])
             >
+                {{-- スクロールラッパ（旧）: min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5 max-md:max-h-[45vh] max-md:pt-4 sm:p-1 --}}
                 <div
-                    class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5 max-md:max-h-[45vh] max-md:pt-4 sm:p-1"
+                    class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5 sm:p-1"
                 >
                     @if ($shopId > 0)
                         <livewire:pos.table-status-grid
@@ -45,10 +47,12 @@
                 </div>
 
                 @if ($shopId > 0)
-                    <livewire:pos.takeaway-bar
-                        :shop-id="$shopId"
-                        :key="'pos-takeaway-bar-'.$shopId"
-                    />
+                    <div class="shrink-0">
+                        <livewire:pos.takeaway-bar
+                            :shop-id="$shopId"
+                            :key="'pos-takeaway-bar-'.$shopId"
+                        />
+                    </div>
                 @endif
 
                 <div
