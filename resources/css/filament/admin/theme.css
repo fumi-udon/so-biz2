@@ -6,3 +6,39 @@
 @import '../../../../vendor/filament/filament/resources/css/base.css';
 
 @config 'tailwind.config.js';
+
+/* Print Table QR Codes — body.fi-print-table-qr-page is set by App\Filament\Pages\PrintTableQrCodes */
+@media print {
+    body.fi-print-table-qr-page .fi-main-sidebar,
+    body.fi-print-table-qr-page .fi-sidebar-close-overlay,
+    body.fi-print-table-qr-page .fi-topbar {
+        display: none !important;
+    }
+
+    body.fi-print-table-qr-page .fi-layout {
+        display: block !important;
+    }
+
+    body.fi-print-table-qr-page .fi-main-ctn {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    body.fi-print-table-qr-page .fi-main {
+        max-width: 100% !important;
+        padding: 0.5rem !important;
+    }
+
+    body.fi-print-table-qr-page .fi-header {
+        display: none !important;
+    }
+
+    body.fi-print-table-qr-page {
+        background: #fff !important;
+    }
+
+    body.fi-print-table-qr-page .fi-print-table-qr-hide-on-print {
+        display: none !important;
+    }
+}
