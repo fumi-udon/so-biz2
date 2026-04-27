@@ -16,6 +16,16 @@
             'min-h-[50vh]' => $shopId <= 0,
         ])
     >
+        @if ($shopId > 0 && filled((string) $this->shopName))
+            <div
+                class="shrink-0 border-b border-gray-200 bg-gray-100 px-3 pt-5 pb-1.5 text-center text-gray-950 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 md:hidden"
+                role="status"
+            >
+                <p class="truncate text-sm font-semibold text-gray-950 dark:text-gray-100">
+                    {{ $this->shopName }}
+                </p>
+            </div>
+        @endif
         <div
             @class([
                 'flex min-h-0 w-full max-w-full min-w-0 flex-1 flex-col overflow-x-hidden max-md:overflow-y-visible md:flex-row md:overflow-y-hidden',

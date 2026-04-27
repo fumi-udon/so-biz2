@@ -325,7 +325,7 @@
         <div wire:key="pane-real-content" x-cloak class="flex min-h-0 flex-1 flex-col">
         {{-- Header: table name + primary actions（max-md は2段＋コンパクトで視認性優先） --}}
         <div
-            class="flex shrink-0 flex-col gap-1.5 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900 md:flex-row md:items-center md:justify-between md:gap-1"
+            class="flex shrink-0 flex-col gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900 max-md:gap-1 md:gap-1.5 md:flex-row md:items-center md:justify-between"
         >
             <div class="flex min-w-0 w-full items-center gap-1 md:flex-1">
                 <button
@@ -333,10 +333,10 @@
                     wire:click="closeHost"
                     wire:loading.attr="disabled"
                     wire:target="closeHost"
-                    class="me-0.5 inline-flex h-8 w-8 shrink-0 touch-manipulation items-center justify-center rounded-md border-2 border-slate-400 bg-white text-gray-950 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 md:h-9 md:w-9 md:hidden dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
+                    class="me-0.5 inline-flex h-7 w-7 shrink-0 touch-manipulation items-center justify-center rounded-md border-2 border-slate-400 bg-white text-gray-950 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 md:h-9 md:w-9 md:hidden dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
                     aria-label="{{ __('pos.detail_pick_table') }}"
                 >
-                    <svg class="h-4 w-4 shrink-0 max-md:h-4 max-md:w-4 md:h-5 md:w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <svg class="h-3.5 w-3.5 shrink-0 md:h-5 md:w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polyline points="13,4 7,10 13,16" />
                     </svg>
                 </button>
@@ -367,11 +367,11 @@
                     wire:click="manualSyncAllTables"
                     wire:loading.attr="disabled"
                     wire:target="manualSyncAllTables"
-                    class="touch-manipulation inline-flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-emerald-900 bg-emerald-500 px-1.5 py-1.5 text-[10px] font-extrabold uppercase leading-tight tracking-wide text-white shadow-md hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:px-1.5 max-md:py-1.5 md:min-h-12 md:flex-row md:gap-1 md:px-2.5 md:py-2 md:text-xs"
+                    class="touch-manipulation inline-flex min-h-9 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-emerald-900 bg-emerald-500 px-1 py-1 text-[9px] font-extrabold uppercase leading-tight tracking-wide text-white shadow-md hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-9 max-md:px-1 max-md:py-1 max-md:text-[9px] md:min-h-12 md:flex-row md:gap-1 md:px-2.5 md:py-2 md:text-xs"
                     title="Sync"
                 >
                     <svg
-                        class="h-3.5 w-3.5 shrink-0 max-md:h-3.5 max-md:w-3.5 md:h-4 md:w-4"
+                        class="h-3 w-3 shrink-0 max-md:h-3 max-md:w-3 md:h-4 md:w-4"
                         wire:loading.class="animate-spin"
                         wire:target="manualSyncAllTables"
                         viewBox="0 0 24 24"
@@ -395,7 +395,7 @@
                     x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                     wire:loading.attr="disabled"
                     wire:target="ajouter"
-                    class="touch-manipulation inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border-2 border-sky-950 bg-sky-400 px-1.5 py-1.5 text-[10px] font-extrabold uppercase leading-tight tracking-wide text-gray-950 shadow-md hover:bg-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:px-1.5 max-md:py-1.5 max-md:text-[10px] md:min-h-[52px] md:px-4 md:py-2.5 md:text-sm"
+                    class="touch-manipulation inline-flex min-h-9 shrink-0 items-center justify-center rounded-md border-2 border-sky-950 bg-sky-400 px-1 py-1 text-[9px] font-extrabold uppercase leading-tight tracking-wide text-gray-950 shadow-md hover:bg-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-9 max-md:px-1 max-md:py-1 max-md:text-[9px] md:min-h-[52px] md:px-4 md:py-2.5 md:text-sm"
                 >
                     {{ __('pos.action_ajouter') }}
                 </button>
@@ -419,7 +419,7 @@
                     "
                     wire:loading.attr="disabled"
                     wire:target="bulkAddAndConfirm"
-                    class="touch-manipulation inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1.5 text-[10px] font-extrabold uppercase leading-tight tracking-wide text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:px-1.5 max-md:py-1.5 max-md:text-[10px] md:min-h-[52px] md:px-4 md:py-2.5 md:text-sm"
+                    class="touch-manipulation inline-flex min-h-9 shrink-0 items-center justify-center rounded-md border-2 border-blue-950 bg-blue-500 px-1 py-1 text-[9px] font-extrabold uppercase leading-tight tracking-wide text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-9 max-md:px-1 max-md:py-1 max-md:text-[9px] md:min-h-[52px] md:px-4 md:py-2.5 md:text-sm"
                 >
                     <span
                         wire:loading.remove
@@ -435,7 +435,7 @@
         </div>
 
         <div
-            class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px]"
+            class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-[2px] max-md:min-h-[min(48svh,22rem)]"
         >
             <div
                 x-show="lineSurfaceMode === 'skeleton' && isLocalSkeletonVisible"
@@ -823,23 +823,23 @@
                 </span>
             </div>
         @endif
-        <div class="grid grid-cols-2 items-center gap-1.5 sm:gap-2">
+        <div class="grid grid-cols-2 items-center gap-1.5 sm:gap-2 max-md:gap-1">
             <button
                 type="button"
                 wire:click="openReceiptPreview('addition')"
                 x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="openReceiptPreview"
-                class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
+                class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 max-md:h-12 max-md:w-12 max-md:min-h-10 max-md:min-w-10 sm:h-16 sm:w-16"
                 title="{{ __('pos.action_addition_bill') }}"
             >
-                <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <svg class="h-5 w-5 text-white max-md:h-4 max-md:w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M4 7h16"></path>
                     <path d="M4 12h16"></path>
                     <path d="M4 17h16"></path>
                     <path d="M17 4v16"></path>
                 </svg>
-                <span class="mt-1 text-[9px] font-extrabold uppercase tracking-wide text-white">Addition</span>
+                <span class="mt-0.5 text-[8px] font-extrabold uppercase leading-tight tracking-wide text-white max-md:mt-0.5 max-md:text-[8px] sm:mt-1 sm:text-[9px]">Addition</span>
             </button>
             <button
                 type="button"
@@ -847,9 +847,9 @@
                 x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
-                class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"
+                class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 max-md:h-12 max-md:w-12 max-md:min-h-10 max-md:min-w-10 sm:h-16 sm:w-16"
             >
-                <svg class="h-5 w-5 text-yellow-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <svg class="h-5 w-5 text-yellow-300 max-md:h-4 max-md:w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="4" y="11" width="16" height="9" rx="1.5"></rect>
                     <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
                     <path d="M12 14.5v2"></path>
@@ -857,12 +857,12 @@
                 <span
                     wire:loading.remove
                     wire:target="checkoutSession"
-                    class="mt-1 text-[9px] font-extrabold uppercase tracking-wide text-yellow-300"
+                    class="mt-0.5 text-[8px] font-extrabold uppercase leading-tight tracking-wide text-yellow-300 sm:mt-1 sm:text-[9px]"
                 >{{ __('pos.action_cloture') }}</span>
                 <span
                     wire:loading
                     wire:target="checkoutSession"
-                    class="mt-1 text-[9px] font-extrabold uppercase tracking-wide text-yellow-300"
+                    class="mt-0.5 text-[8px] font-extrabold uppercase leading-tight tracking-wide text-yellow-300 sm:mt-1 sm:text-[9px]"
                 >...</span>
             </button>
         </div>
