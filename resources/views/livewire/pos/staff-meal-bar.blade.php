@@ -98,7 +98,7 @@
                     data-category="staff"
                     title="@if ($label !== null){{ $label }} — @endif#{{ $tid }}{{ (string)($tile['restaurantTableName'] ?? '') !== '' ? ' ' . (string) $tile['restaurantTableName'] : '' }}"
                     @class([
-                        'relative z-0 inline-flex min-h-6 max-w-full shrink-0 items-center justify-center gap-0.5 whitespace-nowrap rounded border px-1 py-0.5 text-[9px] leading-tight shadow-sm focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-300 '.$staffSurface,
+                        'relative z-0 inline-flex min-h-7 max-w-full shrink-0 items-center justify-center gap-0.5 whitespace-nowrap rounded border px-1.5 py-1 text-[10px] leading-tight shadow-sm focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 dark:focus-visible:outline-sky-300 '.$staffSurface,
                         'font-medium text-slate-800 dark:text-slate-100' => ! $isStaffSel,
                         'font-black' => $isStaffSel,
                     ])

@@ -338,7 +338,7 @@
                     @endif
                 </div>
             </div>
-            <div class="flex shrink-0 items-center gap-1">
+            <div class="flex shrink-0 items-center gap-1.5">
                 <button
                     type="button"
                     wire:click="ajouter"
@@ -346,7 +346,7 @@
                     x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                     wire:loading.attr="disabled"
                     wire:target="ajouter"
-                    class="rounded-md border-2 border-sky-950 bg-sky-400 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-gray-950 shadow-md hover:bg-sky-300 dark:text-gray-950 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
+                    class="touch-manipulation min-h-12 shrink-0 rounded-md border-2 border-sky-950 bg-sky-400 px-3 py-2.5 text-xs font-extrabold uppercase tracking-wide text-gray-950 shadow-md hover:bg-sky-300 dark:text-gray-950 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[52px] sm:px-4 sm:text-sm"
                 >
                     {{ __('pos.action_ajouter') }}
                 </button>
@@ -368,9 +368,18 @@
                         isLocalSkeletonVisible
                         || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
                     "
-                    class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
+                    wire:loading.attr="disabled"
+                    wire:target="bulkAddAndConfirm"
+                    class="touch-manipulation min-h-12 shrink-0 rounded-md border-2 border-blue-950 bg-blue-500 px-3 py-2.5 text-xs font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[52px] sm:px-4 sm:text-sm"
                 >
-                    {{ __('pos.action_recu_staff') }}
+                    <span
+                        wire:loading.remove
+                        wire:target="bulkAddAndConfirm"
+                    >{{ __('pos.action_recu_staff') }}</span>
+                    <span
+                        wire:loading
+                        wire:target="bulkAddAndConfirm"
+                    >{{ __('pos.ui_working') }}</span>
                 </button>
             </div>
         </div>
@@ -864,6 +873,7 @@
                     </button>
                 </div>
                 @if ($addModalStep === 'list')
+                    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div class="flex min-h-0 flex-1 overflow-hidden">
                         @if (count($addCatalog) > 0)
                             <aside
@@ -920,11 +930,70 @@
                             @endforeach
                         </div>
                     </div>
-                @else
+                    <div
+                        class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
+                    >
+                        <p class="text-xs leading-snug text-gray-700 dark:text-gray-200">
+                            {{ __('pos.add_modal_list_footer_hint') }}
+                        </p>
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <button
+                                type="button"
+                                wire:click="closeAddModal"
+                                wire:loading.attr="disabled"
+                                wire:target="closeAddModal"
+                                class="touch-manipulation min-h-12 shrink-0 rounded-md border-2 border-slate-600 bg-white px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 sm:w-40 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
+                            >{{ __('pos.add_modal_close') }}</button>
+                            <button
+                                type="button"
+                                x-on:click="
+                                    if (bulkSyncing || $wire.uiState === 'in_flight') { return; }
+                                    bulkSyncing = true;
+                                    const s = Alpine.store('posDraft');
+                                    $wire.bulkAddAndConfirm([]).then(() => {
+                                        if (s && s.shopId && s.sessionId) {
+                                            s.clearSession(s.shopId, s.sessionId, true);
+                                        }
+                                    }).finally(() => {
+                                        bulkSyncing = false;
+                                    });
+                                "
+                                x-bind:disabled="
+                                    bulkSyncing
+                                    || isLocalSkeletonVisible
+                                    || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
+                                "
+                                wire:loading.attr="disabled"
+                                wire:target="bulkAddAndConfirm"
+                                class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-blue-950 bg-blue-500 px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 dark:text-white"
+                            >
+                                <span
+                                    wire:loading.remove
+                                    wire:target="bulkAddAndConfirm"
+                                >{{ __('pos.action_recu_staff') }}</span>
+                                <span
+                                    wire:loading
+                                    wire:target="bulkAddAndConfirm"
+                                >{{ __('pos.ui_working') }}</span>
+                            </button>
+                        </div>
+                    </div>
+                    </div>
+                @elseif ($addModalStep === 'config')
+                    <div
+                        wire:key="pos-add-config-touch-{{ (int) ($this->addConfigMenuItemId ?? 0) }}"
+                        class="flex min-h-0 flex-1 flex-col overflow-hidden"
+                        x-data="{
+                            q: {{ max(1, min(200, (int) $this->addQty)) }},
+                            dec() { this.q = Math.max(1, this.q - 1); },
+                            inc() { this.q = Math.min(200, this.q + 1); },
+                        }"
+                        x-init="q = {{ max(1, min(200, (int) $this->addQty)) }}"
+                    >
                     <div
                         class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2"
                     >
-                        @if ($addModalStep === 'config' && $this->addItemForConfig)
+                        @if ($this->addItemForConfig)
                             @php
                                 $i = $this->addItemForConfig;
                                 $stylesL = $this->getStylesListForItem($i);
@@ -1012,89 +1081,66 @@
                                     @endforeach
                                 </ul>
                             @endif
-                            <div
-                                class="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
-                            >
-                                <div>
+                            <div class="mb-2 space-y-3">
+                                <div wire:ignore>
                                     <label
-                                        class="mb-0.5 block text-xs font-medium text-gray-800 dark:text-gray-200"
+                                        class="mb-1.5 block text-sm font-extrabold text-gray-950 dark:text-white"
                                     >{{ __('pos.add_qty') }}</label>
-                                    <input
-                                        type="number"
-                                        class="w-full min-h-10 rounded border border-gray-300 bg-white px-2 text-sm text-gray-950 focus:ring-2 focus:ring-amber-500 dark:border-gray-500 dark:bg-gray-800 dark:text-white"
-                                        min="1"
-                                        max="200"
-                                        step="1"
-                                        wire:model.blur="addQty"
-                                    />
+                                    <div
+                                        class="flex max-w-md items-stretch gap-2"
+                                        role="group"
+                                        aria-label="{{ __('pos.add_qty') }}"
+                                    >
+                                        <button
+                                            type="button"
+                                            class="touch-manipulation flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-xl border-2 border-slate-600 bg-white text-2xl font-black leading-none text-slate-900 shadow-sm hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 dark:active:bg-slate-600"
+                                            x-on:click="dec()"
+                                            aria-label="{{ __('pos.add_qty') }} −1"
+                                        >
+                                            −
+                                        </button>
+                                        <div
+                                            class="flex min-h-14 min-w-0 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-50 px-3 dark:border-amber-500 dark:bg-amber-950/40"
+                                        >
+                                            <span
+                                                class="text-3xl font-black tabular-nums text-gray-950 dark:text-white"
+                                                x-text="q"
+                                                aria-live="polite"
+                                            ></span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="touch-manipulation flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-xl border-2 border-slate-600 bg-white text-2xl font-black leading-none text-slate-900 shadow-sm hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 dark:active:bg-slate-600"
+                                            x-on:click="inc()"
+                                            aria-label="{{ __('pos.add_qty') }} +1"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
                                 </div>
                                 <div>
                                     <label
-                                        class="mb-0.5 block text-xs font-medium text-gray-800 dark:text-gray-200"
+                                        class="mb-0.5 block text-[10px] font-medium text-slate-500 dark:text-slate-400"
+                                        for="pos-add-note-field"
                                     >{{ __('pos.add_note') }}</label>
                                     <input
+                                        id="pos-add-note-field"
                                         type="text"
-                                        class="w-full min-h-10 rounded border border-gray-300 bg-white px-2 text-sm text-gray-950 focus:ring-2 focus:ring-amber-500 dark:border-gray-500 dark:bg-gray-800 dark:text-white"
+                                        class="w-full max-w-md rounded-md border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-xs text-gray-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/60 dark:border-slate-600 dark:bg-slate-800/50 dark:text-gray-200 dark:placeholder:text-slate-500"
                                         wire:model.debounce.500ms="addNote"
+                                        autocomplete="off"
                                     />
                                 </div>
                             </div>
-                        @elseif ($addModalStep === 'config' && $this->addItemForConfig === null)
+                        @else
                             <p
                                 class="text-sm text-gray-800 dark:text-gray-200"
                             >{{ __('pos.add_item_load_error') }}</p>
                         @endif
                     </div>
-                @endif
-                <div
-                    class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
-                >
-                    @if ($addModalStep === 'list')
-                        <p class="text-xs leading-snug text-gray-700 dark:text-gray-200">
-                            {{ __('pos.add_modal_list_footer_hint') }}
-                        </p>
-                        <div class="flex flex-col gap-2 sm:flex-row">
-                            <button
-                                type="button"
-                                wire:click="closeAddModal"
-                                wire:loading.attr="disabled"
-                                wire:target="closeAddModal"
-                                class="touch-manipulation min-h-12 shrink-0 rounded-md border-2 border-slate-600 bg-white px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 sm:w-40 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
-                            >{{ __('pos.add_modal_close') }}</button>
-                            <button
-                                type="button"
-                                x-on:click="
-                                    if (bulkSyncing || $wire.uiState === 'in_flight') { return; }
-                                    bulkSyncing = true;
-                                    const s = Alpine.store('posDraft');
-                                    $wire.bulkAddAndConfirm([]).then(() => {
-                                        if (s && s.shopId && s.sessionId) {
-                                            s.clearSession(s.shopId, s.sessionId, true);
-                                        }
-                                    }).finally(() => {
-                                        bulkSyncing = false;
-                                    });
-                                "
-                                x-bind:disabled="
-                                    bulkSyncing
-                                    || isLocalSkeletonVisible
-                                    || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
-                                "
-                                wire:loading.attr="disabled"
-                                wire:target="bulkAddAndConfirm"
-                                class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-blue-950 bg-blue-500 px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 dark:text-white"
-                            >
-                                <span
-                                    wire:loading.remove
-                                    wire:target="bulkAddAndConfirm"
-                                >{{ __('pos.action_recu_staff') }}</span>
-                                <span
-                                    wire:loading
-                                    wire:target="bulkAddAndConfirm"
-                                >{{ __('pos.ui_working') }}</span>
-                            </button>
-                        </div>
-                    @elseif ($addModalStep === 'config')
+                    <div
+                        class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
+                    >
                         <div class="flex gap-2">
                             <button
                                 type="button"
@@ -1106,15 +1152,17 @@
                             @if ($this->addItemForConfig)
                                 <button
                                     type="button"
-                                    wire:click="submitAddLine"
+                                    x-on:click="$wire.submitAddLine(q)"
+                                    x-bind:disabled="typeof q !== 'number' || q < 1"
                                     wire:loading.attr="disabled"
                                     wire:target="submitAddLine"
-                                    class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-2.5 text-sm font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600"
+                                    class="touch-manipulation min-h-14 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-3 text-base font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
                                 >{{ __('pos.add_submit') }}</button>
                             @endif
                         </div>
-                    @endif
-                </div>
+                    </div>
+                    </div>
+                @endif
             </div>
         </div>
     @endif

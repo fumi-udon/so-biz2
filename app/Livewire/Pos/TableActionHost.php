@@ -896,8 +896,11 @@ class TableActionHost extends Component
         }
     }
 
-    public function submitAddLine(): void
+    public function submitAddLine(?int $clientQty = null): void
     {
+        if ($clientQty !== null) {
+            $this->addQty = max(1, min(200, $clientQty));
+        }
         if ($this->uiState === 'in_flight') {
             return;
         }

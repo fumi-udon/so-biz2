@@ -4,7 +4,7 @@
 @endphp
 
 <div
-    class="w-full max-w-full min-h-0 min-w-0"
+    class="h-full w-full max-w-full min-h-0 min-w-0"
     x-data="{
         selectedTableId: null,
         optimisticTableId: null,
@@ -37,7 +37,7 @@
     x-on:pos-customer-grid-clear-selection.window="selectedTableId = null"
 >
     <div
-        class="min-w-0 overflow-hidden rounded-lg border-2 border-blue-200 bg-white/95 p-1 dark:border-blue-700 dark:bg-slate-900 sm:rounded-xl"
+        class="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border-2 border-blue-200 bg-white/95 p-1 dark:border-blue-700 dark:bg-slate-900 sm:rounded-xl"
     >
         @if (count($customerTiles) === 0)
             <p class="text-xs text-gray-700 dark:text-gray-200 sm:text-sm">
@@ -46,7 +46,7 @@
         @else
             <p class="mb-1 text-[10px] font-extrabold uppercase leading-none tracking-wider text-blue-700 dark:text-blue-300 sm:text-xs">SHOP LOG NAME</p>
             <div
-                class="grid w-full min-w-0 max-w-full grid-cols-2 content-start justify-items-stretch gap-1 overflow-visible py-0.5 sm:grid-cols-5 sm:gap-1.5"
+                class="grid h-full min-h-0 w-full min-w-0 max-w-full auto-rows-fr grid-cols-3 content-stretch items-stretch justify-items-stretch gap-[8px] overflow-visible py-0.5 sm:grid-cols-3 sm:gap-[8px]"
             >
                 @foreach ($customerTiles as $tile)
                     @php
@@ -71,7 +71,7 @@
                                 : (string) __('pos.table_name_fallback', ['id' => $tid]);
                     @endphp
                     <div
-                        class="w-full min-w-0"
+                        class="h-full w-full min-w-0"
                         wire:key="table-{{ $tid }}"
                     >
                         <button
@@ -92,14 +92,14 @@
                                 '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': optimisticTableId === {{ $tid }},
                             }"
                             @class([
-                                'relative z-0 flex w-full touch-manipulation flex-col rounded-md border-2 border-transparent p-0 py-[2px] text-left text-[10px] font-bold leading-none active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 sm:text-xs',
+                                'relative z-0 flex h-full min-h-[96px] w-full touch-manipulation flex-col rounded-md border-2 border-transparent p-0 py-[13px] text-left text-[10px] font-bold leading-none active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 sm:min-h-[104px] sm:text-xs',
                             ])
                             data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
                             data-category="{{ $tile['category'] ?? '' }}"
                         >
                             <div
                                 @class([
-                                    'box-border flex min-h-0 min-w-0 flex-col justify-center gap-0 overflow-hidden rounded-sm px-1 py-[2px] sm:px-1.5',
+                                    'box-border flex h-full min-h-0 min-w-0 flex-col justify-center gap-0 overflow-hidden rounded-sm px-1.5 py-[7px] sm:px-2',
                                     $this->tileSurfaceClasses($tile),
                                 ])
                                 :class="{
