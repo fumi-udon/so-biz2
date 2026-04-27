@@ -26,4 +26,5 @@ return [
     'order_flow_notice' => "Envoi au terminal de salle d'abord ; la cuisine seulement après confirmation du staff.",
     'undo' => 'Annuler',
     'item_removed' => 'Retiré du panier',
+    'submit_celebration_ok' => 'Compris',
 ];

@@ -335,6 +335,7 @@ class MenuPage extends Component
             'order_flow_notice',
             'undo',
             'item_removed',
+            'submit_celebration_ok',
         ];
 
         $result = [];

@@ -26,4 +26,5 @@ return [
     'order_flow_notice' => 'Goes to the hall terminal first; the kitchen only after staff confirms your order.',
     'undo' => 'Undo',
     'item_removed' => 'Removed from basket',
+    'submit_celebration_ok' => 'OK',
 ];

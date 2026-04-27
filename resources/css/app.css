@@ -123,6 +123,194 @@
     animation: go-shake 0.38s ease-in-out;
 }
 
+/* Guest order: “Commander” submit celebration (confetti + modal pop) */
+@keyframes go-celebrate-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.52) translateY(22px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.go-animate-celebrate-pop {
+    animation: go-celebrate-pop 0.62s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes go-celebrate-sparkle {
+    0%,
+    100% {
+        opacity: 0.55;
+        transform: scale(0.92) rotate(-6deg);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.12) rotate(8deg);
+    }
+}
+
+.go-animate-celebrate-sparkle {
+    animation: go-celebrate-sparkle 0.9s ease-in-out infinite;
+}
+
+@keyframes go-confetti-fly {
+    0% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate3d(var(--go-cx), var(--go-cy), 0) rotate(var(--go-cr)) scale(0.3);
+    }
+}
+
+.go-submit-confetti-bit {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    width: 8px;
+    height: 13px;
+    margin-left: -4px;
+    margin-top: -6px;
+    border-radius: 2px;
+    opacity: 0;
+    animation: go-confetti-fly 1.32s ease-out forwards;
+    transform-origin: center center;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(1) {
+    --go-cx: -10rem;
+    --go-cy: -12rem;
+    --go-cr: 540deg;
+    background: #fb7185;
+    animation-delay: 0ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(2) {
+    --go-cx: 11rem;
+    --go-cy: -11rem;
+    --go-cr: -480deg;
+    background: #fbbf24;
+    animation-delay: 25ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(3) {
+    --go-cx: -13rem;
+    --go-cy: 4rem;
+    --go-cr: 620deg;
+    background: #34d399;
+    animation-delay: 40ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(4) {
+    --go-cx: 9rem;
+    --go-cy: 10rem;
+    --go-cr: -600deg;
+    background: #60a5fa;
+    animation-delay: 15ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(5) {
+    --go-cx: -4rem;
+    --go-cy: -14rem;
+    --go-cr: 400deg;
+    background: #c084fc;
+    animation-delay: 55ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(6) {
+    --go-cx: 14rem;
+    --go-cy: 2rem;
+    --go-cr: -520deg;
+    background: #f472b6;
+    animation-delay: 30ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(7) {
+    --go-cx: -8rem;
+    --go-cy: 12rem;
+    --go-cr: 700deg;
+    background: #facc15;
+    animation-delay: 20ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(8) {
+    --go-cx: 5rem;
+    --go-cy: -13rem;
+    --go-cr: -420deg;
+    background: #2dd4bf;
+    animation-delay: 45ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(9) {
+    --go-cx: -12rem;
+    --go-cy: -5rem;
+    --go-cr: 580deg;
+    background: #fb923c;
+    animation-delay: 35ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(10) {
+    --go-cx: 7rem;
+    --go-cy: 13rem;
+    --go-cr: -640deg;
+    background: #a78bfa;
+    animation-delay: 10ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(11) {
+    --go-cx: -6rem;
+    --go-cy: 14rem;
+    --go-cr: 500deg;
+    background: #4ade80;
+    animation-delay: 50ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(12) {
+    --go-cx: 12rem;
+    --go-cy: -6rem;
+    --go-cr: -560deg;
+    background: #f87171;
+    animation-delay: 0ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(13) {
+    --go-cx: -14rem;
+    --go-cy: 8rem;
+    --go-cr: 660deg;
+    background: #38bdf8;
+    animation-delay: 28ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(14) {
+    --go-cx: 3rem;
+    --go-cy: 15rem;
+    --go-cr: -380deg;
+    background: #e879f9;
+    animation-delay: 38ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(15) {
+    --go-cx: 0;
+    --go-cy: -15rem;
+    --go-cr: 720deg;
+    background: #fcd34d;
+    animation-delay: 22ms;
+}
+
+.go-submit-confetti-burst .go-submit-confetti-bit:nth-child(16) {
+    --go-cx: -2rem;
+    --go-cy: -11rem;
+    --go-cr: -300deg;
+    background: #22d3ee;
+    animation-delay: 48ms;
+}
+
 /* POS floor tiles: one-shot click flash (TableStatusGrid / TakeawayBar / StaffMealBar) */
 @keyframes pos-tile-select-flash-kf {
     0% {

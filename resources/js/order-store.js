@@ -139,20 +139,11 @@ function registerGuestOrderLivewireListeners() {
         }
         try {
             const cart = Alpine.store('cart');
-            cart.lines = [];
-            // Must use closeCartPanel (not only cartPanelOpen=false): openCartPanel()
-            // acquires a body scroll lock; releasing it restores scrolling after success.
-            if (typeof cart.closeCartPanel === 'function') {
-                cart.closeCartPanel({ restoreScroll: true });
-            } else {
-                cart.cartPanelOpen = false;
-                cart.dismissToast();
+            cart._guestOrderSubmitSucceeded = true;
+            // Celebration stays until OK. If the modal was already dismissed, flush now.
+            if (!cart.submitCelebrationOpen && typeof cart.applyGuestOrderSubmitSuccess === 'function') {
+                cart.applyGuestOrderSubmitSuccess();
             }
-            if (typeof cart.clearSubmitIdempotencyKey === 'function') {
-                cart.clearSubmitIdempotencyKey();
-            }
-            const msg = typeof cart.t === 'function' ? cart.t('order_sent') : 'OK';
-            showGuestOrderFlash(msg, false);
         } catch {
             showGuestOrderFlash('OK', false);
         }
@@ -163,6 +154,16 @@ function registerGuestOrderLivewireListeners() {
         const raw = typeof detail === 'string'
             ? detail
             : (bag.message ?? 'Error');
+        try {
+            const Alpine = window.Alpine;
+            if (Alpine && typeof Alpine.store === 'function') {
+                const cart = Alpine.store('cart');
+                cart._guestOrderSubmitSucceeded = false;
+                cart.submitCelebrationOpen = false;
+            }
+        } catch {
+            // ignore
+        }
         showGuestOrderFlash(String(raw), true);
     });
 }
@@ -204,6 +205,10 @@ document.addEventListener('alpine:init', () => {
 
         // ─── Cart panel (Uber/Glovo-style drawer) ─────────────────────────────────
         cartPanelOpen: false,
+        /** Full-screen “order sent” fanfare; opens before HTTP returns (Ver2 UX). */
+        submitCelebrationOpen: false,
+        /** Set by `guest-order-saved`; cart/panel clear runs only when guest taps OK (see {@link closeSubmitCelebration}). */
+        _guestOrderSubmitSucceeded: false,
         _menuScrollY: 0,
         panelPulseTotal: false,
         _clearCartStep: 0,
@@ -823,10 +828,6 @@ document.addEventListener('alpine:init', () => {
             }
             draft.idempotencyKey = this._submitIdempotencyKey;
 
-            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-                navigator.vibrate(14);
-            }
-
             const component = findGuestMenuLivewireComponent();
             if (!component) {
                 showGuestOrderFlash('Service unavailable', true);
@@ -847,6 +848,52 @@ document.addEventListener('alpine:init', () => {
                 }));
                 // eslint-disable-next-line no-console
                 console.info('[guest-order] transmission draft', draft);
+            }
+        },
+
+        /** Opens celebration UI immediately, then sends draft (non-blocking). */
+        openSubmitCelebrationAndSubmit() {
+            if (!Array.isArray(this.lines) || this.lines.length === 0) {
+                return;
+            }
+            this._guestOrderSubmitSucceeded = false;
+            this.submitCelebrationOpen = true;
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate([18, 42, 22, 42, 28]);
+            }
+            void this.submitOrderDraft();
+        },
+
+        /** Clears cart, closes panel, idempotency key; resets `_guestOrderSubmitSucceeded`. */
+        applyGuestOrderSubmitSuccess() {
+            this._guestOrderSubmitSucceeded = false;
+            this.lines = [];
+            if (typeof this.closeCartPanel === 'function') {
+                this.closeCartPanel({ restoreScroll: true });
+            } else {
+                this.cartPanelOpen = false;
+                this.dismissToast();
+            }
+            if (typeof this.clearSubmitIdempotencyKey === 'function') {
+                this.clearSubmitIdempotencyKey();
+            }
+        },
+
+        /** Guest tapped OK on the celebration dialog (only action that dismisses it). */
+        closeSubmitCelebration() {
+            this.submitCelebrationOpen = false;
+            if (this._guestOrderSubmitSucceeded) {
+                this.applyGuestOrderSubmitSuccess();
+            }
+        },
+
+        /** Escape: while celebration is open, do nothing (must use OK). Otherwise close cart panel. */
+        onCartPanelEscape() {
+            if (this.submitCelebrationOpen) {
+                return;
+            }
+            if (this.cartPanelOpen) {
+                this.closeCartPanel();
             }
         },
 

@@ -459,14 +459,16 @@ class TableActionHost extends Component
             return;
         }
 
+        cache()->forget("pos:boot-snapshot:shop:{$this->shopId}");
+        // Tile grid uses TableDashboardQueryService 1s cache; clear before snapshot rebuild so tiles + payload align.
+        $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
+
         $payload = $this->getGlobalSnapshotPayload();
         $detail = Js::from($payload)->toHtml();
 
         $this->js(
             "window.dispatchEvent(new CustomEvent('pos-snapshot-full-updated', { bubbles: true, detail: {$detail} }));"
         );
-
-        $this->skipRender();
     }
 
     private function resolveAuthoritativeRestaurantTableId(): ?int
