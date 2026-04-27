@@ -86,6 +86,12 @@
                                         tableName: @js((string) ($tile['restaurantTableName'] ?? '')),
                                     });
                                 }
+                                if (window.matchMedia('(max-width: 767px)').matches) {
+                                    const pane = document.querySelector('[data-pos-order-pane]');
+                                    if (pane && typeof pane.scrollIntoView === 'function') {
+                                        pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                    }
+                                }
                             "
                             @pointerdown="clickTile({{ $tid }}, @js($previewTableName), @js($sid > 0 ? $sid : null))"
                             x-bind:class="{

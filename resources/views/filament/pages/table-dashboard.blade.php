@@ -23,9 +23,9 @@
         >
             <div
                 @class([
-                    'flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden border-b border-gray-200 dark:border-gray-600 max-md:overflow-y-visible md:border-e md:border-b-0 md:overflow-y-hidden',
+                    'flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden border-b border-gray-200 dark:border-gray-600 max-md:max-h-[50dvh] max-md:flex-none max-md:overflow-y-hidden md:border-e md:border-b-0 md:overflow-y-hidden',
                     'w-full',
-                    'max-md:min-h-0 max-md:flex-1',
+                    'max-md:min-h-0',
                     'md:h-full md:w-1/2 md:flex-none md:shrink-0' => $shopId > 0,
                 ])
             >
@@ -108,9 +108,10 @@
 
             @if ($shopId > 0)
                 <div
+                    id="pos-order-pane"
+                    data-pos-order-pane="true"
                     @class([
-                        'flex h-auto max-h-[min(52dvh,30rem)] min-h-0 w-full max-w-full flex-none flex-col overflow-x-hidden border-gray-200 bg-white text-gray-950 dark:border-gray-600 dark:bg-slate-950 dark:text-gray-100 max-md:overflow-y-visible md:h-full md:max-h-none md:overflow-y-auto',
-                        'md:w-1/2 md:shrink-0',
+                        'flex h-auto min-h-0 w-full max-w-full flex-col overflow-x-hidden border-gray-200 bg-white text-gray-950 dark:border-gray-600 dark:bg-slate-950 dark:text-gray-100 max-md:flex-1 max-md:overflow-y-auto md:h-full md:max-h-none md:w-1/2 md:shrink-0 md:overflow-y-auto',
                     ])
                 >
                     <livewire:pos.table-action-host

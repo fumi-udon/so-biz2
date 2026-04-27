@@ -18,7 +18,6 @@
     @class([
         'fi-no-print flex min-h-0 w-full min-w-0 max-w-full flex-col border-s-4 border-blue-600 bg-linear-to-b from-white via-blue-50 to-blue-100 text-gray-950 dark:border-blue-500 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:text-gray-100',
         'h-full',
-        'max-md:fixed max-md:inset-0 max-md:z-[320] max-md:h-[100dvh] max-md:max-h-[100dvh] max-md:flex-col max-md:overflow-hidden max-md:overscroll-contain max-md:bg-white max-md:shadow-[0_-8px_30px_rgba(15,23,42,0.25)] max-md:dark:bg-slate-950' => $open,
     ])
     x-data="{
         isLocalSkeletonVisible: false,
@@ -293,7 +292,6 @@
         <div
             wire:key="pane-welcome"
             x-cloak
-            x-show="!@js($open)"
             class="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center"
         >
             <p class="text-sm font-medium text-gray-800 dark:text-gray-100">
