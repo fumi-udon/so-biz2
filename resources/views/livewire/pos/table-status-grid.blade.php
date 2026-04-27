@@ -34,7 +34,6 @@
         },
     }"
     x-on:pos-tile-interaction-ended.window="optimisticTableId = null; selectedTableId = null"
-    x-on:pos-table-selection-sync.window="selectedTableId = ($event.detail && ($event.detail.tableId ?? $event.detail[0])) ?? null"
     x-on:pos-customer-grid-clear-selection.window="selectedTableId = null"
 >
     <div
@@ -77,8 +76,17 @@
                     >
                         <button
                             type="button"
-                            wire:click="openTableContext({{ $tid }}, {{ $sid }}, @js((string) ($tile['restaurantTableName'] ?? '')))"
-                            @click="selectedTableId = {{ $tid }}"
+                            @click="
+                                selectedTableId = {{ $tid }};
+                                window.dispatchEvent(new CustomEvent('pos-tile-interaction-started', { bubbles: true }));
+                                if (window.Livewire && typeof window.Livewire.dispatchTo === 'function') {
+                                    window.Livewire.dispatchTo('pos.table-action-host', 'pos-action-host-opened', {
+                                        tableId: {{ $tid }},
+                                        sessionId: {{ $sid > 0 ? $sid : 'null' }},
+                                        tableName: @js((string) ($tile['restaurantTableName'] ?? '')),
+                                    });
+                                }
+                            "
                             @pointerdown="clickTile({{ $tid }}, @js($previewTableName), @js($sid > 0 ? $sid : null))"
                             x-bind:class="{
                                 '!z-10 !scale-110 transition-none duration-0 ease-linear will-change-transform': optimisticTableId === {{ $tid }},

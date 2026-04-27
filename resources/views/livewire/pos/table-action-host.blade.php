@@ -2,6 +2,8 @@
     $open = $this->activeRestaurantTableId !== null;
     $footerLocked = $this->footerActionsLocked;
     $echoShopId = (int) $this->shopId;
+    $initialSnapshotScriptId = 'pos-initial-snapshot-'.$this->getId();
+    $initialSnapshotPayload = $this->getGlobalSnapshotPayload();
     $zOverlayBackdrop = 'z-[300]';
     $zOverlayPanel = 'z-[310]';
     $zStaffMealBackdrop = 'z-[315]';
@@ -61,6 +63,31 @@
     x-init="
         (function () {
             const shopId = {{ $echoShopId }};
+            const hydrateAfterimageFromGlobalSnapshot = function (snapshot) {
+                const s = window.Alpine?.store?.('posDraft');
+                if (!s || typeof s.writeAfterimageFromAuthoritative !== 'function') {
+                    return;
+                }
+                const rows = Array.isArray(snapshot && snapshot.tables) ? snapshot.tables : [];
+                rows.forEach(function (row) {
+                    s.writeAfterimageFromAuthoritative({
+                        shopId: snapshot && snapshot.shopId,
+                        restaurantTableId: row && row.restaurantTableId,
+                        tableSessionId: row && row.tableSessionId,
+                        lines: Array.isArray(row && row.lines) ? row.lines : [],
+                    });
+                });
+            };
+            const hydrateFromScriptTag = function () {
+                const el = document.getElementById(@js($initialSnapshotScriptId));
+                if (!el) {
+                    return;
+                }
+                try {
+                    const payload = JSON.parse(el.textContent || '{}');
+                    hydrateAfterimageFromGlobalSnapshot(payload);
+                } catch (_) {}
+            };
             const bind = function () {
                 if (! window.Echo || ! window.Livewire) {
                     return;
@@ -87,6 +114,28 @@
                 */
             };
             bind();
+            hydrateFromScriptTag();
+            window.__posSnapshotRefreshBound = window.__posSnapshotRefreshBound || {};
+            if (!window.__posSnapshotRefreshBound[shopId]) {
+                window.__posSnapshotRefreshBound[shopId] = true;
+                window.addEventListener('pos-snapshot-refreshed', function (event) {
+                    const d = event && event.detail ? event.detail : {};
+                    const t = d && typeof d === 'object' ? d.table : null;
+                    if (!t) {
+                        return;
+                    }
+                    const s = window.Alpine?.store?.('posDraft');
+                    if (!s || typeof s.writeAfterimageFromAuthoritative !== 'function') {
+                        return;
+                    }
+                    s.writeAfterimageFromAuthoritative({
+                        shopId: d.shopId,
+                        restaurantTableId: t.restaurantTableId,
+                        tableSessionId: t.tableSessionId,
+                        lines: Array.isArray(t.lines) ? t.lines : [],
+                    });
+                });
+            }
             window.addEventListener('EchoLoaded', bind);
         })();
     "
@@ -231,6 +280,9 @@
         selfActionPending = false
     "
 >
+    <script type="application/json" id="{{ $initialSnapshotScriptId }}">
+        {!! json_encode($initialSnapshotPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
+    </script>
     @if (! $open)
         <div
             wire:key="pane-welcome"

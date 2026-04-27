@@ -22,14 +22,6 @@ class TableStatusGrid extends Component
      */
     public array $tiles = [];
 
-    /** Server-only (double-tap guard); selection ring is Alpine-managed. */
-    #[Locked]
-    public bool $isPollingPaused = false;
-
-    /** Server-only (double-tap guard); selection ring is Alpine-managed. */
-    #[Locked]
-    public ?int $selectedTableId = null;
-
     public function mount(int $shopId): void
     {
         $this->shopId = $shopId;
@@ -57,73 +49,12 @@ class TableStatusGrid extends Component
         );
     }
 
-    public function openTableContext(int $tableId, mixed $sessionId = null, ?string $tableName = null): void
-    {
-        $sid = is_numeric($sessionId) ? (int) $sessionId : null;
-        if ($sid !== null && $sid < 1) {
-            $sid = null;
-        }
-
-        // Guard against rapid double taps on the same table while context is already opening.
-        // Still emit the opened event so the right pane can clear local skeleton UI.
-        if ($this->isPollingPaused && $this->selectedTableId === $tableId) {
-            $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid)
-                ->to(TableActionHost::class);
-            $this->skipRender();
-
-            return;
-        }
-
-        $this->dispatch('pos-takeaway-bar-clear-ui');
-        if (TableCategory::tryResolveFromId($tableId) !== TableCategory::Staff) {
-            $this->dispatch('pos-staff-meal-floor-reset')->to(StaffMealBar::class);
-        }
-        $this->selectedTableId = $tableId;
-        $this->isPollingPaused = true;
-        $this->dispatch('pos-tile-interaction-started');
-        $this->dispatch(
-            'pos-action-host-opened',
-            tableId: $tableId,
-            sessionId: $sid,
-            tableName: is_string($tableName) ? trim($tableName) : null,
-        )->to(TableActionHost::class);
-        $this->skipRender();
-    }
-
-    #[On('pos-tile-interaction-ended')]
-    public function onTileInteractionEnded(): void
-    {
-        $this->isPollingPaused = false;
-        $this->selectedTableId = null;
-        $this->skipRender();
-    }
-
-    /**
-     * Staff meal bar (sibling Livewire) opens a table; mirror selection ring on customer grid.
-     */
-    #[On('pos-table-selection-sync')]
-    public function onTableSelectionSync(int $tableId): void
-    {
-        $this->selectedTableId = $tableId;
-        $this->skipRender();
-    }
-
     #[On('pos-refresh-tiles')]
     public function onRefreshTiles(): void
     {
         if ($this->shopId > 0) {
             $this->loadTiles();
         }
-    }
-
-    /**
-     * Takeaway 帯で卓が選ばれたときに、通常卓グリッドの選択リングだけを外す。
-     */
-    #[On('pos-customer-grid-clear-selection')]
-    public function onCustomerGridClearSelection(): void
-    {
-        $this->selectedTableId = null;
-        $this->skipRender();
     }
 
     public function render()

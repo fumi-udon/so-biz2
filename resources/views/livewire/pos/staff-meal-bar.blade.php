@@ -69,7 +69,7 @@
                     $sid = (int) ($tile['activeTableSessionId'] ?? 0);
                     $sn = $tile['activeSessionStaffName'] ?? null;
                     $label = is_string($sn) && trim($sn) !== '' ? trim($sn) : null;
-                    $isStaffSel = $this->floorSelectedStaffTableId !== null && $this->floorSelectedStaffTableId === $tid;
+                    $isStaffSel = false;
                     $staffSurface = $this->tileSurfaceClasses($tile);
                     $previewTableName =
                         (string) ($tile['restaurantTableName'] ?? '') !== ''
@@ -78,9 +78,19 @@
                 @endphp
                 <button
                     type="button"
-                    wire:click="openTableContext({{ $tid }}, {{ $sid > 0 ? $sid : 'null' }})"
                     wire:key="staff-meal-{{ $tid }}"
                     @pointerdown="clickStaffTile({{ $tid }}, @js($previewTableName), @js($sid > 0 ? $sid : null))"
+                    @click="
+                        window.dispatchEvent(new CustomEvent('pos-customer-grid-clear-selection', { bubbles: true }));
+                        window.dispatchEvent(new CustomEvent('pos-tile-interaction-started', { bubbles: true }));
+                        if (window.Livewire && typeof window.Livewire.dispatchTo === 'function') {
+                            window.Livewire.dispatchTo('pos.table-action-host', 'pos-action-host-opened', {
+                                tableId: {{ $tid }},
+                                sessionId: {{ $sid > 0 ? $sid : 'null' }},
+                                tableName: @js((string) ($tile['restaurantTableName'] ?? '')),
+                            });
+                        }
+                    "
                     x-bind:class="{
                         '!z-10 !scale-110 ring-4 ring-inset ring-amber-600 transition-none duration-0 ease-linear will-change-transform dark:ring-amber-400': @js($isStaffSel) || optimisticStaffTableId === {{ $tid }} || peerStaffTid === {{ $tid }},
                     }"

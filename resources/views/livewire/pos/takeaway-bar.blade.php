@@ -33,11 +33,25 @@
                     @endphp
                     <button
                         type="button"
-                        wire:click="openModalForTable({{ $tid }})"
                         wire:key="takeaway-tile-{{ $tid }}"
                         @pointerdown="window.dispatchEvent(new CustomEvent('show-local-skeleton', { detail: { tid: {{ $tid }}, token: Date.now(), tableName: @js($previewTableName), sessionId: @js($sid > 0 ? $sid : null) }, bubbles: true }))"
+                        @click="
+                            if ({{ $sid > 0 ? 'true' : 'false' }}) {
+                                window.dispatchEvent(new CustomEvent('pos-customer-grid-clear-selection', { bubbles: true }));
+                                window.dispatchEvent(new CustomEvent('pos-tile-interaction-started', { bubbles: true }));
+                                if (window.Livewire && typeof window.Livewire.dispatchTo === 'function') {
+                                    window.Livewire.dispatchTo('pos.table-action-host', 'pos-action-host-opened', {
+                                        tableId: {{ $tid }},
+                                        sessionId: {{ $sid }},
+                                        tableName: @js((string) ($tile['restaurantTableName'] ?? '')),
+                                    });
+                                }
+                            } else {
+                                $wire.openModalForTable({{ $tid }});
+                            }
+                        "
                         x-data="{ flash: false, flashTimer: null }"
-                        x-on:click="
+                        x-on:click.capture="
                             flash = true;
                             if (flashTimer) clearTimeout(flashTimer);
                             flashTimer = setTimeout(() => { flash = false; flashTimer = null }, 450);

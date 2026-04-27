@@ -26,11 +26,6 @@ class StaffMealBar extends Component
      */
     public bool $inlineInFooter = false;
 
-    public bool $isPollingPaused = false;
-
-    /** 右ペインで開いている賄い卓（ビューで amber 反転 + scale に使用） */
-    public ?int $floorSelectedStaffTableId = null;
-
     /**
      * @var list<array<string, mixed>>
      */
@@ -43,23 +38,6 @@ class StaffMealBar extends Component
         if ($this->shopId > 0) {
             $this->loadStaffTiles();
         }
-    }
-
-    #[On('pos-tile-interaction-ended')]
-    public function onTileInteractionEnded(): void
-    {
-        $this->isPollingPaused = false;
-        $this->floorSelectedStaffTableId = null;
-    }
-
-    /**
-     * 通常卓グリッドから卓が開かれたとき、賄い帯のサーバ側リング状態を外す（Livewire 相乗りは TableStatusGrid のみ）。
-     */
-    #[On('pos-staff-meal-floor-reset')]
-    public function onStaffMealFloorReset(): void
-    {
-        $this->floorSelectedStaffTableId = null;
-        $this->skipRender();
     }
 
     #[On('pos-refresh-tiles')]
@@ -109,21 +87,6 @@ class StaffMealBar extends Component
         }
 
         return false;
-    }
-
-    public function openTableContext(int $tableId, mixed $sessionId = null): void
-    {
-        $sid = is_numeric($sessionId) ? (int) $sessionId : null;
-        if ($sid !== null && $sid < 1) {
-            $sid = null;
-        }
-        $this->floorSelectedStaffTableId = $tableId;
-        $this->dispatch('pos-takeaway-bar-clear-ui');
-        $this->isPollingPaused = true;
-        $this->dispatch('pos-tile-interaction-started');
-        $this->dispatch('pos-action-host-opened', tableId: $tableId, sessionId: $sid)
-            ->to(TableActionHost::class);
-        $this->dispatch('pos-table-selection-sync', tableId: $tableId);
     }
 
     /**

@@ -352,6 +352,102 @@ class TableActionHost extends Component
         return $out;
     }
 
+    /**
+     * Boot hydration payload for afterimage prefill (all active table sessions in one shot).
+     *
+     * @return array{
+     *   version:int,
+     *   shopId:int,
+     *   generatedAt:string,
+     *   tables:list<array{
+     *     restaurantTableId:int,
+     *     tableSessionId:int|null,
+     *     lines:list<array{id:int,name:string,qty:int,summary:string,is_unsent:bool}>
+     *   }>
+     * }
+     */
+    public function getGlobalSnapshotPayload(): array
+    {
+        if ($this->shopId < 1) {
+            return [
+                'version' => 1,
+                'shopId' => 0,
+                'generatedAt' => now()->toIso8601String(),
+                'tables' => [],
+            ];
+        }
+
+        return cache()->remember(
+            "pos:boot-snapshot:shop:{$this->shopId}",
+            2,
+            function (): array {
+                $tiles = app(TableDashboardQueryService::class)->getDashboardData($this->shopId)->tiles;
+                $tableSessionByTableId = [];
+                foreach ($tiles as $tile) {
+                    $tableSessionByTableId[(int) $tile->restaurantTableId] = $tile->activeTableSessionId === null
+                        ? null
+                        : (int) $tile->activeTableSessionId;
+                }
+
+                $activeSessionIds = array_values(array_filter(
+                    array_values($tableSessionByTableId),
+                    static fn (?int $sid): bool => $sid !== null && $sid > 0
+                ));
+
+                /** @var Collection<int, PosOrder> $orders */
+                $orders = $activeSessionIds === []
+                    ? collect()
+                    : PosOrder::query()
+                        ->where('shop_id', $this->shopId)
+                        ->whereIn('table_session_id', $activeSessionIds)
+                        ->where('status', '!=', OrderStatus::Voided)
+                        ->with([
+                            'lines' => static fn ($q) => $q->orderBy('id'),
+                        ])
+                        ->orderBy('id')
+                        ->get();
+
+                /** @var Collection<int, Collection<int, PosOrder>> $ordersBySession */
+                $ordersBySession = $orders->groupBy(static fn (PosOrder $o): int => (int) $o->table_session_id);
+
+                $tables = [];
+                foreach ($tableSessionByTableId as $tableId => $sessionId) {
+                    $lines = [];
+                    if ($sessionId !== null && $sessionId > 0) {
+                        /** @var Collection<int, PosOrder> $sessionOrders */
+                        $sessionOrders = $ordersBySession->get($sessionId, collect());
+                        foreach ($sessionOrders as $order) {
+                            foreach ($order->lines as $line) {
+                                if ($line->status === OrderLineStatus::Cancelled) {
+                                    continue;
+                                }
+                                $lines[] = [
+                                    'id' => (int) $line->getKey(),
+                                    'name' => trim((string) $line->snapshot_name),
+                                    'qty' => (int) $line->qty,
+                                    'summary' => $this->linePrimaryText($line),
+                                    'is_unsent' => $line->status === OrderLineStatus::Placed,
+                                ];
+                            }
+                        }
+                    }
+                    $tables[] = [
+                        'restaurantTableId' => (int) $tableId,
+                        'tableSessionId' => $sessionId,
+                        'lines' => $lines,
+                    ];
+                }
+
+                return [
+                    'version' => 1,
+                    'shopId' => (int) $this->shopId,
+                    'generatedAt' => now()->toIso8601String(),
+                    'tables' => $tables,
+                ];
+            }
+        );
+    }
+
     private function resolveAuthoritativeRestaurantTableId(): ?int
     {
         if ($this->session !== null) {
@@ -388,15 +484,26 @@ class TableActionHost extends Component
             return;
         }
         $lines = $this->buildAuthoritativeLinePayloadLines();
-        $detail = Js::from([
-            'shopId' => (int) $this->shopId,
+        $tableDetail = [
             'restaurantTableId' => $this->resolveAuthoritativeRestaurantTableId(),
             'tableSessionId' => $this->resolveAuthoritativeTableSessionId(),
             'lines' => $lines,
+        ];
+        $detail = Js::from([
+            'shopId' => (int) $this->shopId,
+            'restaurantTableId' => $tableDetail['restaurantTableId'],
+            'tableSessionId' => $tableDetail['tableSessionId'],
+            'lines' => $lines,
+        ])->toHtml();
+        $snapshotRefresh = Js::from([
+            'version' => 1,
+            'shopId' => (int) $this->shopId,
+            'table' => $tableDetail,
         ])->toHtml();
         $this->js(
             "window.dispatchEvent(new CustomEvent('pos-action-host-ui-sync', { bubbles: true }));"
             ."window.dispatchEvent(new CustomEvent('pos-action-host-authoritative', { bubbles: true, detail: {$detail} }));"
+            ."window.dispatchEvent(new CustomEvent('pos-snapshot-refreshed', { bubbles: true, detail: {$snapshotRefresh} }));"
         );
     }
 
