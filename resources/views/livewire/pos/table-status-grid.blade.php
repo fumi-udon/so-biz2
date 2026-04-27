@@ -47,7 +47,7 @@
         @else
             {{-- グリッド（旧）: grid h-full min-h-0 … auto-rows-fr grid-cols-3 content-stretch items-stretch justify-items-stretch gap-[8px] overflow-visible py-0.5 sm:grid-cols-3 sm:gap-[8px] --}}
             <div
-                class="grid w-full min-w-0 max-w-full grid-cols-3 gap-[6px] py-0.5 sm:grid-cols-3 sm:gap-[8px]"
+                class="grid w-full min-w-0 max-w-full grid-cols-3 gap-[3px] sm:grid-cols-3 sm:gap-[4px]"
             >
                 @foreach ($customerTiles as $tile)
                     @php
