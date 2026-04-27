@@ -81,6 +81,26 @@
                 <span class="min-w-0">{{ __('pos.kiosk_open_admin') }}</span>
             </a>
 
+            @if ($this->canUseDevPosReset)
+                <button
+                    type="button"
+                    role="menuitem"
+                    wire:loading.attr="disabled"
+                    wire:target="resetAllPosData"
+                    class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-amber-900 hover:border-amber-300 hover:bg-amber-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:text-amber-100 dark:hover:border-amber-700 dark:hover:bg-amber-950/30"
+                    x-on:click.prevent="
+                        if (! confirm(@js(__('pos.dev_reset_confirm')))) { return; }
+                        posUtilityMenuOpen = false;
+                        $wire.resetAllPosData();
+                    "
+                >
+                    <svg class="h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 6h18M8 6V4h8v2m-9 4v8m4-8v8m4-8v8" />
+                    </svg>
+                    <span class="min-w-0">{{ __('pos.dev_reset_label') }}</span>
+                </button>
+            @endif
+
             <form
                 x-ref="posFooterLogoutForm"
                 method="post"

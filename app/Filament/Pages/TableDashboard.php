@@ -4,9 +4,12 @@ namespace App\Filament\Pages;
 
 use App\Models\Shop;
 use App\Support\Pos\PosPrinterClientConfig;
+use Filament\Notifications\Notification;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Enums\MaxWidth;
+use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class TableDashboard extends Page
 {
@@ -91,6 +94,55 @@ class TableDashboard extends Page
     public function getHeading(): string
     {
         return '';
+    }
+
+    public function getCanUseDevPosResetProperty(): bool
+    {
+        return app()->environment('local') && (bool) config('app.debug');
+    }
+
+    public function resetAllPosData(): void
+    {
+        if (! $this->canUseDevPosReset) {
+            abort(403);
+        }
+
+        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+
+        try {
+            $tables = array_map(
+                static fn ($t): string => (string) current((array) $t),
+                DB::select('SHOW TABLES')
+            );
+
+            $targets = ['order_lines', 'orders', 'receipt_lines', 'receipts', 'table_sessions'];
+            foreach ($tables as $table) {
+                foreach ($targets as $target) {
+                    if (str_ends_with($table, $target)) {
+                        DB::statement("TRUNCATE TABLE `{$table}`");
+                        break;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            report($e);
+
+            Notification::make()
+                ->title(__('pos.dev_reset_failed'))
+                ->danger()
+                ->send();
+
+            return;
+        } finally {
+            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+        }
+
+        $this->dispatch('pos-refresh-tiles');
+
+        Notification::make()
+            ->title(__('pos.dev_reset_done'))
+            ->success()
+            ->send();
     }
 
     /**
