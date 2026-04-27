@@ -225,3 +225,9 @@ Route::get('/pos/receipt-preview', function (Request $request) {
         'intent' => $intent,
     ]);
 })->name('pos.receipt-preview.page');
+
+Route::get('/history_cloture', function () {
+    abort_unless(Auth::check(), 403);
+
+    return view('pos.history-cloture-page');
+})->name('pos.history-cloture.page');

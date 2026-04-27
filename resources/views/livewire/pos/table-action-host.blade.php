@@ -36,6 +36,7 @@
         bulkSyncing: false,
         lastSyncedAt: '--:--',
         closeDrawer() {
+            this.seenUnsentLineKeys = {};
             if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
                 window.Livewire.dispatch('pos-tile-interaction-ended');
             }
@@ -296,6 +297,7 @@
     "
     x-on:pos-afterimage-self-action.window="selfActionPending = true"
     x-on:pos-afterimage-sync-request.window="selfActionPending = true"
+    x-on:pos-draft-context-switched.window="seenUnsentLineKeys = {}"
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
         localSkeletonToken = null
@@ -450,12 +452,6 @@
                 role="status"
                 aria-live="polite"
             >
-                <div class="sticky top-0 z-10 mb-1 flex justify-center">
-                    <span class="inline-flex items-center gap-1 rounded-full border-2 border-amber-500 bg-amber-100 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-amber-950 shadow-sm dark:border-amber-400 dark:bg-amber-950/60 dark:text-amber-100">
-                        <span aria-hidden="true">🔄</span>
-                        <span>{{ __('pos.afterimage_syncing') }}</span>
-                    </span>
-                </div>
                 <template x-for="row in afterimageLines" :key="row.id">
                     <div
                         class="grid grid-cols-[auto_1fr] items-start gap-x-1 rounded-md border px-2 py-1 text-[12px] shadow-sm"
@@ -482,7 +478,7 @@
                             <span class="ms-1" x-text="row.name"></span>
                         </div>
                         <p
-                            class="mt-0.5 text-[11px] leading-snug"
+                            class="col-start-2 mt-0.5 text-[11px] leading-snug"
                             :class="row.is_unsent ? 'text-gray-700 dark:text-gray-200' : 'text-slate-600 dark:text-slate-300'"
                             x-show="row.summary"
                             x-text="row.summary"
@@ -495,6 +491,13 @@
                 >
                     {{ __('pos.drawer_no_orders') }}
                 </p>
+                <span
+                    class="pointer-events-none absolute bottom-1 right-1 z-10 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100/45 text-[10px] text-amber-800/65 dark:bg-amber-950/30 dark:text-amber-200/50"
+                    aria-hidden="true"
+                    title="{{ __('pos.afterimage_syncing') }}"
+                >
+                    🔄
+                </span>
             </div>
             <div x-show="lineSurfaceMode === 'live'" class="min-h-0">
             @if (! $this->isOrdersLoaded)
@@ -888,44 +891,6 @@
                     wire:target="checkoutSession"
                     class="mt-1 text-[9px] font-extrabold uppercase tracking-wide text-yellow-300"
                 >...</span>
-            </button>
-        </div>
-        <div
-            class="grid grid-cols-1 gap-1"
-            wire:loading.class="opacity-60"
-            wire:target="printAddition,confirmOrders,bulkAddAndConfirm,checkoutSession"
-        >
-            <button
-                type="button"
-                x-on:click="
-                    if ($wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)) { return; }
-                    const hasItems = lineSurfaceMode === 'afterimage'
-                        ? afterimageLines.length > 0
-                        : {{ (int) $this->posOrders->count() }} > 0;
-                    if (!hasItems) {
-                        alert('商品がありません');
-                        return;
-                    }
-                    const url = new URL(@js(route('pos.receipt-preview.page')), window.location.origin);
-                    url.searchParams.set('shop_id', String({{ (int) $this->shopId }}));
-                    url.searchParams.set('table_session_id', String($wire.activeTableSessionId));
-                    url.searchParams.set('expected_revision', String($wire.expectedSessionRevision || 0));
-                    url.searchParams.set('intent', 'addition');
-                    window.open(url.toString(), '_blank', 'noopener');
-                "
-                x-bind:disabled="$wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)"
-                wire:loading.attr="disabled"
-                wire:target="printAddition"
-                class="min-h-9 rounded-md border-2 border-sky-900 bg-sky-100 py-1 text-center text-[10px] font-extrabold uppercase tracking-wide text-sky-950 shadow-sm hover:bg-sky-200 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-[11px]"
-            >
-                <span
-                    wire:loading.remove
-                    wire:target="printAddition"
-                >{{ __('pos.action_addition_bill') }}</span>
-                <span
-                    wire:loading
-                    wire:target="printAddition"
-                >{{ __('pos.ui_working') }}</span>
             </button>
         </div>
         @if ($this->isBilledState)

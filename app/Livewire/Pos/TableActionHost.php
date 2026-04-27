@@ -341,9 +341,11 @@ class TableActionHost extends Component
                 }
                 $out[] = [
                     'id' => (int) $line->getKey(),
-                    'name' => trim((string) $line->snapshot_name),
+                    'name' => $this->linePrimaryText($line),
                     'qty' => (int) $line->qty,
-                    'summary' => $this->linePrimaryText($line),
+                    'summary' => $this->lineExtraLineForTable(
+                        is_array($line->snapshot_options_payload) ? $line->snapshot_options_payload : null
+                    ),
                     'is_unsent' => $line->status === OrderLineStatus::Placed,
                 ];
             }
@@ -423,9 +425,11 @@ class TableActionHost extends Component
                                 }
                                 $lines[] = [
                                     'id' => (int) $line->getKey(),
-                                    'name' => trim((string) $line->snapshot_name),
+                                    'name' => $this->linePrimaryText($line),
                                     'qty' => (int) $line->qty,
-                                    'summary' => $this->linePrimaryText($line),
+                                    'summary' => $this->lineExtraLineForTable(
+                                        is_array($line->snapshot_options_payload) ? $line->snapshot_options_payload : null
+                                    ),
                                     'is_unsent' => $line->status === OrderLineStatus::Placed,
                                 ];
                             }

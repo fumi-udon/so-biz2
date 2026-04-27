@@ -64,6 +64,21 @@
                 <span class="min-w-0">{{ __('pos.action_changer_table') }}</span>
             </button>
 
+            <button
+                type="button"
+                role="menuitem"
+                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                x-on:click="
+                    posUtilityMenuOpen = false;
+                    window.open(@js(route('pos.history-cloture.page')), '_blank', 'noopener');
+                "
+            >
+                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
+                </svg>
+                <span class="min-w-0">History</span>
+            </button>
+
             <a
                 href="{{ url('/admin') }}"
                 role="menuitem"

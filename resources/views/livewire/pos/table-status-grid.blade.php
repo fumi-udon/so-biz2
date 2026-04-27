@@ -44,8 +44,7 @@
                 {{ __('pos.table_status_no_tiles') }}
             </p>
         @else
-            <p class="mb-1 text-[10px] font-extrabold uppercase leading-none tracking-wider text-blue-700 dark:text-blue-300 sm:text-xs">SHOP LOG NAME</p>
-            <div
+<div
                 class="grid h-full min-h-0 w-full min-w-0 max-w-full auto-rows-fr grid-cols-3 content-stretch items-stretch justify-items-stretch gap-[8px] overflow-visible py-0.5 sm:grid-cols-3 sm:gap-[8px]"
             >
                 @foreach ($customerTiles as $tile)

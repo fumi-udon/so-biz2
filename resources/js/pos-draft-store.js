@@ -275,6 +275,7 @@ document.addEventListener('alpine:init', () => {
                 sessionId != null && sessionId !== '' && Number(sessionId) > 0 ? Number(sessionId) : null;
             const nextTable =
                 tableId != null && tableId !== '' && Number(tableId) > 0 ? Number(tableId) : null;
+            const changed = this.shopId !== nextShop || this.sessionId !== nextSession || this.tableId !== nextTable;
 
             const prevSession = this.sessionId;
             const hadSession = prevSession != null && Number(prevSession) > 0;
@@ -295,6 +296,9 @@ document.addEventListener('alpine:init', () => {
             this.shopId = nextShop;
             this.sessionId = nextSession;
             this.tableId = nextTable;
+            if (changed) {
+                window.dispatchEvent(new CustomEvent('pos-draft-context-switched'));
+            }
         },
 
         /**
