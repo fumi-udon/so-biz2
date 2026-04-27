@@ -323,53 +323,55 @@
         </div>
     @else
         <div wire:key="pane-real-content" x-cloak class="flex min-h-0 flex-1 flex-col">
-        {{-- Header: table name + primary actions --}}
+        {{-- Header: table name + primary actions（max-md は2段＋コンパクトで視認性優先） --}}
         <div
-            class="flex shrink-0 items-center justify-between gap-1 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900"
+            class="flex shrink-0 flex-col gap-1.5 border-b-4 border-blue-600 bg-white px-1.5 py-1 dark:border-blue-500 dark:bg-slate-900 md:flex-row md:items-center md:justify-between md:gap-1"
         >
-            <button
-                type="button"
-                wire:click="closeHost"
-                wire:loading.attr="disabled"
-                wire:target="closeHost"
-                class="me-0.5 inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-md border-2 border-slate-400 bg-white text-gray-950 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 md:hidden dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
-                aria-label="{{ __('pos.detail_pick_table') }}"
-            >
-                <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <polyline points="13,4 7,10 13,16" />
-                </svg>
-            </button>
-            <div class="min-w-0 flex-1">
-                <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
-                    <span class="inline-flex min-w-0 max-w-full rounded-full border-2 border-amber-400 bg-amber-100 px-4 py-1 text-[14px] font-extrabold uppercase tracking-wider text-blue-900 dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-100">
-                        <span
-                            class="min-w-0 max-w-full truncate text-blue-900 dark:text-blue-100"
-                            x-show="previewTableName"
-                            x-text="previewTableName"
-                        ></span>
-                        <span
-                            class="min-w-0 max-w-full truncate text-blue-900 dark:text-blue-100"
-                            x-show="!previewTableName"
-                        >{{ $this->activeSessionLabel }}</span>
-                    </span>
-                    @if ($this->isBilledState)
-                        <span class="rounded-full border-2 border-amber-500 bg-amber-200 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-900 dark:border-amber-400 dark:bg-amber-900/50 dark:text-amber-100">
-                            {{ __('rad_table.badge_printed') }}
+            <div class="flex min-w-0 w-full items-center gap-1 md:flex-1">
+                <button
+                    type="button"
+                    wire:click="closeHost"
+                    wire:loading.attr="disabled"
+                    wire:target="closeHost"
+                    class="me-0.5 inline-flex h-8 w-8 shrink-0 touch-manipulation items-center justify-center rounded-md border-2 border-slate-400 bg-white text-gray-950 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 md:h-9 md:w-9 md:hidden dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
+                    aria-label="{{ __('pos.detail_pick_table') }}"
+                >
+                    <svg class="h-4 w-4 shrink-0 max-md:h-4 max-md:w-4 md:h-5 md:w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="13,4 7,10 13,16" />
+                    </svg>
+                </button>
+                <div class="min-w-0 flex-1">
+                    <div class="mt-0.5 flex min-w-0 items-center gap-1 max-md:gap-1 md:gap-1.5">
+                        <span class="inline-flex min-w-0 max-w-full rounded-full border-2 border-amber-400 bg-amber-100 px-3 py-1 text-[13px] font-extrabold uppercase tracking-wide text-blue-900 max-md:px-3 max-md:py-1 max-md:text-[13px] md:px-4 md:text-[14px] md:tracking-wider dark:border-blue-500 dark:bg-blue-950/50 dark:text-blue-100">
+                            <span
+                                class="min-w-0 max-w-full truncate text-blue-900 dark:text-blue-100"
+                                x-show="previewTableName"
+                                x-text="previewTableName"
+                            ></span>
+                            <span
+                                class="min-w-0 max-w-full truncate text-blue-900 dark:text-blue-100"
+                                x-show="!previewTableName"
+                            >{{ $this->activeSessionLabel }}</span>
                         </span>
-                    @endif
+                        @if ($this->isBilledState)
+                            <span class="shrink-0 rounded-full border-2 border-amber-500 bg-amber-200 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-amber-900 max-md:px-1.5 max-md:text-[9px] md:px-2 md:text-[10px] dark:border-amber-400 dark:bg-amber-900/50 dark:text-amber-100">
+                                {{ __('rad_table.badge_printed') }}
+                            </span>
+                        @endif
+                    </div>
                 </div>
             </div>
-            <div class="flex shrink-0 items-center gap-1.5">
+            <div class="grid w-full shrink-0 grid-cols-3 gap-1 max-md:gap-1 md:flex md:w-auto md:items-center md:gap-1.5">
                 <button
                     type="button"
                     wire:click="manualSyncAllTables"
                     wire:loading.attr="disabled"
                     wire:target="manualSyncAllTables"
-                    class="touch-manipulation inline-flex min-h-12 items-center gap-1 rounded-md border-2 border-emerald-900 bg-emerald-500 px-2.5 py-2 text-xs font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    class="touch-manipulation inline-flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-emerald-900 bg-emerald-500 px-1.5 py-1.5 text-[10px] font-extrabold uppercase leading-tight tracking-wide text-white shadow-md hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:px-1.5 max-md:py-1.5 md:min-h-12 md:flex-row md:gap-1 md:px-2.5 md:py-2 md:text-xs"
                     title="Sync"
                 >
                     <svg
-                        class="h-4 w-4 shrink-0"
+                        class="h-3.5 w-3.5 shrink-0 max-md:h-3.5 max-md:w-3.5 md:h-4 md:w-4"
                         wire:loading.class="animate-spin"
                         wire:target="manualSyncAllTables"
                         viewBox="0 0 24 24"
@@ -383,8 +385,8 @@
                         <path d="M21 12a9 9 0 1 1-2.64-6.36" />
                         <polyline points="21 3 21 9 15 9" />
                     </svg>
-                    <span>Sync</span>
-                    <span class="text-[10px] font-bold normal-case opacity-90" x-text="lastSyncedAt"></span>
+                    <span class="leading-none max-md:text-[9px] md:inline md:text-xs">Sync</span>
+                    <span class="max-w-full truncate text-[9px] font-bold normal-case opacity-90 max-md:text-center md:text-[10px]" x-text="lastSyncedAt"></span>
                 </button>
                 <button
                     type="button"
@@ -393,7 +395,7 @@
                     x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                     wire:loading.attr="disabled"
                     wire:target="ajouter"
-                    class="touch-manipulation min-h-12 shrink-0 rounded-md border-2 border-sky-950 bg-sky-400 px-3 py-2.5 text-xs font-extrabold uppercase tracking-wide text-gray-950 shadow-md hover:bg-sky-300 dark:text-gray-950 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[52px] sm:px-4 sm:text-sm"
+                    class="touch-manipulation inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border-2 border-sky-950 bg-sky-400 px-1.5 py-1.5 text-[10px] font-extrabold uppercase leading-tight tracking-wide text-gray-950 shadow-md hover:bg-sky-300 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:px-1.5 max-md:py-1.5 max-md:text-[10px] md:min-h-[52px] md:px-4 md:py-2.5 md:text-sm"
                 >
                     {{ __('pos.action_ajouter') }}
                 </button>
@@ -417,11 +419,12 @@
                     "
                     wire:loading.attr="disabled"
                     wire:target="bulkAddAndConfirm"
-                    class="touch-manipulation min-h-12 shrink-0 rounded-md border-2 border-blue-950 bg-blue-500 px-3 py-2.5 text-xs font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[52px] sm:px-4 sm:text-sm"
+                    class="touch-manipulation inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1.5 text-[10px] font-extrabold uppercase leading-tight tracking-wide text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:px-1.5 max-md:py-1.5 max-md:text-[10px] md:min-h-[52px] md:px-4 md:py-2.5 md:text-sm"
                 >
                     <span
                         wire:loading.remove
                         wire:target="bulkAddAndConfirm"
+                        class="max-md:line-clamp-2 max-md:text-center max-md:leading-tight"
                     >{{ __('pos.action_recu_staff') }}</span>
                     <span
                         wire:loading

@@ -11,7 +11,7 @@
     <div
         @class([
             'fi-pos-viewport',
-            'flex w-full max-w-full min-h-0 flex-1 flex-col overflow-x-hidden overscroll-none bg-gray-100 text-gray-950 dark:bg-gray-950 dark:text-gray-100 max-md:h-svh max-md:max-h-svh max-md:overflow-y-hidden md:overflow-y-hidden',
+            'flex w-full max-w-full min-h-0 flex-1 flex-col overflow-x-hidden overscroll-none bg-gray-100 text-gray-950 dark:bg-gray-950 dark:text-gray-100 max-md:h-[100svh] max-md:max-h-[100svh] max-md:overflow-y-hidden max-md:pt-[env(safe-area-inset-top,0px)] md:overflow-y-hidden',
             'h-[100dvh] max-h-[100dvh]' => $shopId > 0,
             'min-h-[50vh]' => $shopId <= 0,
         ])
