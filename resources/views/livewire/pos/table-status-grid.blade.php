@@ -4,7 +4,7 @@
 @endphp
 
 <div
-    class="h-full w-full max-w-full min-h-0 min-w-0"
+    class="h-full w-full max-w-full min-h-0 min-w-0 max-md:max-h-[45vh] max-md:overflow-y-auto max-md:pt-4"
     x-data="{
         selectedTableId: null,
         optimisticTableId: null,

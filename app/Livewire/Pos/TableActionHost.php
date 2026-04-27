@@ -448,6 +448,22 @@ class TableActionHost extends Component
         );
     }
 
+    public function manualSyncAllTables(): void
+    {
+        if ($this->shopId < 1 || $this->uiState === 'in_flight') {
+            return;
+        }
+
+        $payload = $this->getGlobalSnapshotPayload();
+        $detail = Js::from($payload)->toHtml();
+
+        $this->js(
+            "window.dispatchEvent(new CustomEvent('pos-snapshot-full-updated', { bubbles: true, detail: {$detail} }));"
+        );
+
+        $this->skipRender();
+    }
+
     private function resolveAuthoritativeRestaurantTableId(): ?int
     {
         if ($this->session !== null) {

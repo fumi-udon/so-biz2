@@ -34,6 +34,7 @@
         selfActionPending: false,
         seenUnsentLineKeys: {},
         bulkSyncing: false,
+        lastSyncedAt: '--:--',
         closeDrawer() {
             if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
                 window.Livewire.dispatch('pos-tile-interaction-ended');
@@ -139,6 +140,26 @@
                         tableSessionId: t.tableSessionId,
                         lines: Array.isArray(t.lines) ? t.lines : [],
                     });
+                });
+                window.addEventListener('pos-snapshot-full-updated', function (event) {
+                    const d = event && event.detail ? event.detail : {};
+                    const s = window.Alpine?.store?.('posDraft');
+                    if (!s || typeof s.writeAfterimageFromAuthoritative !== 'function') {
+                        return;
+                    }
+                    const rows = Array.isArray(d && d.tables) ? d.tables : [];
+                    rows.forEach(function (row) {
+                        s.writeAfterimageFromAuthoritative({
+                            shopId: d.shopId,
+                            restaurantTableId: row && row.restaurantTableId,
+                            tableSessionId: row && row.tableSessionId,
+                            lines: Array.isArray(row && row.lines) ? row.lines : [],
+                        });
+                    });
+                    const generatedAt = d && typeof d.generatedAt === 'string' ? d.generatedAt : '';
+                    const parsed = generatedAt ? new Date(generatedAt) : null;
+                    const now = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date();
+                    lastSyncedAt = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 });
             }
             window.addEventListener('EchoLoaded', bind);
@@ -337,6 +358,32 @@
                 </div>
             </div>
             <div class="flex shrink-0 items-center gap-1.5">
+                <button
+                    type="button"
+                    wire:click="manualSyncAllTables"
+                    wire:loading.attr="disabled"
+                    wire:target="manualSyncAllTables"
+                    class="touch-manipulation inline-flex min-h-12 items-center gap-1 rounded-md border-2 border-emerald-900 bg-emerald-500 px-2.5 py-2 text-xs font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Sync"
+                >
+                    <svg
+                        class="h-4 w-4 shrink-0"
+                        wire:loading.class="animate-spin"
+                        wire:target="manualSyncAllTables"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                        <polyline points="21 3 21 9 15 9" />
+                    </svg>
+                    <span>Sync</span>
+                    <span class="text-[10px] font-bold normal-case opacity-90" x-text="lastSyncedAt"></span>
+                </button>
                 <button
                     type="button"
                     wire:click="ajouter"

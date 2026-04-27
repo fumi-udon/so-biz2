@@ -11,7 +11,7 @@
     <div
         @class([
             'fi-pos-viewport',
-            'flex w-full max-w-full min-h-0 flex-1 flex-col overflow-x-hidden overscroll-none bg-gray-100 text-gray-950 dark:bg-gray-950 dark:text-gray-100 max-md:overflow-y-visible md:overflow-y-hidden',
+            'flex w-full max-w-full min-h-0 flex-1 flex-col overflow-x-hidden overscroll-none bg-gray-100 text-gray-950 dark:bg-gray-950 dark:text-gray-100 max-md:h-svh max-md:max-h-svh max-md:overflow-y-hidden md:overflow-y-hidden',
             'h-[100dvh] max-h-[100dvh]' => $shopId > 0,
             'min-h-[50vh]' => $shopId <= 0,
         ])
@@ -23,14 +23,14 @@
         >
             <div
                 @class([
-                    'flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden border-b border-gray-200 dark:border-gray-600 max-md:max-h-[50dvh] max-md:flex-none max-md:overflow-y-hidden md:border-e md:border-b-0 md:overflow-y-hidden',
+                    'flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden border-b border-gray-200 dark:border-gray-600 max-md:max-h-[45vh] max-md:flex-none max-md:overflow-y-hidden md:border-e md:border-b-0 md:overflow-y-hidden',
                     'w-full',
                     'max-md:min-h-0',
                     'md:h-full md:w-1/2 md:flex-none md:shrink-0' => $shopId > 0,
                 ])
             >
                 <div
-                    class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5 sm:p-1"
+                    class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5 max-md:max-h-[45vh] max-md:pt-4 sm:p-1"
                 >
                     @if ($shopId > 0)
                         <livewire:pos.table-status-grid
