@@ -159,8 +159,20 @@ class ClotureModal extends Component
             $this->uiState = 'failed';
             Notification::make()->title(__('rad_table.cannot_close_with_unacked'))->danger()->send();
         } catch (SessionAlreadySettledException $e) {
-            $this->uiState = 'failed';
             Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
+            // Idempotent completion path:
+            // another in-flight confirm may have already settled this session.
+            // Continue with the same post-settlement flow so cashier always reaches preview.
+            $this->dispatch(
+                'pos-settlement-completed',
+                table_session_id: (int) $this->tableSessionId,
+                open_receipt_preview: true,
+            );
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
+            $this->dispatch('pos-refresh-tiles');
+            $this->uiState = 'success';
             $this->closeModal();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
@@ -169,7 +181,7 @@ class ClotureModal extends Component
                 app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
             }
             $this->dispatch('pos-refresh-tiles');
-            $this->closeModal();
+            $this->loadPricing();
         } catch (Throwable $e) {
             $this->uiState = 'failed';
             Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();

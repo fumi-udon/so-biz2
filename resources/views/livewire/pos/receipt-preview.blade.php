@@ -6,14 +6,17 @@
     x-data="{ isPrinting: false }"
     x-on:pos-print-lifecycle.window="if ($event.detail && $event.detail.phase === 'start') { isPrinting = true } else if ($event.detail && $event.detail.phase === 'end') { isPrinting = false }"
 >
-    <header class="flex shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900">
-        <!-- <button
+    <header class="flex shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900">
+        <button
             type="button"
             wire:click="closePreview"
-            class="inline-flex min-h-9 shrink-0 items-center rounded border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            wire:loading.attr="disabled"
+            wire:target="closePreview"
+            class="touch-manipulation inline-flex min-h-12 shrink-0 items-center justify-center rounded-lg border-2 border-slate-600 bg-white px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-gray-950 shadow-sm hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 dark:focus-visible:ring-slate-500"
         >
-            ← {{ __('pos.add_back') }}
-        </button> -->
+            <span wire:loading.remove wire:target="closePreview" class="max-w-[9rem] truncate sm:max-w-[11rem]">← {{ __('pos.receipt_preview_back_to_pos') }}</span>
+            <span wire:loading wire:target="closePreview" class="text-xs">{{ __('pos.ui_working') }}</span>
+        </button>
 
         <div class="min-w-0 flex-1 text-center">
             <p class="truncate text-xs font-black uppercase tracking-wide text-blue-800 dark:text-blue-300">
@@ -28,9 +31,9 @@
             wire:click="printFromPreview"
             wire:loading.attr="disabled"
             wire:target="printFromPreview"
-            class="inline-flex min-h-9 shrink-0 items-center rounded border border-emerald-700 bg-emerald-600 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            class="touch-manipulation inline-flex min-h-12 shrink-0 items-center justify-center rounded-lg border-2 border-emerald-800 bg-emerald-600 px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-white shadow-sm hover:bg-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-600 dark:text-white dark:hover:bg-emerald-500"
         >
-            <span wire:loading.remove wire:target="printFromPreview">{{ $this->viewData['title'] }}</span>
+            <span wire:loading.remove wire:target="printFromPreview">{{ __('pos.receipt_preview_print') }}</span>
             <span wire:loading wire:target="printFromPreview">{{ __('pos.ui_working') }}</span>
         </button>
     </header>

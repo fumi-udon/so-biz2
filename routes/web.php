@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Pages\TableDashboard;
 use App\Http\Controllers\ClientInventoryController;
 use App\Http\Controllers\CloseCheckController;
 use App\Http\Controllers\KdsAuthController;
@@ -223,6 +224,7 @@ Route::get('/pos/receipt-preview', function (Request $request) {
         'tableSessionId' => $tableSessionId,
         'expectedRevision' => $expectedRevision,
         'intent' => $intent,
+        'posMainEscapeUrl' => TableDashboard::getUrl(),
     ]);
 })->name('pos.receipt-preview.page');
 

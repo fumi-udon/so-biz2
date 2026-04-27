@@ -83,6 +83,7 @@ class PrinterBridge extends Component
             if ($display !== '') {
                 $body .= PHP_EOL.PHP_EOL.__('pos.print_error_code_line', ['code' => $display]);
             }
+            $body .= PHP_EOL.PHP_EOL.__('pos.print_failed_but_processed_notice');
 
             Notification::make()
                 ->title(__('pos.print_failed_title'))

@@ -4,6 +4,7 @@ namespace App\Livewire\Pos;
 
 use App\Actions\Pos\AddPosOrderFromStaffAction;
 use App\Actions\Pos\DeleteOrderLineWithPolicyAction;
+use App\Actions\RadTable\RecordAdditionPrintForSessionAction;
 use App\Actions\RadTable\RecuPlacedOrdersForSessionAction;
 use App\Domains\Pos\Pricing\PricingEngine;
 use App\Domains\Pos\Pricing\PricingInput;
@@ -1147,12 +1148,52 @@ class TableActionHost extends Component
 
         $resolved = PrintIntent::tryFrom($intent) ?? PrintIntent::Addition;
         if ($resolved === PrintIntent::Addition && ! $this->canImprimerAddition) {
+            Notification::make()
+                ->title(__('pos.addition_preview_blocked_title'))
+                ->body(__('pos.addition_preview_blocked_body'))
+                ->warning()
+                ->send();
+
             return;
+        }
+
+        if ($resolved === PrintIntent::Addition) {
+            try {
+                app(RecordAdditionPrintForSessionAction::class)->execute(
+                    $this->shopId,
+                    (int) $this->activeTableSessionId,
+                    $this->expectedSessionRevision,
+                );
+            } catch (RevisionConflictException $e) {
+                Notification::make()
+                    ->title(__('pos.data_stale_title'))
+                    ->body(__('pos.revision_conflict_reload'))
+                    ->warning()
+                    ->send();
+                $this->loadSessionData((int) $this->activeTableSessionId);
+                $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
+
+                return;
+            } catch (Throwable $e) {
+                Notification::make()
+                    ->title(__('pos.action_failed'))
+                    ->body($e->getMessage())
+                    ->danger()
+                    ->send();
+
+                return;
+            }
+
+            $this->loadSessionData((int) $this->activeTableSessionId);
         }
 
         $this->previewIntent = $resolved->value;
         $this->previewSessionId = (int) $this->activeTableSessionId;
         $this->showReceiptPreview = true;
+
+        if ($resolved === PrintIntent::Addition) {
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
+        }
     }
 
     #[On('close-receipt')]

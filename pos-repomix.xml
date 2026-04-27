@@ -148,151 +148,6 @@ routes/
 <files>
 This section contains the contents of the repository's files.
 
-<file path="app/Livewire/Pos/ClotureHistoryPage.php">
-<?php
-
-namespace App\Livewire\Pos;
-
-use App\Models\Shop;
-use App\Models\TableSessionSettlement;
-use App\Support\MenuItemMoney;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
-use Livewire\Component;
-
-class ClotureHistoryPage extends Component
-{
-    public int $shopId = 0;
-
-    public string $shopName = '';
-
-    public bool $detailOpen = false;
-
-    public ?int $selectedSettlementId = null;
-
-    public string $selectedReceiptUrl = '';
-
-    public function mount(): void
-    {
-        $this->shopId = $this->resolveCurrentShopId();
-        $this->shopName = $this->shopId > 0
-            ? (string) (Shop::query()->whereKey($this->shopId)->value('name') ?? '')
-            : '';
-    }
-
-    public function openDetail(int $settlementId): void
-    {
-        /** @var TableSessionSettlement|null $settlement */
-        $settlement = TableSessionSettlement::query()
-            ->whereKey($settlementId)
-            ->where('shop_id', $this->shopId)
-            ->first();
-
-        if ($settlement === null) {
-            return;
-        }
-
-        $expectedRevision = max(0, (int) ($settlement->session_revision_at_settle ?? 0));
-        $this->selectedSettlementId = (int) $settlement->id;
-        $this->selectedReceiptUrl = route('pos.receipt-preview.page', [
-            'shop_id' => (int) $settlement->shop_id,
-            'table_session_id' => (int) $settlement->table_session_id,
-            'expected_revision' => $expectedRevision,
-            'intent' => 'copy',
-        ]);
-        $this->detailOpen = true;
-    }
-
-    public function closeDetail(): void
-    {
-        $this->detailOpen = false;
-    }
-
-    public function getHistoryRowsProperty(): Collection
-    {
-        if ($this->shopId < 1) {
-            return collect();
-        }
-
-        [$startAt, $endAt] = $this->businessDayRange();
-
-        return TableSessionSettlement::query()
-            ->where('shop_id', $this->shopId)
-            ->whereBetween('settled_at', [$startAt, $endAt])
-            ->with([
-                'tableSession.restaurantTable:id,name',
-                'settledBy:id,name',
-            ])
-            ->orderByDesc('settled_at')
-            ->orderByDesc('id')
-            ->get();
-    }
-
-    public function formatMinor(int $minor): string
-    {
-        return MenuItemMoney::formatMinorForDisplay($minor);
-    }
-
-    public function paymentLabel(?string $method): string
-    {
-        return match ($method) {
-            'cash' => __('rad_table.cloture_payment_cash'),
-            'card' => __('rad_table.cloture_payment_card'),
-            'voucher' => __('rad_table.cloture_payment_voucher'),
-            'bypass_forced' => 'Bypass',
-            default => '—',
-        };
-    }
-
-    public function render()
-    {
-        return view('livewire.pos.cloture-history-page');
-    }
-
-    /**
-     * 営業日境界: 04:00:00 起点（04:00〜翌03:59:59）。
-     *
-     * @return array{0: Carbon, 1: Carbon}
-     */
-    private function businessDayRange(): array
-    {
-        $tz = (string) config('app.timezone', 'UTC');
-        $now = Carbon::now($tz);
-        $businessStart = $now->copy()->setTime(4, 0, 0);
-
-        if ($now->lt($businessStart)) {
-            $businessStart->subDay();
-        }
-
-        $businessEnd = $businessStart->copy()->addDay()->subSecond();
-
-        return [$businessStart, $businessEnd];
-    }
-
-    private function resolveCurrentShopId(): int
-    {
-        $preferredShopId = (int) config('pos.default_shop_id', 3);
-        $shop = null;
-
-        if ($preferredShopId > 0) {
-            $shop = Shop::query()
-                ->whereKey($preferredShopId)
-                ->where('is_active', true)
-                ->first();
-        }
-
-        if ($shop === null) {
-            $shop = Shop::query()
-                ->where('is_active', true)
-                ->orderBy('id')
-                ->first();
-        }
-
-        return (int) ($shop?->id ?? 0);
-    }
-}
-</file>
-
 <file path="app/Models/AttendanceEditLog.php">
 <?php
 
@@ -2032,115 +1887,149 @@ class TipCalculationService
 </div>
 </file>
 
-<file path="resources/views/livewire/pos/cloture-history-page.blade.php">
-<div
-    class="min-h-screen bg-white px-3 py-3 text-gray-950 dark:bg-gray-950 dark:text-gray-100 sm:px-4"
-    x-data="{ detailOpen: @entangle('detailOpen') }"
->
-    <div class="mx-auto w-full max-w-6xl space-y-2">
-        <div class="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900">
-            <div class="min-w-0">
-                <h1 class="truncate text-sm font-black uppercase tracking-wide text-gray-900 dark:text-white">
-                    History (Cloture)
-                </h1>
-                <p class="truncate text-[11px] text-gray-600 dark:text-gray-300">
-                    {{ $shopName !== '' ? $shopName : 'Shop #'.$shopId }}
-                </p>
-            </div>
-            <button
-                type="button"
-                x-on:click="window.close()"
-                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
-                Close
-            </button>
-        </div>
+<file path="app/Livewire/Pos/ClotureHistoryPage.php">
+<?php
 
-        <div class="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 text-xs dark:divide-gray-700">
-                    <thead class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
-                        <tr>
-                            <th class="px-2 py-2 text-left font-bold">Cloture time</th>
-                            <th class="px-2 py-2 text-left font-bold">Session start</th>
-                            <th class="px-2 py-2 text-left font-bold">Table</th>
-                            <th class="px-2 py-2 text-right font-bold">Total</th>
-                            <th class="px-2 py-2 text-left font-bold">Payment</th>
-                            <th class="px-2 py-2 text-left font-bold">Details</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                        @forelse ($this->historyRows as $row)
-                            @php
-                                $tableName = (string) ($row->tableSession?->restaurantTable?->name ?? '');
-                                $openedAt = $row->tableSession?->opened_at;
-                            @endphp
-                            <tr class="bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
-                                <td class="whitespace-nowrap px-2 py-2 tabular-nums">
-                                    {{ optional($row->settled_at)->timezone(config('app.timezone'))->format('Y-m-d H:i') }}
-                                </td>
-                                <td class="whitespace-nowrap px-2 py-2 tabular-nums text-gray-700 dark:text-gray-300">
-                                    {{ $openedAt ? $openedAt->timezone(config('app.timezone'))->format('Y-m-d H:i') : '—' }}
-                                </td>
-                                <td class="whitespace-nowrap px-2 py-2">
-                                    {{ $tableName !== '' ? $tableName : 'Session #'.$row->table_session_id }}
-                                </td>
-                                <td class="whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">
-                                    {{ $this->formatMinor((int) $row->final_total_minor) }}
-                                </td>
-                                <td class="whitespace-nowrap px-2 py-2">
-                                    {{ $this->paymentLabel($row->payment_method?->value ?? null) }}
-                                </td>
-                                <td class="whitespace-nowrap px-2 py-2">
-                                    <button
-                                        type="button"
-                                        wire:click="openDetail({{ (int) $row->id }})"
-                                        class="inline-flex items-center rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-900/50"
-                                    >
-                                        Details
-                                    </button>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr class="bg-white dark:bg-gray-900">
-                                <td colspan="6" class="px-2 py-5 text-center text-sm text-gray-600 dark:text-gray-300">
-                                    本日の会計履歴はありません。
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+namespace App\Livewire\Pos;
 
-    <div
-        x-cloak
-        x-show="detailOpen"
-        class="fixed inset-0 z-[320] flex items-center justify-center bg-black/60 p-2"
-        x-on:keydown.escape.window="$wire.closeDetail()"
-    >
-        <div class="absolute inset-0" x-on:click="$wire.closeDetail()"></div>
-        <div class="relative z-[321] h-[92dvh] w-full max-w-5xl overflow-hidden rounded-lg border-2 border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
-            <div class="flex items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-700">
-                <p class="text-sm font-bold text-gray-900 dark:text-gray-100">Receipt details</p>
-                <button
-                    type="button"
-                    x-on:click="$wire.closeDetail()"
-                    class="inline-flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                    ×
-                </button>
-            </div>
-            <iframe
-                title="receipt-preview"
-                class="h-[calc(92dvh-44px)] w-full border-0 bg-white dark:bg-gray-950"
-                loading="lazy"
-                x-bind:src="$wire.selectedReceiptUrl"
-            ></iframe>
-        </div>
-    </div>
-</div>
+use App\Models\Shop;
+use App\Models\TableSessionSettlement;
+use App\Support\MenuItemMoney;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
+use Livewire\Component;
+
+class ClotureHistoryPage extends Component
+{
+    public int $shopId = 0;
+
+    public string $shopName = '';
+
+    public bool $detailOpen = false;
+
+    public ?int $selectedSettlementId = null;
+
+    public string $selectedReceiptUrl = '';
+
+    public function mount(): void
+    {
+        $this->shopId = $this->resolveCurrentShopId();
+        $this->shopName = $this->shopId > 0
+            ? (string) (Shop::query()->whereKey($this->shopId)->value('name') ?? '')
+            : '';
+    }
+
+    public function openDetail(int $settlementId): void
+    {
+        /** @var TableSessionSettlement|null $settlement */
+        $settlement = TableSessionSettlement::query()
+            ->whereKey($settlementId)
+            ->where('shop_id', $this->shopId)
+            ->first();
+
+        if ($settlement === null) {
+            return;
+        }
+
+        $expectedRevision = max(0, (int) ($settlement->session_revision_at_settle ?? 0));
+        $this->selectedSettlementId = (int) $settlement->id;
+        $this->selectedReceiptUrl = route('pos.receipt-preview.page', [
+            'shop_id' => (int) $settlement->shop_id,
+            'table_session_id' => (int) $settlement->table_session_id,
+            'expected_revision' => $expectedRevision,
+            'intent' => 'copy',
+        ]);
+        $this->detailOpen = true;
+    }
+
+    public function closeDetail(): void
+    {
+        $this->detailOpen = false;
+    }
+
+    public function getHistoryRowsProperty(): Collection
+    {
+        if ($this->shopId < 1) {
+            return collect();
+        }
+
+        [$startAt, $endAt] = $this->businessDayRange();
+
+        return TableSessionSettlement::query()
+            ->where('shop_id', $this->shopId)
+            ->whereBetween('settled_at', [$startAt, $endAt])
+            ->with([
+                'tableSession.restaurantTable:id,name',
+                'settledBy:id,name',
+            ])
+            ->orderByDesc('settled_at')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    public function formatMinor(int $minor): string
+    {
+        return MenuItemMoney::formatMinorForDisplay($minor);
+    }
+
+    public function paymentLabel(?string $method): string
+    {
+        return match ($method) {
+            'cash' => __('rad_table.cloture_payment_cash'),
+            'card' => __('rad_table.cloture_payment_card'),
+            'voucher' => __('rad_table.cloture_payment_voucher'),
+            'bypass_forced' => 'Bypass',
+            default => '—',
+        };
+    }
+
+    public function render()
+    {
+        return view('livewire.pos.cloture-history-page');
+    }
+
+    /**
+     * 営業日境界: 04:00:00 起点（04:00〜翌03:59:59）。
+     *
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function businessDayRange(): array
+    {
+        $tz = (string) config('app.timezone', 'UTC');
+        $now = Carbon::now($tz);
+        $businessStart = $now->copy()->setTime(4, 0, 0);
+
+        if ($now->lt($businessStart)) {
+            $businessStart->subDay();
+        }
+
+        $businessEnd = $businessStart->copy()->addDay()->subSecond();
+
+        return [$businessStart, $businessEnd];
+    }
+
+    private function resolveCurrentShopId(): int
+    {
+        $preferredShopId = (int) config('pos.default_shop_id', 3);
+        $shop = null;
+
+        if ($preferredShopId > 0) {
+            $shop = Shop::query()
+                ->whereKey($preferredShopId)
+                ->where('is_active', true)
+                ->first();
+        }
+
+        if ($shop === null) {
+            $shop = Shop::query()
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->first();
+        }
+
+        return (int) ($shop?->id ?? 0);
+    }
+}
 </file>
 
 <file path="app/Models/Attendance.php">
@@ -4685,6 +4574,117 @@ class WeeklyShiftGridService
 </div>
 </file>
 
+<file path="resources/views/livewire/pos/cloture-history-page.blade.php">
+<div
+    class="min-h-screen bg-white px-3 py-3 text-gray-950 dark:bg-gray-950 dark:text-gray-100 sm:px-4"
+    x-data="{ detailOpen: @entangle('detailOpen') }"
+>
+    <div class="mx-auto w-full max-w-6xl space-y-2">
+        <div class="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900">
+            <div class="min-w-0">
+                <h1 class="truncate text-sm font-black uppercase tracking-wide text-gray-900 dark:text-white">
+                    History (Cloture)
+                </h1>
+                <p class="truncate text-[11px] text-gray-600 dark:text-gray-300">
+                    {{ $shopName !== '' ? $shopName : 'Shop #'.$shopId }}
+                </p>
+            </div>
+            <button
+                type="button"
+                x-on:click="window.close()"
+                class="inline-flex items-center rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+                Close
+            </button>
+        </div>
+
+        <div class="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-xs dark:divide-gray-700">
+                    <thead class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100">
+                        <tr>
+                            <th class="px-2 py-2 text-left font-bold">Cloture time</th>
+                            <th class="px-2 py-2 text-left font-bold">Session start</th>
+                            <th class="px-2 py-2 text-left font-bold">Table</th>
+                            <th class="px-2 py-2 text-right font-bold">Total</th>
+                            <th class="px-2 py-2 text-left font-bold">Payment</th>
+                            <th class="px-2 py-2 text-left font-bold">Details</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                        @forelse ($this->historyRows as $row)
+                            @php
+                                $tableName = (string) ($row->tableSession?->restaurantTable?->name ?? '');
+                                $openedAt = $row->tableSession?->opened_at;
+                            @endphp
+                            <tr class="bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+                                <td class="whitespace-nowrap px-2 py-2 tabular-nums">
+                                    {{ optional($row->settled_at)->timezone(config('app.timezone'))->format('Y-m-d H:i') }}
+                                </td>
+                                <td class="whitespace-nowrap px-2 py-2 tabular-nums text-gray-700 dark:text-gray-300">
+                                    {{ $openedAt ? $openedAt->timezone(config('app.timezone'))->format('Y-m-d H:i') : '—' }}
+                                </td>
+                                <td class="whitespace-nowrap px-2 py-2">
+                                    {{ $tableName !== '' ? $tableName : 'Session #'.$row->table_session_id }}
+                                </td>
+                                <td class="whitespace-nowrap px-2 py-2 text-right font-bold tabular-nums">
+                                    {{ $this->formatMinor((int) $row->final_total_minor) }}
+                                </td>
+                                <td class="whitespace-nowrap px-2 py-2">
+                                    {{ $this->paymentLabel($row->payment_method?->value ?? null) }}
+                                </td>
+                                <td class="whitespace-nowrap px-2 py-2">
+                                    <button
+                                        type="button"
+                                        wire:click="openDetail({{ (int) $row->id }})"
+                                        class="inline-flex items-center rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-800 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-900/50"
+                                    >
+                                        Details
+                                    </button>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr class="bg-white dark:bg-gray-900">
+                                <td colspan="6" class="px-2 py-5 text-center text-sm text-gray-600 dark:text-gray-300">
+                                    本日の会計履歴はありません。
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div
+        x-cloak
+        x-show="detailOpen"
+        class="fixed inset-0 z-[320] flex items-center justify-center bg-black/60 p-2"
+        x-on:keydown.escape.window="$wire.closeDetail()"
+    >
+        <div class="absolute inset-0" x-on:click="$wire.closeDetail()"></div>
+        <div class="relative z-[321] h-[92dvh] w-full max-w-5xl overflow-hidden rounded-lg border-2 border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+            <div class="flex items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-700">
+                <p class="text-sm font-bold text-gray-900 dark:text-gray-100">Receipt details</p>
+                <button
+                    type="button"
+                    x-on:click="$wire.closeDetail()"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                    ×
+                </button>
+            </div>
+            <iframe
+                title="receipt-preview"
+                class="h-[calc(92dvh-44px)] w-full border-0 bg-white dark:bg-gray-950"
+                loading="lazy"
+                x-bind:src="$wire.selectedReceiptUrl"
+            ></iframe>
+        </div>
+    </div>
+</div>
+</file>
+
 <file path="resources/views/livewire/pos/printer-bridge.blade.php">
 {{-- Invisible: PrinterBridge only listens for browser events --}}
 <div class="fi-no-print hidden" aria-hidden="true" wire:key="printer-bridge"></div>
@@ -4953,6 +4953,7 @@ class PrinterBridge extends Component
             if ($display !== '') {
                 $body .= PHP_EOL.PHP_EOL.__('pos.print_error_code_line', ['code' => $display]);
             }
+            $body .= PHP_EOL.PHP_EOL.__('pos.print_failed_but_processed_notice');
 
             Notification::make()
                 ->title(__('pos.print_failed_title'))
@@ -6073,149 +6074,6 @@ final class TimecardPunchService
 </section>
 </file>
 
-<file path="resources/views/components/pos/footer-utility-menu.blade.php">
-{{-- POS kiosk footer: low-frequency actions (change table, admin, logout). Used by table-dashboard. --}}
-<div
-    class="relative shrink-0"
-    x-data="{ posUtilityMenuOpen: false }"
-    x-on:keydown.escape.window="posUtilityMenuOpen = false"
-    x-on:click.outside="posUtilityMenuOpen = false"
->
-    <button
-        type="button"
-        class="inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-md border border-slate-200 bg-white text-gray-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 active:scale-95 dark:border-slate-600 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-slate-500 dark:hover:bg-slate-800 dark:hover:text-gray-200"
-        x-on:click.stop="posUtilityMenuOpen = ! posUtilityMenuOpen"
-        x-bind:aria-expanded="posUtilityMenuOpen ? 'true' : 'false'"
-        aria-haspopup="menu"
-        aria-label="{{ __('pos.footer_utility_menu') }}"
-    >
-        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
-            <path d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-    </button>
-
-    <div
-        x-cloak
-        x-show="posUtilityMenuOpen"
-        x-transition:enter="transition ease-out duration-150"
-        x-transition:enter-start="opacity-0"
-        x-transition:enter-end="opacity-100"
-        x-transition:leave="transition ease-in duration-100"
-        x-transition:leave-start="opacity-100"
-        x-transition:leave-end="opacity-0"
-        class="fixed inset-0 z-[205] bg-slate-950/40 max-md:block md:hidden"
-        x-on:click="posUtilityMenuOpen = false"
-        aria-hidden="true"
-    ></div>
-
-    <div
-        x-cloak
-        x-show="posUtilityMenuOpen"
-        x-transition:enter="transition ease-out duration-150"
-        x-transition:enter-start="opacity-0"
-        x-transition:enter-end="opacity-100"
-        x-transition:leave="transition ease-in duration-100"
-        x-transition:leave-start="opacity-100"
-        x-transition:leave-end="opacity-0"
-        class="fixed left-2 right-2 bottom-2 z-[210] flex max-h-[min(70dvh,28rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-gray-950 shadow-xl max-md:flex dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100 md:absolute md:bottom-full md:left-0 md:right-auto md:top-auto md:mb-1 md:max-h-none md:w-56 md:rounded-lg md:shadow-lg"
-        role="menu"
-        aria-label="{{ __('pos.footer_utility_menu') }}"
-        x-on:click.stop
-    >
-        <div class="flex max-h-[min(70dvh,28rem)] min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-1.5 md:max-h-none">
-            <button
-                type="button"
-                role="menuitem"
-                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
-                x-on:click="
-                    posUtilityMenuOpen = false;
-                    if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
-                        window.Livewire.dispatch('pos-tile-interaction-ended');
-                    }
-                "
-            >
-                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
-                </svg>
-                <span class="min-w-0">{{ __('pos.action_changer_table') }}</span>
-            </button>
-
-            <button
-                type="button"
-                role="menuitem"
-                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
-                x-on:click="
-                    posUtilityMenuOpen = false;
-                    window.open(@js(route('pos.history-cloture.page')), '_blank', 'noopener');
-                "
-            >
-                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
-                </svg>
-                <span class="min-w-0">History</span>
-            </button>
-
-            <a
-                href="{{ url('/admin') }}"
-                role="menuitem"
-                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
-                x-on:click="posUtilityMenuOpen = false"
-            >
-                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.37.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.377-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
-                    />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                </svg>
-                <span class="min-w-0">{{ __('pos.kiosk_open_admin') }}</span>
-            </a>
-
-            @if ($this->canUseDevPosReset)
-                <button
-                    type="button"
-                    role="menuitem"
-                    wire:loading.attr="disabled"
-                    wire:target="resetAllPosData"
-                    class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-amber-900 hover:border-amber-300 hover:bg-amber-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:text-amber-100 dark:hover:border-amber-700 dark:hover:bg-amber-950/30"
-                    x-on:click.prevent="
-                        if (! confirm(@js(__('pos.dev_reset_confirm')))) { return; }
-                        posUtilityMenuOpen = false;
-                        $wire.resetAllPosData();
-                    "
-                >
-                    <svg class="h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M3 6h18M8 6V4h8v2m-9 4v8m4-8v8m4-8v8" />
-                    </svg>
-                    <span class="min-w-0">{{ __('pos.dev_reset_label') }}</span>
-                </button>
-            @endif
-
-            <form
-                x-ref="posFooterLogoutForm"
-                method="post"
-                action="{{ filament()->getLogoutUrl() }}"
-                role="none"
-            >
-                @csrf
-                <button
-                    type="button"
-                    role="menuitem"
-                    class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-rose-200 hover:bg-rose-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:text-gray-100 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30"
-                    x-on:click="if (confirm(@js(__('pos.logout_confirm')))) { $refs.posFooterLogoutForm.requestSubmit(); }"
-                >
-                    <svg class="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
-                    </svg>
-                    <span class="min-w-0">{{ __('pos.action_logout') }}</span>
-                </button>
-            </form>
-        </div>
-    </div>
-</div>
-</file>
-
 <file path="resources/views/components/rad-table-tile.blade.php">
 @props([
     'tile' => [],
@@ -6687,6 +6545,149 @@ final class TimecardPunchService
 </article>
 </file>
 
+<file path="resources/views/components/pos/footer-utility-menu.blade.php">
+{{-- POS kiosk footer: low-frequency actions (change table, admin, logout). Used by table-dashboard. --}}
+<div
+    class="relative shrink-0"
+    x-data="{ posUtilityMenuOpen: false }"
+    x-on:keydown.escape.window="posUtilityMenuOpen = false"
+    x-on:click.outside="posUtilityMenuOpen = false"
+>
+    <button
+        type="button"
+        class="inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-md border border-slate-200 bg-white text-gray-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 active:scale-95 dark:border-slate-600 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-slate-500 dark:hover:bg-slate-800 dark:hover:text-gray-200"
+        x-on:click.stop="posUtilityMenuOpen = ! posUtilityMenuOpen"
+        x-bind:aria-expanded="posUtilityMenuOpen ? 'true' : 'false'"
+        aria-haspopup="menu"
+        aria-label="{{ __('pos.footer_utility_menu') }}"
+    >
+        <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    </button>
+
+    <div
+        x-cloak
+        x-show="posUtilityMenuOpen"
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-100"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed inset-0 z-[205] bg-slate-950/40 max-md:block md:hidden"
+        x-on:click="posUtilityMenuOpen = false"
+        aria-hidden="true"
+    ></div>
+
+    <div
+        x-cloak
+        x-show="posUtilityMenuOpen"
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-100"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed left-2 right-2 bottom-2 z-[210] flex max-h-[min(70dvh,28rem)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-gray-950 shadow-xl max-md:flex dark:border-slate-600 dark:bg-gray-900 dark:text-gray-100 md:absolute md:bottom-full md:left-0 md:right-auto md:top-auto md:mb-1 md:max-h-none md:w-56 md:rounded-lg md:shadow-lg"
+        role="menu"
+        aria-label="{{ __('pos.footer_utility_menu') }}"
+        x-on:click.stop
+    >
+        <div class="flex max-h-[min(70dvh,28rem)] min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain p-1.5 md:max-h-none">
+            <button
+                type="button"
+                role="menuitem"
+                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                x-on:click="
+                    posUtilityMenuOpen = false;
+                    if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
+                        window.Livewire.dispatch('pos-tile-interaction-ended');
+                    }
+                "
+            >
+                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
+                </svg>
+                <span class="min-w-0">{{ __('pos.action_changer_table') }}</span>
+            </button>
+
+            <button
+                type="button"
+                role="menuitem"
+                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                x-on:click="
+                    posUtilityMenuOpen = false;
+                    window.open(@js(route('pos.history-cloture.page')), '_blank', 'noopener');
+                "
+            >
+                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
+                </svg>
+                <span class="min-w-0">History</span>
+            </button>
+
+            <a
+                href="{{ url('/admin') }}"
+                role="menuitem"
+                class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-slate-200 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:text-gray-100 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                x-on:click="posUtilityMenuOpen = false"
+            >
+                <svg class="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.37.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.377-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
+                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+                <span class="min-w-0">{{ __('pos.kiosk_open_admin') }}</span>
+            </a>
+
+            @if ($this->canUseDevPosReset)
+                <button
+                    type="button"
+                    role="menuitem"
+                    wire:loading.attr="disabled"
+                    wire:target="resetAllPosData"
+                    class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-amber-900 hover:border-amber-300 hover:bg-amber-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 dark:text-amber-100 dark:hover:border-amber-700 dark:hover:bg-amber-950/30"
+                    x-on:click.prevent="
+                        if (! confirm(@js(__('pos.dev_reset_confirm')))) { return; }
+                        posUtilityMenuOpen = false;
+                        $wire.resetAllPosData();
+                    "
+                >
+                    <svg class="h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 6h18M8 6V4h8v2m-9 4v8m4-8v8m4-8v8" />
+                    </svg>
+                    <span class="min-w-0">{{ __('pos.dev_reset_label') }}</span>
+                </button>
+            @endif
+
+            <form
+                x-ref="posFooterLogoutForm"
+                method="post"
+                action="{{ filament()->getLogoutUrl() }}"
+                role="none"
+            >
+                @csrf
+                <button
+                    type="button"
+                    role="menuitem"
+                    class="flex w-full touch-manipulation items-center gap-2 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-950 hover:border-rose-200 hover:bg-rose-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 dark:text-gray-100 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30"
+                    x-on:click="if (confirm(@js(__('pos.logout_confirm')))) { $refs.posFooterLogoutForm.requestSubmit(); }"
+                >
+                    <svg class="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                    </svg>
+                    <span class="min-w-0">{{ __('pos.action_logout') }}</span>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+</file>
+
 <file path="resources/views/livewire/pos/discount-modal.blade.php">
 @php
     $locked = $this->uiState === 'in_flight';
@@ -6905,17 +6906,14 @@ class ReceiptPreview extends Component
         }
 
         $this->uiState = 'in_flight';
+        $additionMarked = false;
 
         try {
             $physicalEnabled = (bool) config('pos.printer.physical_enabled', true);
             if (! $physicalEnabled) {
                 if ($this->printIntent === PrintIntent::Addition) {
-                    app(RecordAdditionPrintForSessionAction::class)->execute(
-                        $this->shopId,
-                        $this->tableSessionId,
-                        $this->expectedSessionRevision,
-                    );
-                    $this->expectedSessionRevision++;
+                    $this->markAdditionPrintedAndBumpRevision();
+                    $additionMarked = true;
                 }
                 $this->uiState = 'success';
                 $this->dispatch(
@@ -6979,12 +6977,8 @@ class ReceiptPreview extends Component
             ));
 
             if ($this->printIntent === PrintIntent::Addition) {
-                app(RecordAdditionPrintForSessionAction::class)->execute(
-                    $this->shopId,
-                    $this->tableSessionId,
-                    $this->expectedSessionRevision,
-                );
-                $this->expectedSessionRevision++;
+                $this->markAdditionPrintedAndBumpRevision();
+                $additionMarked = true;
             }
 
             $this->dispatch(
@@ -7009,6 +7003,14 @@ class ReceiptPreview extends Component
                 ->warning()
                 ->send();
         } catch (Throwable $e) {
+            if ($this->printIntent === PrintIntent::Addition && ! $additionMarked) {
+                try {
+                    $this->markAdditionPrintedAndBumpRevision();
+                    $additionMarked = true;
+                } catch (Throwable $markError) {
+                    // Keep the original exception path and UI error message.
+                }
+            }
             $this->uiState = 'failed';
             Notification::make()
                 ->title(__('pos.action_failed'))
@@ -7315,6 +7317,16 @@ class ReceiptPreview extends Component
             ->value('id');
 
         return $id !== null ? (int) $id : null;
+    }
+
+    private function markAdditionPrintedAndBumpRevision(): void
+    {
+        app(RecordAdditionPrintForSessionAction::class)->execute(
+            $this->shopId,
+            $this->tableSessionId,
+            $this->expectedSessionRevision,
+        );
+        $this->expectedSessionRevision++;
     }
 }
 </file>
@@ -7743,8 +7755,19 @@ class ClotureModal extends Component
             $this->uiState = 'failed';
             Notification::make()->title(__('rad_table.cannot_close_with_unacked'))->danger()->send();
         } catch (SessionAlreadySettledException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
+            // Idempotent completion path:
+            // another in-flight confirm may have already settled this session.
+            // Continue with the same post-settlement flow so cashier always reaches preview.
+            $this->dispatch(
+                'pos-settlement-completed',
+                table_session_id: (int) $this->tableSessionId,
+                open_receipt_preview: true,
+            );
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
+            $this->dispatch('pos-refresh-tiles');
+            $this->uiState = 'success';
             $this->closeModal();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
@@ -8887,242 +8910,6 @@ class TakeawayBar extends Component
 @endif
 </file>
 
-<file path="routes/web.php">
-<?php
-
-use App\Http\Controllers\ClientInventoryController;
-use App\Http\Controllers\CloseCheckController;
-use App\Http\Controllers\KdsAuthController;
-use App\Http\Controllers\MyPageController;
-use App\Http\Controllers\NewsNoteController;
-use App\Http\Middleware\SetGuestLocale;
-use App\Livewire\ClientOrderForm;
-use App\Livewire\FrontendDailyClose;
-use App\Livewire\GuestOrder\MenuPage as GuestMenuPage;
-use App\Livewire\Kds\KdsDashboard;
-use App\Livewire\TimecardForm;
-use App\Models\Attendance;
-use App\Models\NewsNote;
-use App\Models\Staff;
-use App\Services\WeeklyShiftGridService;
-use App\Support\AbsenceScope;
-use App\Support\BusinessDate;
-use App\Support\StoreHolidaySetting;
-use App\Support\TipAttendanceScope;
-use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Route;
-
-Route::get('/', function (Request $request) {
-    $request->session()->forget('mypage_staff_id');
-
-    // ── スタッフリスト（MyPage モーダル / Note モーダル用） ─────────────
-    $mypageStaffList = Staff::query()->where('is_active', true)->orderBy('name')->get();
-    $recentNews = NewsNote::recentDays(5);
-
-    // ── 当日チップ対象者（打刻 + 申請 + 非剥奪） ─────────────────────────
-    $today = BusinessDate::current()->toDateString();
-    $tipLunchAppliers = TipAttendanceScope::applyGoldenFormula(
-        Attendance::query()->whereDate('date', $today),
-        'lunch',
-    )
-        ->with('staff:id,name')
-        ->get()
-        ->pluck('staff')
-        ->filter()
-        ->values();
-    $tipDinnerAppliers = TipAttendanceScope::applyGoldenFormula(
-        Attendance::query()->whereDate('date', $today),
-        'dinner',
-    )
-        ->with('staff:id,name')
-        ->get()
-        ->pluck('staff')
-        ->filter()
-        ->values();
-
-    // ── 本日の人員配置（週次シフト表と同一集計・welcome 用） ─────────────
-    $shiftGridData = app(WeeklyShiftGridService::class)->build();
-    $todayDayKey = $shiftGridData['todayDayKey'];
-    $emptyShiftBlock = [
-        'assignments' => [],
-        'counts' => ['kitchen' => 0, 'hall' => 0, 'other' => 0],
-        'live_extras' => [],
-    ];
-    $todayShiftPanel = [
-        'dayLabel' => $shiftGridData['dayLabels'][$todayDayKey] ?? $todayDayKey,
-        'dateLabel' => Carbon::parse($today)->format('d/m/Y'),
-        'lunch' => $shiftGridData['shiftGrid'][$todayDayKey]['lunch'] ?? $emptyShiftBlock,
-        'dinner' => $shiftGridData['shiftGrid'][$todayDayKey]['dinner'] ?? $emptyShiftBlock,
-    ];
-
-    // ── 勤怠ガント用集計 ─────────────────────────────────────────────────
-    $bd = BusinessDate::current();
-    $ganttMonthStart = $bd->copy()->startOfMonth()->toDateString();
-    $ganttMonthEnd = $bd->copy()->toDateString();
-    $ganttMonthLabel = $bd->copy()->format('M Y');
-
-    $ganttAllStaff = Staff::query()
-        ->where('is_active', true)
-        ->whereHas('jobLevel', fn ($q) => $q->where('level', '!=', 10))
-        ->with('jobLevel')
-        ->orderBy('name')
-        ->get();
-
-    // 当月 Attendance を一括取得してスタッフ別 + 日付別にインデックス
-    $ganttAllAttendances = Attendance::query()
-        ->whereIn('staff_id', $ganttAllStaff->pluck('id'))
-        ->whereBetween('date', [$ganttMonthStart, $ganttMonthEnd])
-        ->get();
-
-    $ganttAttendanceMap = [];
-    foreach ($ganttAllAttendances as $att) {
-        $dateStr = Carbon::parse($att->date)->toDateString();
-        $ganttAttendanceMap[$att->staff_id][$dateStr] = $att;
-    }
-
-    $ganttHolidaySet = StoreHolidaySetting::dateSet();
-    $ganttStaffIds = $ganttAllStaff->pluck('id')->all();
-    $ganttAbsenceMap = AbsenceScope::loadAbsenceMapForStaffInRange($ganttStaffIds, $ganttMonthStart, $ganttMonthEnd);
-
-    $ganttRows = $ganttAllStaff->map(function ($s) use ($ganttAttendanceMap, $ganttMonthStart, $ganttMonthEnd, $ganttHolidaySet, $ganttAbsenceMap) {
-        $staffAttByDate = $ganttAttendanceMap[$s->id] ?? [];
-
-        // 遅刻カウント
-        $late = collect($staffAttByDate)->filter(fn ($r) => (int) ($r->late_minutes ?? 0) > 0)->count();
-
-        // 欠勤カウント（AbsenceScope: 休業日・出勤・確定欠勤）
-        $absent = 0;
-        $absentDates = [];
-        $cursor = Carbon::parse($ganttMonthStart);
-        $endCarbon = Carbon::parse($ganttMonthEnd);
-        while ($cursor->lte($endCarbon)) {
-            $d = $cursor->toDateString();
-            $row = $staffAttByDate[$d] ?? null;
-            $hasAbs = isset($ganttAbsenceMap[$s->id][$d]);
-            if (AbsenceScope::resolveDay($d, $row, $ganttHolidaySet, $hasAbs) === AbsenceScope::STATUS_ABSENT) {
-                $absent++;
-                $absentDates[] = $d;
-            }
-            $cursor->addDay();
-        }
-
-        return [
-            'staff' => $s,
-            'late' => $late,
-            'absent' => $absent,
-            'absent_dates' => $absentDates,
-            'total' => $late + $absent,
-        ];
-    })->sortByDesc('total')->values();
-
-    $ganttBravo = $ganttRows->filter(fn ($r) => $r['total'] === 0)->values();
-    $ganttProblematic = $ganttRows->filter(fn ($r) => $r['total'] > 0)->values();
-    $ganttMaxVal = max((int) ($ganttProblematic->max('total') ?? 0), 1);
-
-    return view('welcome', compact(
-        'mypageStaffList',
-        'recentNews',
-        'today',
-        'tipLunchAppliers',
-        'tipDinnerAppliers',
-        'todayShiftPanel',
-        'ganttMonthLabel',
-        'ganttRows',
-        'ganttBravo',
-        'ganttProblematic',
-        'ganttMaxVal',
-    ));
-})->name('home');
-
-Route::get('/order/{table_number}', ClientOrderForm::class)->name('order.table');
-
-Route::get('/kds/login', [KdsAuthController::class, 'showLoginForm'])->name('kds.login');
-Route::post('/kds/login', [KdsAuthController::class, 'login'])->name('kds.login.submit');
-
-Route::middleware('kds.auth')->group(function () {
-    Route::get('/kds', KdsDashboard::class)->name('kds.dashboard');
-});
-
-Route::get('/timecard', TimecardForm::class)->name('timecard.index');
-
-Route::get('/daily-close', FrontendDailyClose::class)->name('daily-close');
-
-Route::get('/close-check', [CloseCheckController::class, 'index'])->name('close-check.index');
-Route::post('/close-check/process', [CloseCheckController::class, 'process'])->name('close-check.process');
-Route::get('/close-check/success', [CloseCheckController::class, 'success'])->name('close-check.success');
-
-Route::get('/mypage', [MyPageController::class, 'index'])->name('mypage.index');
-Route::get('/mypage/reauth', [MyPageController::class, 'reauthenticate'])->name('mypage.reauth');
-Route::post('/mypage/open', [MyPageController::class, 'openByPin'])->name('mypage.open');
-Route::post('/mypage', [MyPageController::class, 'store'])->name('mypage.store');
-Route::post('/mypage/auto-logout', [MyPageController::class, 'autoLogout'])->name('mypage.auto-logout');
-// 旧 Presence 独立ページ → My page へ 302 リダイレクト（ブックマーク互換）
-Route::get('/mypage/attendance', function (Request $request) {
-    $params = array_filter([
-        'staff_id' => $request->integer('staff_id') ?: null,
-        'month' => $request->input('month') ?: null,
-    ]);
-
-    return redirect()->route('mypage.index', $params, 302);
-})->name('mypage.attendance');
-
-// 固定パスを {id} の前に並べること（ルータは上から順にマッチするため）
-Route::post('/news/auth', [NewsNoteController::class, 'auth'])->name('news.auth');
-Route::post('/news/logout', [NewsNoteController::class, 'logout'])->name('news.logout');
-Route::get('/news/manage', [NewsNoteController::class, 'manage'])->name('news.manage');
-Route::post('/news', [NewsNoteController::class, 'store'])->name('news.store');
-Route::post('/news/{id}', [NewsNoteController::class, 'update'])->name('news.update');
-Route::post('/news/{id}/delete', [NewsNoteController::class, 'destroy'])->name('news.destroy');
-
-Route::prefix('inventory')->name('inventory.')->group(function () {
-    Route::get('/', [ClientInventoryController::class, 'index'])->name('index');
-    Route::get('/input/{timing}/{staff_id}', [ClientInventoryController::class, 'input'])->name('input');
-    Route::post('/store', [ClientInventoryController::class, 'store'])->name('store');
-});
-
-// ── Guest mobile order UI ──────────────────────────────────────────────────────
-// Isolated from Filament/admin. SetGuestLocale resolves fr|en from Accept-Language.
-// Ver2: tenantSlug resolved from tableToken directly (opaque signed token).
-Route::middleware(SetGuestLocale::class)
-    ->group(function () {
-        Route::get(
-            '/guest/menu/{tenantSlug}/{tableToken}',
-            GuestMenuPage::class
-        )->name('guest.menu');
-    });
-
-// ── Isolated Epson hardware sanity check (not wired into POS / Livewire) ─────
-Route::get('/printer-test', function () {
-    return view('printer-test');
-})->name('printer-test');
-
-Route::get('/pos/receipt-preview', function (Request $request) {
-    abort_unless(Auth::check(), 403);
-
-    $shopId = max(0, (int) $request->query('shop_id', 0));
-    $tableSessionId = max(0, (int) $request->query('table_session_id', 0));
-    $expectedRevision = max(0, (int) $request->query('expected_revision', 0));
-    $intent = (string) $request->query('intent', 'addition');
-
-    abort_unless($shopId > 0 && $tableSessionId > 0, 404);
-
-    return view('pos.receipt-preview-page', [
-        'shopId' => $shopId,
-        'tableSessionId' => $tableSessionId,
-        'expectedRevision' => $expectedRevision,
-        'intent' => $intent,
-    ]);
-})->name('pos.receipt-preview.page');
-
-Route::get('/history_cloture', function () {
-    abort_unless(Auth::check(), 403);
-
-    return view('pos.history-cloture-page');
-})->name('pos.history-cloture.page');
-</file>
-
 <file path="app/Livewire/Pos/StaffMealBar.php">
 <?php
 
@@ -9407,6 +9194,7 @@ final class KdsQueryService
                 wire:key="cloture-modal-{{ $this->tableSessionId }}"
                 x-data="{
                     optimisticClosing: false,
+                    submitting: false,
                     inputDt: $wire.entangle('tenderedDtInput'),
                     finalMinor: {{ (int) $this->finalTotalMinor }},
                     changeMinor() {
@@ -9616,8 +9404,19 @@ final class KdsQueryService
                                 type="button"
                                 color="danger"
                                 size="sm"
-                                x-on:click="optimisticClosing = true; $wire.set('tenderedDtInput', inputDt); $wire.confirm()"
-                                x-bind:disabled="@js($locked) || changeMinor() < 0"
+                                x-on:click="
+                                    if (submitting) { return }
+                                    if (changeMinor() < 0) { return }
+                                    submitting = true
+                                    optimisticClosing = true
+                                    $wire.set('tenderedDtInput', inputDt)
+                                    $wire.confirm().catch(() => {
+                                        optimisticClosing = false
+                                    }).finally(() => {
+                                        submitting = false
+                                    })
+                                "
+                                x-bind:disabled="submitting || @js($locked) || changeMinor() < 0"
                                 wire:loading.attr="disabled"
                                 wire:target="confirm"
                                 :loading-indicator="false"
@@ -9841,6 +9640,242 @@ final class KdsQueryService
 </div>
 </file>
 
+<file path="routes/web.php">
+<?php
+
+use App\Http\Controllers\ClientInventoryController;
+use App\Http\Controllers\CloseCheckController;
+use App\Http\Controllers\KdsAuthController;
+use App\Http\Controllers\MyPageController;
+use App\Http\Controllers\NewsNoteController;
+use App\Http\Middleware\SetGuestLocale;
+use App\Livewire\ClientOrderForm;
+use App\Livewire\FrontendDailyClose;
+use App\Livewire\GuestOrder\MenuPage as GuestMenuPage;
+use App\Livewire\Kds\KdsDashboard;
+use App\Livewire\TimecardForm;
+use App\Models\Attendance;
+use App\Models\NewsNote;
+use App\Models\Staff;
+use App\Services\WeeklyShiftGridService;
+use App\Support\AbsenceScope;
+use App\Support\BusinessDate;
+use App\Support\StoreHolidaySetting;
+use App\Support\TipAttendanceScope;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/', function (Request $request) {
+    $request->session()->forget('mypage_staff_id');
+
+    // ── スタッフリスト（MyPage モーダル / Note モーダル用） ─────────────
+    $mypageStaffList = Staff::query()->where('is_active', true)->orderBy('name')->get();
+    $recentNews = NewsNote::recentDays(5);
+
+    // ── 当日チップ対象者（打刻 + 申請 + 非剥奪） ─────────────────────────
+    $today = BusinessDate::current()->toDateString();
+    $tipLunchAppliers = TipAttendanceScope::applyGoldenFormula(
+        Attendance::query()->whereDate('date', $today),
+        'lunch',
+    )
+        ->with('staff:id,name')
+        ->get()
+        ->pluck('staff')
+        ->filter()
+        ->values();
+    $tipDinnerAppliers = TipAttendanceScope::applyGoldenFormula(
+        Attendance::query()->whereDate('date', $today),
+        'dinner',
+    )
+        ->with('staff:id,name')
+        ->get()
+        ->pluck('staff')
+        ->filter()
+        ->values();
+
+    // ── 本日の人員配置（週次シフト表と同一集計・welcome 用） ─────────────
+    $shiftGridData = app(WeeklyShiftGridService::class)->build();
+    $todayDayKey = $shiftGridData['todayDayKey'];
+    $emptyShiftBlock = [
+        'assignments' => [],
+        'counts' => ['kitchen' => 0, 'hall' => 0, 'other' => 0],
+        'live_extras' => [],
+    ];
+    $todayShiftPanel = [
+        'dayLabel' => $shiftGridData['dayLabels'][$todayDayKey] ?? $todayDayKey,
+        'dateLabel' => Carbon::parse($today)->format('d/m/Y'),
+        'lunch' => $shiftGridData['shiftGrid'][$todayDayKey]['lunch'] ?? $emptyShiftBlock,
+        'dinner' => $shiftGridData['shiftGrid'][$todayDayKey]['dinner'] ?? $emptyShiftBlock,
+    ];
+
+    // ── 勤怠ガント用集計 ─────────────────────────────────────────────────
+    $bd = BusinessDate::current();
+    $ganttMonthStart = $bd->copy()->startOfMonth()->toDateString();
+    $ganttMonthEnd = $bd->copy()->toDateString();
+    $ganttMonthLabel = $bd->copy()->format('M Y');
+
+    $ganttAllStaff = Staff::query()
+        ->where('is_active', true)
+        ->whereHas('jobLevel', fn ($q) => $q->where('level', '!=', 10))
+        ->with('jobLevel')
+        ->orderBy('name')
+        ->get();
+
+    // 当月 Attendance を一括取得してスタッフ別 + 日付別にインデックス
+    $ganttAllAttendances = Attendance::query()
+        ->whereIn('staff_id', $ganttAllStaff->pluck('id'))
+        ->whereBetween('date', [$ganttMonthStart, $ganttMonthEnd])
+        ->get();
+
+    $ganttAttendanceMap = [];
+    foreach ($ganttAllAttendances as $att) {
+        $dateStr = Carbon::parse($att->date)->toDateString();
+        $ganttAttendanceMap[$att->staff_id][$dateStr] = $att;
+    }
+
+    $ganttHolidaySet = StoreHolidaySetting::dateSet();
+    $ganttStaffIds = $ganttAllStaff->pluck('id')->all();
+    $ganttAbsenceMap = AbsenceScope::loadAbsenceMapForStaffInRange($ganttStaffIds, $ganttMonthStart, $ganttMonthEnd);
+
+    $ganttRows = $ganttAllStaff->map(function ($s) use ($ganttAttendanceMap, $ganttMonthStart, $ganttMonthEnd, $ganttHolidaySet, $ganttAbsenceMap) {
+        $staffAttByDate = $ganttAttendanceMap[$s->id] ?? [];
+
+        // 遅刻カウント
+        $late = collect($staffAttByDate)->filter(fn ($r) => (int) ($r->late_minutes ?? 0) > 0)->count();
+
+        // 欠勤カウント（AbsenceScope: 休業日・出勤・確定欠勤）
+        $absent = 0;
+        $absentDates = [];
+        $cursor = Carbon::parse($ganttMonthStart);
+        $endCarbon = Carbon::parse($ganttMonthEnd);
+        while ($cursor->lte($endCarbon)) {
+            $d = $cursor->toDateString();
+            $row = $staffAttByDate[$d] ?? null;
+            $hasAbs = isset($ganttAbsenceMap[$s->id][$d]);
+            if (AbsenceScope::resolveDay($d, $row, $ganttHolidaySet, $hasAbs) === AbsenceScope::STATUS_ABSENT) {
+                $absent++;
+                $absentDates[] = $d;
+            }
+            $cursor->addDay();
+        }
+
+        return [
+            'staff' => $s,
+            'late' => $late,
+            'absent' => $absent,
+            'absent_dates' => $absentDates,
+            'total' => $late + $absent,
+        ];
+    })->sortByDesc('total')->values();
+
+    $ganttBravo = $ganttRows->filter(fn ($r) => $r['total'] === 0)->values();
+    $ganttProblematic = $ganttRows->filter(fn ($r) => $r['total'] > 0)->values();
+    $ganttMaxVal = max((int) ($ganttProblematic->max('total') ?? 0), 1);
+
+    return view('welcome', compact(
+        'mypageStaffList',
+        'recentNews',
+        'today',
+        'tipLunchAppliers',
+        'tipDinnerAppliers',
+        'todayShiftPanel',
+        'ganttMonthLabel',
+        'ganttRows',
+        'ganttBravo',
+        'ganttProblematic',
+        'ganttMaxVal',
+    ));
+})->name('home');
+
+Route::get('/order/{table_number}', ClientOrderForm::class)->name('order.table');
+
+Route::get('/kds/login', [KdsAuthController::class, 'showLoginForm'])->name('kds.login');
+Route::post('/kds/login', [KdsAuthController::class, 'login'])->name('kds.login.submit');
+
+Route::middleware('kds.auth')->group(function () {
+    Route::get('/kds', KdsDashboard::class)->name('kds.dashboard');
+});
+
+Route::get('/timecard', TimecardForm::class)->name('timecard.index');
+
+Route::get('/daily-close', FrontendDailyClose::class)->name('daily-close');
+
+Route::get('/close-check', [CloseCheckController::class, 'index'])->name('close-check.index');
+Route::post('/close-check/process', [CloseCheckController::class, 'process'])->name('close-check.process');
+Route::get('/close-check/success', [CloseCheckController::class, 'success'])->name('close-check.success');
+
+Route::get('/mypage', [MyPageController::class, 'index'])->name('mypage.index');
+Route::get('/mypage/reauth', [MyPageController::class, 'reauthenticate'])->name('mypage.reauth');
+Route::post('/mypage/open', [MyPageController::class, 'openByPin'])->name('mypage.open');
+Route::post('/mypage', [MyPageController::class, 'store'])->name('mypage.store');
+Route::post('/mypage/auto-logout', [MyPageController::class, 'autoLogout'])->name('mypage.auto-logout');
+// 旧 Presence 独立ページ → My page へ 302 リダイレクト（ブックマーク互換）
+Route::get('/mypage/attendance', function (Request $request) {
+    $params = array_filter([
+        'staff_id' => $request->integer('staff_id') ?: null,
+        'month' => $request->input('month') ?: null,
+    ]);
+
+    return redirect()->route('mypage.index', $params, 302);
+})->name('mypage.attendance');
+
+// 固定パスを {id} の前に並べること（ルータは上から順にマッチするため）
+Route::post('/news/auth', [NewsNoteController::class, 'auth'])->name('news.auth');
+Route::post('/news/logout', [NewsNoteController::class, 'logout'])->name('news.logout');
+Route::get('/news/manage', [NewsNoteController::class, 'manage'])->name('news.manage');
+Route::post('/news', [NewsNoteController::class, 'store'])->name('news.store');
+Route::post('/news/{id}', [NewsNoteController::class, 'update'])->name('news.update');
+Route::post('/news/{id}/delete', [NewsNoteController::class, 'destroy'])->name('news.destroy');
+
+Route::prefix('inventory')->name('inventory.')->group(function () {
+    Route::get('/', [ClientInventoryController::class, 'index'])->name('index');
+    Route::get('/input/{timing}/{staff_id}', [ClientInventoryController::class, 'input'])->name('input');
+    Route::post('/store', [ClientInventoryController::class, 'store'])->name('store');
+});
+
+// ── Guest mobile order UI ──────────────────────────────────────────────────────
+// Isolated from Filament/admin. SetGuestLocale resolves fr|en from Accept-Language.
+// Ver2: tenantSlug resolved from tableToken directly (opaque signed token).
+Route::middleware(SetGuestLocale::class)
+    ->group(function () {
+        Route::get(
+            '/guest/menu/{tenantSlug}/{tableToken}',
+            GuestMenuPage::class
+        )->name('guest.menu');
+    });
+
+// ── Isolated Epson hardware sanity check (not wired into POS / Livewire) ─────
+Route::get('/printer-test', function () {
+    return view('printer-test');
+})->name('printer-test');
+
+Route::get('/pos/receipt-preview', function (Request $request) {
+    abort_unless(Auth::check(), 403);
+
+    $shopId = max(0, (int) $request->query('shop_id', 0));
+    $tableSessionId = max(0, (int) $request->query('table_session_id', 0));
+    $expectedRevision = max(0, (int) $request->query('expected_revision', 0));
+    $intent = (string) $request->query('intent', 'addition');
+
+    abort_unless($shopId > 0 && $tableSessionId > 0, 404);
+
+    return view('pos.receipt-preview-page', [
+        'shopId' => $shopId,
+        'tableSessionId' => $tableSessionId,
+        'expectedRevision' => $expectedRevision,
+        'intent' => $intent,
+    ]);
+})->name('pos.receipt-preview.page');
+
+Route::get('/history_cloture', function () {
+    abort_unless(Auth::check(), 403);
+
+    return view('pos.history-cloture-page');
+})->name('pos.history-cloture.page');
+</file>
+
 <file path="app/Livewire/Pos/TableStatusGrid.php">
 <?php
 
@@ -9995,7 +10030,7 @@ class TableStatusGrid extends Component
     role="region"
     aria-label="{{ __('pos.takeaway_region_label') }}"
 >
-    <div class="max-w-full px-1 py-1 sm:px-5 sm:py-4">
+    <div class="max-w-full px-1 py-1 sm:px-1 sm:py-1">
         @if (count($takeawayTiles) === 0)
             <p class="text-[10px] text-yellow-950/80 dark:text-yellow-100/90">
                 {{ __('pos.takeaway_no_tables') }}
@@ -13260,25 +13295,10 @@ class TableActionHost extends Component
         <div class="grid grid-cols-2 items-center gap-1.5 sm:gap-2">
             <button
                 type="button"
-                x-on:click="
-                    if ($wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)) { return; }
-                    const hasItems = lineSurfaceMode === 'afterimage'
-                        ? afterimageLines.length > 0
-                        : {{ (int) $this->posOrders->count() }} > 0;
-                    if (!hasItems) {
-                        alert('商品がありません');
-                        return;
-                    }
-                    const url = new URL(@js(route('pos.receipt-preview.page')), window.location.origin);
-                    url.searchParams.set('shop_id', String({{ (int) $this->shopId }}));
-                    url.searchParams.set('table_session_id', String($wire.activeTableSessionId));
-                    url.searchParams.set('expected_revision', String($wire.expectedSessionRevision || 0));
-                    url.searchParams.set('intent', 'addition');
-                    window.open(url.toString(), '_blank', 'noopener');
-                "
-                x-bind:disabled="$wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)"
+                wire:click="openReceiptPreview('addition')"
+                x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                 wire:loading.attr="disabled"
-                wire:target="printAddition"
+                wire:target="openReceiptPreview"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
                 title="{{ __('pos.action_addition_bill') }}"
             >
@@ -13292,23 +13312,8 @@ class TableActionHost extends Component
             </button>
             <button
                 type="button"
-                x-on:click="
-                    if ($wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)) { return; }
-                    const hasItems = lineSurfaceMode === 'afterimage'
-                        ? afterimageLines.length > 0
-                        : {{ (int) $this->posOrders->count() }} > 0;
-                    if (!hasItems) {
-                        alert('商品がありません');
-                        return;
-                    }
-                    const url = new URL(@js(route('pos.receipt-preview.page')), window.location.origin);
-                    url.searchParams.set('shop_id', String({{ (int) $this->shopId }}));
-                    url.searchParams.set('table_session_id', String($wire.activeTableSessionId));
-                    url.searchParams.set('expected_revision', String($wire.expectedSessionRevision || 0));
-                    url.searchParams.set('intent', 'receipt');
-                    window.open(url.toString(), '_blank', 'noopener');
-                "
-                x-bind:disabled="$wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)"
+                wire:click="checkoutSession"
+                x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"

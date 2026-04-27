@@ -30,5 +30,8 @@ final class TableActionHostPrintPreviewTest extends TestCase
             ->assertSet('showReceiptPreview', true)
             ->assertSet('previewIntent', PrintIntent::Addition->value)
             ->assertSet('previewSessionId', (int) $session->id);
+
+        $session->refresh();
+        $this->assertNotNull($session->last_addition_printed_at);
     }
 }

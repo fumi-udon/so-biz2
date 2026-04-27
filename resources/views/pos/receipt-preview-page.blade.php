@@ -19,5 +19,22 @@
 
     @livewireScripts
     @filamentScripts(withCore: true)
+
+    {{-- スタンドアロンタブ専用: 戻るで Filament 管理画面へ落ちる事故を防ぎ POS へ誘導（モーダル埋め込みでは本レイアウトは使わない） --}}
+    <script>
+        (function () {
+            const posUrl = @json($posMainEscapeUrl ?? '');
+
+            if (!posUrl) {
+                return;
+            }
+
+            history.pushState(null, null, window.location.href);
+
+            window.addEventListener('popstate', function () {
+                window.location.replace(posUrl);
+            });
+        })();
+    </script>
 </body>
 </html>

@@ -4,7 +4,6 @@ namespace App\Livewire\Pos;
 
 use App\Actions\Pos\Print\DispatchPrintJobAction;
 use App\Actions\Pos\Print\DispatchPrintJobRequest;
-use App\Actions\RadTable\RecordAdditionPrintForSessionAction;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PrintIntent;
@@ -92,14 +91,6 @@ class ReceiptPreview extends Component
         try {
             $physicalEnabled = (bool) config('pos.printer.physical_enabled', true);
             if (! $physicalEnabled) {
-                if ($this->printIntent === PrintIntent::Addition) {
-                    app(RecordAdditionPrintForSessionAction::class)->execute(
-                        $this->shopId,
-                        $this->tableSessionId,
-                        $this->expectedSessionRevision,
-                    );
-                    $this->expectedSessionRevision++;
-                }
                 $this->uiState = 'success';
                 $this->dispatch(
                     'receipt-preview-printed',
@@ -160,15 +151,6 @@ class ReceiptPreview extends Component
                 payloadMeta: $payloadMeta,
                 idempotencyNonce: $idempotencyNonce,
             ));
-
-            if ($this->printIntent === PrintIntent::Addition) {
-                app(RecordAdditionPrintForSessionAction::class)->execute(
-                    $this->shopId,
-                    $this->tableSessionId,
-                    $this->expectedSessionRevision,
-                );
-                $this->expectedSessionRevision++;
-            }
 
             $this->dispatch(
                 'pos-trigger-print',

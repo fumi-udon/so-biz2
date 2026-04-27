@@ -823,25 +823,10 @@
         <div class="grid grid-cols-2 items-center gap-1.5 sm:gap-2">
             <button
                 type="button"
-                x-on:click="
-                    if ($wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)) { return; }
-                    const hasItems = lineSurfaceMode === 'afterimage'
-                        ? afterimageLines.length > 0
-                        : {{ (int) $this->posOrders->count() }} > 0;
-                    if (!hasItems) {
-                        alert('商品がありません');
-                        return;
-                    }
-                    const url = new URL(@js(route('pos.receipt-preview.page')), window.location.origin);
-                    url.searchParams.set('shop_id', String({{ (int) $this->shopId }}));
-                    url.searchParams.set('table_session_id', String($wire.activeTableSessionId));
-                    url.searchParams.set('expected_revision', String($wire.expectedSessionRevision || 0));
-                    url.searchParams.set('intent', 'addition');
-                    window.open(url.toString(), '_blank', 'noopener');
-                "
-                x-bind:disabled="$wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)"
+                wire:click="openReceiptPreview('addition')"
+                x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                 wire:loading.attr="disabled"
-                wire:target="printAddition"
+                wire:target="openReceiptPreview"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
                 title="{{ __('pos.action_addition_bill') }}"
             >
@@ -855,23 +840,8 @@
             </button>
             <button
                 type="button"
-                x-on:click="
-                    if ($wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)) { return; }
-                    const hasItems = lineSurfaceMode === 'afterimage'
-                        ? afterimageLines.length > 0
-                        : {{ (int) $this->posOrders->count() }} > 0;
-                    if (!hasItems) {
-                        alert('商品がありません');
-                        return;
-                    }
-                    const url = new URL(@js(route('pos.receipt-preview.page')), window.location.origin);
-                    url.searchParams.set('shop_id', String({{ (int) $this->shopId }}));
-                    url.searchParams.set('table_session_id', String($wire.activeTableSessionId));
-                    url.searchParams.set('expected_revision', String($wire.expectedSessionRevision || 0));
-                    url.searchParams.set('intent', 'receipt');
-                    window.open(url.toString(), '_blank', 'noopener');
-                "
-                x-bind:disabled="$wire.activeTableSessionId === null || $wire.uiState === 'in_flight' || @js($footerLocked)"
+                wire:click="checkoutSession"
+                x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"
@@ -1242,12 +1212,17 @@
     @endif
 
     @if ($showReceiptPreview && $previewSessionId > 0)
-        <livewire:pos.receipt-preview
-            :shop-id="$this->shopId"
-            :table-session-id="$previewSessionId"
-            :intent="$previewIntent"
-            :expected-session-revision="$expectedSessionRevision"
-            :key="'pos-receipt-preview-'.$this->shopId.'-'.$previewSessionId.'-'.$previewIntent.'-'.$expectedSessionRevision"
-        />
+        {{-- wire:key を親に持たせ、子 Livewire のマウント境界を pos-refresh-tiles 連鎖の morph から切り離す --}}
+        <div
+            wire:key="pos-receipt-preview-mount-{{ $this->shopId }}-{{ $previewSessionId }}-{{ $previewIntent }}-{{ $expectedSessionRevision }}"
+        >
+            <livewire:pos.receipt-preview
+                :shop-id="$this->shopId"
+                :table-session-id="$previewSessionId"
+                :intent="$previewIntent"
+                :expected-session-revision="$expectedSessionRevision"
+                :key="'pos-receipt-preview-'.$this->shopId.'-'.$previewSessionId.'-'.$previewIntent.'-'.$expectedSessionRevision"
+            />
+        </div>
     @endif
 </div>

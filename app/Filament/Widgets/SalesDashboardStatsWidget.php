@@ -14,7 +14,7 @@ class SalesDashboardStatsWidget extends StatsOverviewWidget
 
     protected function getColumns(): int
     {
-        return 2;
+        return 3;
     }
 
     /**
@@ -25,8 +25,9 @@ class SalesDashboardStatsWidget extends StatsOverviewWidget
         $shopId = $this->resolveCurrentShopId();
         if ($shopId < 1) {
             return [
-                Stat::make('今月売上', '0 DT')->color('gray'),
-                Stat::make('先月売上', '0 DT')->color('gray'),
+                Stat::make('今月累計', '0 DT')->color('gray'),
+                Stat::make('今週累計', '0 DT')->color('gray'),
+                Stat::make('90日平均日販', '0 DT')->color('gray'),
             ];
         }
 
@@ -34,25 +35,27 @@ class SalesDashboardStatsWidget extends StatsOverviewWidget
         $nowLocal = Carbon::now($tz);
         $currentBusinessStart = $this->currentBusinessStart($nowLocal);
         $thisMonthStartLocal = $currentBusinessStart->copy()->startOfMonth()->setTime(4, 0, 0);
-        $lastMonthStartLocal = $thisMonthStartLocal->copy()->subMonthNoOverflow()->startOfMonth()->setTime(4, 0, 0);
-        $thisMonthEndLocal = $thisMonthStartLocal->copy()->addMonthNoOverflow();
+        $thisWeekStartLocal = $currentBusinessStart->copy()->startOfWeek(Carbon::MONDAY)->setTime(4, 0, 0);
+        $window90StartLocal = $currentBusinessStart->copy()->subDays(89)->setTime(4, 0, 0);
+
+        $toUtc = $nowLocal->copy()->utc();
+        $monthlyMinor = $this->sumMinor($shopId, $thisMonthStartLocal->copy()->utc(), $toUtc);
+        $weeklyMinor = $this->sumMinor($shopId, $thisWeekStartLocal->copy()->utc(), $toUtc);
+        $window90Minor = $this->sumMinor($shopId, $window90StartLocal->copy()->utc(), $toUtc);
+        $average90Minor = (int) floor($window90Minor / 90);
 
         return [
-            Stat::make('今月売上', $this->formatMinor($this->sumMinor(
-                $shopId,
-                $thisMonthStartLocal->copy()->utc(),
-                $nowLocal->copy()->utc()
-            )))
+            Stat::make('今月累計', $this->formatMinor($monthlyMinor))
                 ->description('当月1日 04:00〜現在')
                 ->icon('heroicon-o-calendar-days')
                 ->color('success'),
-            Stat::make('先月売上', $this->formatMinor($this->sumMinor(
-                $shopId,
-                $lastMonthStartLocal->copy()->utc(),
-                $thisMonthEndLocal->copy()->utc()
-            )))
-                ->description('先月1日 04:00〜当月1日 03:59')
-                ->icon('heroicon-o-clock')
+            Stat::make('今週累計', $this->formatMinor($weeklyMinor))
+                ->description('月曜 04:00〜現在')
+                ->icon('heroicon-o-calendar')
+                ->color('info'),
+            Stat::make('90日平均日販', $this->formatMinor($average90Minor))
+                ->description('直近90営業日の1日平均')
+                ->icon('heroicon-o-chart-bar')
                 ->color('warning'),
         ];
     }
