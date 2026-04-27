@@ -38,7 +38,7 @@
     x-on:pos-customer-grid-clear-selection.window="selectedTableId = null"
 >
     <div
-        class="flex min-h-0 min-w-0 flex-col overflow-x-hidden rounded-lg border-2 border-blue-200 bg-white/95 p-1 dark:border-blue-700 dark:bg-slate-900 sm:rounded-xl"
+        class="flex min-h-0 min-w-0 flex-col overflow-x-hidden rounded-lg border-2 border-blue-200 bg-white/95 p-0.5 dark:border-blue-700 dark:bg-slate-900 sm:rounded-xl"
     >
         @if (count($customerTiles) === 0)
             <p class="text-xs text-gray-700 dark:text-gray-200 sm:text-sm">
@@ -47,7 +47,7 @@
         @else
             {{-- グリッド（旧）: grid h-full min-h-0 … auto-rows-fr grid-cols-3 content-stretch items-stretch justify-items-stretch gap-[8px] overflow-visible py-0.5 sm:grid-cols-3 sm:gap-[8px] --}}
             <div
-                class="grid w-full min-w-0 max-w-full grid-cols-3 gap-[3px] sm:grid-cols-3 sm:gap-[4px]"
+                class="grid w-full min-w-0 max-w-full grid-cols-3 gap-px sm:grid-cols-3 sm:gap-px"
             >
                 @foreach ($customerTiles as $tile)
                     @php
@@ -100,14 +100,14 @@
                             }"
                             {{-- セル button（旧）: … min-h-[96px] … sm:min-h-[104px] … --}}
                             @class([
-                                'relative z-0 flex h-full min-h-[80px] w-full touch-manipulation flex-col rounded-md border-2 border-transparent p-0 py-[13px] text-left text-[10px] font-bold leading-none active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 sm:min-h-[88px] sm:text-xs',
+                                'relative z-0 flex h-full min-h-[60px] w-full touch-manipulation flex-col rounded-md border-2 border-transparent p-0 py-1 text-left text-[10px] font-bold leading-none active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 sm:min-h-[64px] sm:text-xs',
                             ])
                             data-ui-status="{{ $tile['uiStatus'] ?? 'free' }}"
                             data-category="{{ $tile['category'] ?? '' }}"
                         >
                             <div
                                 @class([
-                                    'box-border flex h-full min-h-0 min-w-0 flex-col justify-center gap-0 overflow-hidden rounded-sm px-1.5 py-[7px] sm:px-2',
+                                    'box-border flex h-full min-h-0 min-w-0 flex-col justify-center gap-0 overflow-hidden rounded-sm px-1 py-0.5 sm:px-1.5 sm:py-1',
                                     $this->tileSurfaceClasses($tile),
                                 ])
                                 :class="{
