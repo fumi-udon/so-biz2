@@ -75,6 +75,7 @@ return [
     'order_voided_cannot_edit' => 'This order is voided.',
     'add_modal_title' => 'Add to table',
     'add_modal_close' => 'Close',
+    'add_modal_list_footer_hint' => 'Tap a product to add it to the table. Use Validate CMD to send pending kitchen orders (same as the table header).',
     'add_item_load_error' => 'Could not load the menu item.',
     'add_no_menu' => 'No menu items in this shop.',
     'add_select_style' => 'Style',

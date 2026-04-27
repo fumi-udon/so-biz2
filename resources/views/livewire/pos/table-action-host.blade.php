@@ -59,6 +59,12 @@
             this.seenUnsentLineKeys[key] = true;
             return true;
         },
+        scrollAddCatalogToCategory(catId) {
+            const el = document.getElementById('pos-add-category-' + catId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        },
     }"
     x-init="
         (function () {
@@ -360,7 +366,6 @@
                     "
                     x-bind:disabled="
                         isLocalSkeletonVisible
-                        || (lineSurfaceMode === 'afterimage' && !@js($this->hasUnackedPlaced))
                         || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
                     "
                     class="rounded-md border-2 border-blue-950 bg-blue-500 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:py-1.5 sm:text-[11px]"
@@ -485,7 +490,7 @@
                                             @if (! $this->isBilledState)
                                                 wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                             @endif
-                                            x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js($footerLocked)"
+                                            x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                                             wire:loading.attr="disabled"
                                             wire:target="promptRemoveLine({{ (int) $line->id }})"
                                             class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -531,7 +536,7 @@
                                         @if (! $this->isBilledState)
                                             wire:confirm="{{ __('pos.remove_line_confirm') }}"
                                         @endif
-                                        x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js($footerLocked)"
+                                        x-bind:disabled="isLocalSkeletonVisible || @js($footerLocked)"
                                         wire:loading.attr="disabled"
                                         wire:target="promptRemoveLine({{ (int) $line->id }})"
                                         class="row-span-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border border-slate-400 bg-slate-200 text-[10px] font-bold text-slate-700 hover:bg-slate-300 focus:ring-1 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
@@ -753,7 +758,7 @@
             <button
                 type="button"
                 wire:click="printAddition"
-                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canImprimerAddition || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-start rounded-lg border-2 border-orange-900 bg-orange-500 text-white shadow-md hover:bg-orange-600 focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-16 sm:w-16"
@@ -770,7 +775,7 @@
             <button
                 type="button"
                 wire:click="checkoutSession"
-                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canCloture || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canCloture || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="checkoutSession"
                 class="flex h-14 w-14 min-h-11 min-w-11 flex-col items-center justify-center justify-self-end rounded-lg border-2 border-pink-900 bg-pink-500 text-yellow-300 shadow-md hover:bg-pink-600 focus:ring-2 focus:ring-pink-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:border-pink-900 disabled:bg-pink-500 disabled:text-yellow-300 sm:h-16 sm:w-16"
@@ -800,7 +805,7 @@
             <button
                 type="button"
                 wire:click="printAddition"
-                x-bind:disabled="isLocalSkeletonVisible || lineSurfaceMode === 'afterimage' || @js(! $this->canImprimerAddition || $footerLocked)"
+                x-bind:disabled="isLocalSkeletonVisible || @js(! $this->canImprimerAddition || $footerLocked)"
                 wire:loading.attr="disabled"
                 wire:target="printAddition"
                 class="min-h-9 rounded-md border-2 border-sky-900 bg-sky-100 py-1 text-center text-[10px] font-extrabold uppercase tracking-wide text-sky-950 shadow-sm hover:bg-sky-200 focus:ring-2 focus:ring-sky-200 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-[11px]"
@@ -836,12 +841,12 @@
             ></div>
             <div
                 @click.stop
-                class="relative {{ $zAddModalPanel }} m-0 flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border-4 border-blue-600 bg-white text-slate-950 shadow-2xl sm:m-4 sm:rounded-2xl dark:border-blue-500 dark:bg-slate-900 dark:text-white"
+                class="relative {{ $zAddModalPanel }} m-0 flex h-[90dvh] max-h-[90dvh] w-full max-w-7xl flex-col overflow-hidden rounded-t-2xl border-4 border-blue-600 bg-white text-slate-950 shadow-2xl sm:m-4 sm:w-[90vw] sm:rounded-2xl dark:border-blue-500 dark:bg-slate-900 dark:text-white"
             >
                 <div
                     class="flex shrink-0 items-center justify-between border-b-4 border-blue-600 bg-blue-100 px-3 py-2.5 dark:border-blue-500 dark:bg-blue-950/40"
                 >
-                    <h3 class="text-sm font-bold">
+                    <h3 class="min-w-0 truncate text-base font-bold text-gray-950 dark:text-white">
                         @if ($addModalStep === 'config')
                             {{ $this->addItemForConfig?->name }}
                         @else
@@ -853,188 +858,261 @@
                         wire:click="closeAddModal"
                         wire:loading.attr="disabled"
                         wire:target="closeAddModal"
-                        class="rounded border border-slate-400 bg-white px-2 py-0.5 text-sm font-bold text-slate-900 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
+                        class="touch-manipulation rounded border border-slate-400 bg-white px-3 py-1.5 text-sm font-bold text-slate-900 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
                     >
                         {{ __('pos.add_modal_close') }}
                     </button>
                 </div>
-                <div
-                    class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2"
-                >
-                    @if ($addModalStep === 'config' && $this->addItemForConfig)
-                        @php
-                            $i = $this->addItemForConfig;
-                            $stylesL = $this->getStylesListForItem($i);
-                            $topsL = $this->getToppingsListForItem($i);
-                            $styleReq = $this->isStyleRequiredFor($i);
-                        @endphp
-                        <p class="mb-2 text-xs text-gray-600 dark:text-gray-300">
-                            {{ $i->name }} ·
-                            <span class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                                {{ $this->formatMinor((int) $i->from_price_minor) }}
-                            </span>
-                        </p>
-                        @if (count($stylesL) > 0)
-                            <p
-                                class="mb-1 text-xs font-bold uppercase text-gray-800 dark:text-gray-200"
+                @if ($addModalStep === 'list')
+                    <div class="flex min-h-0 flex-1 overflow-hidden">
+                        @if (count($addCatalog) > 0)
+                            <aside
+                                class="flex w-[25%] min-w-[10rem] max-w-[14rem] shrink-0 flex-col overflow-y-auto overscroll-contain border-e-4 border-blue-200 bg-slate-50 py-2 ps-2 pe-1.5 dark:border-blue-800 dark:bg-slate-800/80"
+                                aria-label="{{ __('pos.add_modal_title') }}"
                             >
-                                {{ __('pos.add_select_style') }}
-                            </p>
-                            <ul class="mb-2 space-y-1">
-                                @foreach ($stylesL as $s)
-                                    <li>
-                                        <label
-                                            class="flex items-center justify-between gap-2 rounded border border-gray-200 px-2 py-1.5 text-sm dark:border-gray-600"
-                                        >
-                                            <span
-                                                class="inline-flex items-center gap-2 text-gray-900 dark:text-white"
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    class="h-3.5 w-3.5"
-                                                    name="add-style"
-                                                    value="{{ $s['id'] }}"
-                                                    wire:model="addStyleId"
-                                                />
-                                                <span>{{ $s['name'] }}</span>
-                                            </span>
-                                            <span
-                                                class="shrink-0 text-xs font-medium tabular-nums text-gray-800 dark:text-gray-200"
-                                            >{{ $s['price_label'] }}</span>
-                                        </label>
-                                    </li>
+                                @foreach ($addCatalog as $block)
+                                    <button
+                                        type="button"
+                                        class="touch-manipulation mb-1 w-full rounded-lg border-2 border-transparent bg-white px-2 py-3 text-left text-sm font-bold leading-snug text-gray-950 shadow-sm hover:border-blue-400 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:bg-slate-900 dark:text-white dark:hover:border-blue-500 dark:hover:bg-slate-800"
+                                        @click.prevent="scrollAddCatalogToCategory({{ (int) $block['id'] }})"
+                                    >{{ $block['name'] }}</button>
                                 @endforeach
-                            </ul>
-                        @endif
-                        @if ($styleReq && count($stylesL) > 0 && ($addStyleId === null || $addStyleId === ''))
-                            <p class="mb-2 text-xs text-amber-800 dark:text-amber-200">
-                                {{ __('pos.add_style_required_hint') }}
-                            </p>
-                        @endif
-                        @if (count($topsL) > 0)
-                            <p
-                                class="mb-1 text-xs font-bold uppercase text-gray-800 dark:text-gray-200"
-                            >
-                                {{ __('pos.add_select_toppings') }}
-                            </p>
-                            <ul class="mb-2 space-y-0.5">
-                                @foreach ($topsL as $t)
-                                    @php
-                                        $tChecked = in_array(
-                                            (string) $t['id'],
-                                            $addToppings,
-                                            true,
-                                        );
-                                    @endphp
-                                    <li>
-                                        <button
-                                            type="button"
-                                            class="flex w-full items-center justify-between gap-2 rounded border-2 border-amber-500 bg-amber-50 px-2 py-1.5 text-left text-sm font-semibold text-slate-900 hover:bg-amber-100 focus:ring-2 focus:ring-amber-400 dark:border-amber-500 dark:bg-amber-950/30 dark:text-white dark:hover:bg-amber-900/40"
-                                            wire:click="toggleAddTopping('{{ $t['id'] }}')"
-                                            wire:loading.attr="disabled"
-                                            wire:target="toggleAddTopping"
-                                        >
-                                            <span
-                                                @class(['font-semibold' => $tChecked])
-                                            >{{ $tChecked ? '☑' : '☐' }} {{ $t['name'] }}</span>
-                                            <span
-                                                class="shrink-0 text-xs font-medium tabular-nums text-gray-800 dark:text-gray-200"
-                                            >+{{ $t['price_label'] }}</span>
-                                        </button>
-                                    </li>
-                                @endforeach
-                            </ul>
+                            </aside>
                         @endif
                         <div
-                            class="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
+                            @class([
+                                'min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2',
+                                'w-full' => count($addCatalog) === 0,
+                            ])
                         >
-                            <div>
-                                <label
-                                    class="mb-0.5 block text-xs font-medium text-gray-800 dark:text-gray-200"
-                                >{{ __('pos.add_qty') }}</label>
-                                <input
-                                    type="number"
-                                    class="w-full min-h-10 rounded border border-gray-300 bg-white px-2 text-sm text-gray-950 focus:ring-2 focus:ring-amber-500 dark:border-gray-500 dark:bg-gray-800 dark:text-white"
-                                    min="1"
-                                    max="200"
-                                    step="1"
-                                    wire:model.blur="addQty"
-                                />
-                            </div>
-                            <div>
-                                <label
-                                    class="mb-0.5 block text-xs font-medium text-gray-800 dark:text-gray-200"
-                                >{{ __('pos.add_note') }}</label>
-                                <input
-                                    type="text"
-                                    class="w-full min-h-10 rounded border border-gray-300 bg-white px-2 text-sm text-gray-950 focus:ring-2 focus:ring-amber-500 dark:border-gray-500 dark:bg-gray-800 dark:text-white"
-                                    wire:model.debounce.500ms="addNote"
-                                />
-                            </div>
-                        </div>
-                    @elseif ($addModalStep === 'config' && $this->addItemForConfig === null)
-                        <p
-                            class="text-sm text-gray-800 dark:text-gray-200"
-                        >{{ __('pos.add_item_load_error') }}</p>
-                    @endif
-
-                    @if ($addModalStep === 'list')
-                        <div class="space-y-2">
                             @if (count($addCatalog) === 0)
                                 <p
-                                    class="text-sm text-gray-800 dark:text-gray-200"
+                                    class="text-base text-gray-800 dark:text-gray-200"
                                 >{{ __('pos.add_no_menu') }}</p>
                             @endif
                             @foreach ($addCatalog as $block)
-                                <div>
-                                    <p
-                                        class="mb-0.5 text-xs font-bold uppercase text-gray-700 dark:text-gray-200"
-                                    >{{ $block['name'] }}</p>
-                                    <ul class="space-y-0.5">
+                                <section class="mb-4 last:mb-1">
+                                    <h3
+                                        id="pos-add-category-{{ (int) $block['id'] }}"
+                                        class="scroll-mt-3 border-b-2 border-blue-200 pb-1 text-base font-extrabold uppercase tracking-wide text-gray-950 dark:border-blue-700 dark:text-white"
+                                    >{{ $block['name'] }}</h3>
+                                    <ul class="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2">
                                         @foreach ($block['items'] as $m)
                                             <li>
                                                 <button
                                                     type="button"
-                                                    class="flex w-full items-center justify-between gap-2 rounded border-2 border-blue-400 bg-white py-1.5 text-left text-sm font-semibold hover:bg-blue-50 focus:ring-2 focus:ring-blue-400 dark:border-blue-600 dark:bg-slate-800 dark:hover:bg-slate-700"
+                                                    class="touch-manipulation flex min-h-[80px] w-full items-center justify-between gap-3 rounded-xl border-2 border-blue-400 bg-white px-4 py-3 text-left text-base font-bold text-gray-950 shadow-sm hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:border-blue-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
                                                     wire:click="beginConfigureItem({{ (int) $m['id'] }})"
                                                     wire:loading.attr="disabled"
                                                     wire:target="beginConfigureItem"
                                                 >
                                                     <span
-                                                        class="min-w-0 truncate text-gray-950 dark:text-white"
+                                                        class="min-w-0 flex-1 leading-snug text-gray-950 dark:text-white"
                                                     >{{ $m['name'] }}</span>
                                                     <span
-                                                        class="shrink-0 text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-100"
+                                                        class="shrink-0 text-base font-semibold tabular-nums text-gray-800 dark:text-gray-100"
                                                     >{{ $m['from_label'] }}</span>
                                                 </button>
                                             </li>
                                         @endforeach
                                     </ul>
-                                </div>
+                                </section>
                             @endforeach
                         </div>
-                    @endif
-                </div>
+                    </div>
+                @else
+                    <div
+                        class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2"
+                    >
+                        @if ($addModalStep === 'config' && $this->addItemForConfig)
+                            @php
+                                $i = $this->addItemForConfig;
+                                $stylesL = $this->getStylesListForItem($i);
+                                $topsL = $this->getToppingsListForItem($i);
+                                $styleReq = $this->isStyleRequiredFor($i);
+                            @endphp
+                            <p class="mb-2 text-sm text-gray-600 dark:text-gray-300">
+                                {{ $i->name }} ·
+                                <span class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                    {{ $this->formatMinor((int) $i->from_price_minor) }}
+                                </span>
+                            </p>
+                            @if (count($stylesL) > 0)
+                                <p
+                                    class="mb-1 text-xs font-bold uppercase text-gray-800 dark:text-gray-200"
+                                >
+                                    {{ __('pos.add_select_style') }}
+                                </p>
+                                <ul class="mb-2 space-y-2">
+                                    @foreach ($stylesL as $s)
+                                        <li>
+                                            <label
+                                                class="flex min-h-14 cursor-pointer touch-manipulation items-center justify-between gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base active:bg-gray-50 dark:border-gray-600 dark:bg-slate-900 dark:active:bg-slate-800"
+                                            >
+                                                <span
+                                                    class="inline-flex min-w-0 flex-1 items-center gap-3 text-gray-950 dark:text-white"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        class="size-5 shrink-0 border-gray-400 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-500 dark:text-blue-500"
+                                                        name="add-style"
+                                                        value="{{ $s['id'] }}"
+                                                        wire:model="addStyleId"
+                                                    />
+                                                    <span class="font-semibold leading-snug">{{ $s['name'] }}</span>
+                                                </span>
+                                                <span
+                                                    class="shrink-0 text-sm font-medium tabular-nums text-gray-800 dark:text-gray-200"
+                                                >{{ $s['price_label'] }}</span>
+                                            </label>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                            @if ($styleReq && count($stylesL) > 0 && ($addStyleId === null || $addStyleId === ''))
+                                <p class="mb-2 text-xs text-amber-800 dark:text-amber-200">
+                                    {{ __('pos.add_style_required_hint') }}
+                                </p>
+                            @endif
+                            @if (count($topsL) > 0)
+                                <p
+                                    class="mb-1 text-xs font-bold uppercase text-gray-800 dark:text-gray-200"
+                                >
+                                    {{ __('pos.add_select_toppings') }}
+                                </p>
+                                <ul class="mb-2 space-y-2">
+                                    @foreach ($topsL as $t)
+                                        @php
+                                            $tChecked = in_array(
+                                                (string) $t['id'],
+                                                $addToppings,
+                                                true,
+                                            );
+                                        @endphp
+                                        <li>
+                                            <button
+                                                type="button"
+                                                class="flex min-h-14 w-full touch-manipulation items-center justify-between gap-3 rounded-xl border-2 border-amber-500 bg-amber-50 px-4 py-3 text-left text-base font-bold text-slate-950 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 active:bg-amber-100 dark:border-amber-500 dark:bg-amber-950/30 dark:text-white dark:hover:bg-amber-900/40 dark:active:bg-amber-900/50"
+                                                wire:click="toggleAddTopping('{{ $t['id'] }}')"
+                                                wire:loading.attr="disabled"
+                                                wire:target="toggleAddTopping"
+                                            >
+                                                <span
+                                                    @class([
+                                                        'min-w-0 flex-1 leading-snug',
+                                                        'font-extrabold' => $tChecked,
+                                                        'font-semibold' => ! $tChecked,
+                                                    ])
+                                                >{{ $tChecked ? '☑' : '☐' }} {{ $t['name'] }}</span>
+                                                <span
+                                                    class="shrink-0 text-sm font-semibold tabular-nums text-gray-800 dark:text-gray-200"
+                                                >+{{ $t['price_label'] }}</span>
+                                            </button>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                            <div
+                                class="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
+                            >
+                                <div>
+                                    <label
+                                        class="mb-0.5 block text-xs font-medium text-gray-800 dark:text-gray-200"
+                                    >{{ __('pos.add_qty') }}</label>
+                                    <input
+                                        type="number"
+                                        class="w-full min-h-10 rounded border border-gray-300 bg-white px-2 text-sm text-gray-950 focus:ring-2 focus:ring-amber-500 dark:border-gray-500 dark:bg-gray-800 dark:text-white"
+                                        min="1"
+                                        max="200"
+                                        step="1"
+                                        wire:model.blur="addQty"
+                                    />
+                                </div>
+                                <div>
+                                    <label
+                                        class="mb-0.5 block text-xs font-medium text-gray-800 dark:text-gray-200"
+                                    >{{ __('pos.add_note') }}</label>
+                                    <input
+                                        type="text"
+                                        class="w-full min-h-10 rounded border border-gray-300 bg-white px-2 text-sm text-gray-950 focus:ring-2 focus:ring-amber-500 dark:border-gray-500 dark:bg-gray-800 dark:text-white"
+                                        wire:model.debounce.500ms="addNote"
+                                    />
+                                </div>
+                            </div>
+                        @elseif ($addModalStep === 'config' && $this->addItemForConfig === null)
+                            <p
+                                class="text-sm text-gray-800 dark:text-gray-200"
+                            >{{ __('pos.add_item_load_error') }}</p>
+                        @endif
+                    </div>
+                @endif
                 <div
-                    class="flex shrink-0 gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 dark:border-blue-500 dark:bg-slate-900"
+                    class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
                 >
-                    @if ($addModalStep === 'config')
-                        <button
-                            type="button"
-                            wire:click="backToAddList"
-                            wire:loading.attr="disabled"
-                            wire:target="backToAddList"
-                            class="min-h-10 flex-1 rounded-md border-2 border-slate-600 bg-white py-2 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
-                        >{{ __('pos.add_back') }}</button>
-                        @if ($this->addItemForConfig)
+                    @if ($addModalStep === 'list')
+                        <p class="text-xs leading-snug text-gray-700 dark:text-gray-200">
+                            {{ __('pos.add_modal_list_footer_hint') }}
+                        </p>
+                        <div class="flex flex-col gap-2 sm:flex-row">
                             <button
                                 type="button"
-                                wire:click="submitAddLine"
+                                wire:click="closeAddModal"
                                 wire:loading.attr="disabled"
-                                wire:target="submitAddLine"
-                                class="min-h-10 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-2 text-sm font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600"
-                            >{{ __('pos.add_submit') }}</button>
-                        @endif
+                                wire:target="closeAddModal"
+                                class="touch-manipulation min-h-12 shrink-0 rounded-md border-2 border-slate-600 bg-white px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 sm:w-40 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
+                            >{{ __('pos.add_modal_close') }}</button>
+                            <button
+                                type="button"
+                                x-on:click="
+                                    if (bulkSyncing || $wire.uiState === 'in_flight') { return; }
+                                    bulkSyncing = true;
+                                    const s = Alpine.store('posDraft');
+                                    $wire.bulkAddAndConfirm([]).then(() => {
+                                        if (s && s.shopId && s.sessionId) {
+                                            s.clearSession(s.shopId, s.sessionId, true);
+                                        }
+                                    }).finally(() => {
+                                        bulkSyncing = false;
+                                    });
+                                "
+                                x-bind:disabled="
+                                    bulkSyncing
+                                    || isLocalSkeletonVisible
+                                    || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
+                                "
+                                wire:loading.attr="disabled"
+                                wire:target="bulkAddAndConfirm"
+                                class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-blue-950 bg-blue-500 px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 dark:text-white"
+                            >
+                                <span
+                                    wire:loading.remove
+                                    wire:target="bulkAddAndConfirm"
+                                >{{ __('pos.action_recu_staff') }}</span>
+                                <span
+                                    wire:loading
+                                    wire:target="bulkAddAndConfirm"
+                                >{{ __('pos.ui_working') }}</span>
+                            </button>
+                        </div>
+                    @elseif ($addModalStep === 'config')
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                wire:click="backToAddList"
+                                wire:loading.attr="disabled"
+                                wire:target="backToAddList"
+                                class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-slate-600 bg-white py-2.5 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
+                            >{{ __('pos.add_back') }}</button>
+                            @if ($this->addItemForConfig)
+                                <button
+                                    type="button"
+                                    wire:click="submitAddLine"
+                                    wire:loading.attr="disabled"
+                                    wire:target="submitAddLine"
+                                    class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-2.5 text-sm font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600"
+                                >{{ __('pos.add_submit') }}</button>
+                            @endif
+                        </div>
                     @endif
                 </div>
             </div>

@@ -75,6 +75,7 @@ return [
     'order_voided_cannot_edit' => 'Commande annulée, modification impossible.',
     'add_modal_title' => 'Ajouter',
     'add_modal_close' => 'Fermer',
+    'add_modal_list_footer_hint' => 'Appuyez sur un produit pour l’ajouter. Utilisez « Valider CMD » pour envoyer les commandes en attente vers la cuisine (identique à l’en-tête du tableau).',
     'add_item_load_error' => 'Produit indisponible.',
     'add_no_menu' => 'Aucun produit de carte.',
     'add_select_style' => 'Format',

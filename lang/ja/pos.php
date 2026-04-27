@@ -75,6 +75,7 @@ return [
     'order_voided_cannot_edit' => '注文は無効のため編集できません。',
     'add_modal_title' => '卓に追加',
     'add_modal_close' => '閉じる',
+    'add_modal_list_footer_hint' => '商品をタップして卓に追加します。未送信の厨房行は下の「レセプション（厨房確定）」または卓ヘッダーと同じ操作で送信できます。',
     'add_item_load_error' => '商品を読み込めませんでした。',
     'add_no_menu' => '表示できるメニュー商品がありません。',
     'add_select_style' => 'スタイル',
