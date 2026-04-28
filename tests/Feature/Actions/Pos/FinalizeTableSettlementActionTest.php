@@ -9,7 +9,6 @@ use App\Enums\PaymentMethod;
 use App\Enums\TableSessionStatus;
 use App\Exceptions\Pos\InsufficientTenderException;
 use App\Exceptions\Pos\PendingOrdersRemainException;
-use App\Exceptions\Pos\SessionAlreadySettledException;
 use App\Exceptions\RevisionConflictException;
 use App\Models\PosOrder;
 use App\Models\TableSession;
@@ -232,7 +231,7 @@ final class FinalizeTableSettlementActionTest extends TestCase
 
         $this->expectException(PendingOrdersRemainException::class);
 
-        $this->action()->execute(new FinalizeTableSettlementRequest(
+        $first = $this->action()->execute(new FinalizeTableSettlementRequest(
             shopId: (int) $shop->id,
             tableSessionId: (int) $session->id,
             expectedSessionRevision: 0,
@@ -265,7 +264,7 @@ final class FinalizeTableSettlementActionTest extends TestCase
         ));
     }
 
-    public function test_already_settled_session_is_rejected(): void
+    public function test_already_settled_session_is_idempotent_and_returns_existing_snapshot(): void
     {
         $shop = $this->makeShop('fin-9');
         $table = $this->makeCustomerTable($shop, 18);
@@ -274,7 +273,7 @@ final class FinalizeTableSettlementActionTest extends TestCase
 
         $user = $this->actor();
 
-        $this->action()->execute(new FinalizeTableSettlementRequest(
+        $first = $this->action()->execute(new FinalizeTableSettlementRequest(
             shopId: (int) $shop->id,
             tableSessionId: (int) $session->id,
             expectedSessionRevision: 0,
@@ -283,9 +282,7 @@ final class FinalizeTableSettlementActionTest extends TestCase
             actorUserId: (int) $user->id,
         ));
 
-        $this->expectException(SessionAlreadySettledException::class);
-
-        $this->action()->execute(new FinalizeTableSettlementRequest(
+        $second = $this->action()->execute(new FinalizeTableSettlementRequest(
             shopId: (int) $shop->id,
             tableSessionId: (int) $session->id,
             expectedSessionRevision: 1,
@@ -298,9 +295,10 @@ final class FinalizeTableSettlementActionTest extends TestCase
             ->where('table_session_id', $session->id)
             ->count();
         $this->assertSame(1, $count, 'A second settlement row must never be created');
+        $this->assertSame((int) $first->id, (int) $second->id, 'Second call must return existing settlement snapshot');
     }
 
-    public function test_simultaneous_checkout_second_call_sees_stale_revision_and_fails(): void
+    public function test_simultaneous_checkout_second_call_stays_idempotent_single_row(): void
     {
         // Simulate the "two tablets hit 'Clôturer' at once" race: after the
         // first finalize commits, the second call carries the now-stale
@@ -313,7 +311,7 @@ final class FinalizeTableSettlementActionTest extends TestCase
 
         $user = $this->actor();
 
-        $this->action()->execute(new FinalizeTableSettlementRequest(
+        $first = $this->action()->execute(new FinalizeTableSettlementRequest(
             shopId: (int) $shop->id,
             tableSessionId: (int) $session->id,
             expectedSessionRevision: 0,
@@ -322,31 +320,75 @@ final class FinalizeTableSettlementActionTest extends TestCase
             actorUserId: (int) $user->id,
         ));
 
-        try {
-            $this->action()->execute(new FinalizeTableSettlementRequest(
-                shopId: (int) $shop->id,
-                tableSessionId: (int) $session->id,
-                expectedSessionRevision: 0,
-                tenderedMinor: 3_000,
-                paymentMethod: PaymentMethod::Cash,
-                actorUserId: (int) $user->id,
-            ));
-            $this->fail('Expected the second finalize to throw.');
-        } catch (SessionAlreadySettledException $e) {
-            // Expected: second call hits the pre-flight dedupe.
-        } catch (RevisionConflictException $e) {
-            // Also acceptable if the Action ordering ever flips: proves the
-            // optimistic lock catches the race.
-        }
+        $second = $this->action()->execute(new FinalizeTableSettlementRequest(
+            shopId: (int) $shop->id,
+            tableSessionId: (int) $session->id,
+            expectedSessionRevision: 0,
+            tenderedMinor: 3_000,
+            paymentMethod: PaymentMethod::Cash,
+            actorUserId: (int) $user->id,
+        ));
 
         $this->assertSame(
             1,
             TableSessionSettlement::query()->where('table_session_id', $session->id)->count(),
             'Race must never produce two settlement rows',
         );
+        $this->assertSame((int) $first->id, (int) $second->id, 'Second call must return existing settlement snapshot');
 
         $session->refresh();
         $this->assertSame(TableSessionStatus::Closed, $session->status);
+    }
+
+    public function test_already_settled_path_moves_unpaid_orders_to_fresh_session_and_settles_it(): void
+    {
+        $shop = $this->makeShop('fin-10b');
+        $table = $this->makeCustomerTable($shop, 25);
+        $session = $this->openActiveSession($shop, $table);
+        $placed = $this->placeLinedOrder($shop, $session, 3_000, OrderStatus::Confirmed);
+        $user = $this->actor();
+
+        $first = $this->action()->execute(new FinalizeTableSettlementRequest(
+            shopId: (int) $shop->id,
+            tableSessionId: (int) $session->id,
+            expectedSessionRevision: 0,
+            tenderedMinor: 3_000,
+            paymentMethod: PaymentMethod::Cash,
+            actorUserId: (int) $user->id,
+        ));
+
+        $session->refresh();
+        $session->forceFill([
+            'status' => TableSessionStatus::Active,
+            'closed_at' => null,
+        ])->save();
+        $driftedOrder = PosOrder::query()->whereKey((int) $placed['order']->id)->firstOrFail();
+        $driftedOrder->forceFill(['status' => OrderStatus::Confirmed])->save();
+
+        $second = $this->action()->execute(new FinalizeTableSettlementRequest(
+            shopId: (int) $shop->id,
+            tableSessionId: (int) $session->id,
+            expectedSessionRevision: 0,
+            tenderedMinor: 3_000,
+            paymentMethod: PaymentMethod::Cash,
+            actorUserId: (int) $user->id,
+        ));
+
+        $session->refresh();
+        $this->assertNotSame((int) $first->id, (int) $second->id);
+        $this->assertSame(
+            2,
+            TableSessionSettlement::query()->where('shop_id', (int) $shop->id)->count()
+        );
+        $this->assertSame(TableSessionStatus::Closed, $session->status);
+        $this->assertNotNull($session->closed_at);
+
+        $movedOrder = PosOrder::query()->whereKey((int) $placed['order']->id)->firstOrFail();
+        $this->assertSame(OrderStatus::Paid, $movedOrder->status);
+        $this->assertNotSame((int) $session->id, (int) $movedOrder->table_session_id);
+
+        $newSession = TableSession::query()->findOrFail((int) $movedOrder->table_session_id);
+        $this->assertSame(TableSessionStatus::Closed, $newSession->status);
     }
 
     public function test_bypass_forced_accepts_any_tender_and_records_reason(): void

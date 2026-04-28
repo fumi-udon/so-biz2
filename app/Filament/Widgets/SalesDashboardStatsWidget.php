@@ -25,9 +25,9 @@ class SalesDashboardStatsWidget extends StatsOverviewWidget
         $shopId = $this->resolveCurrentShopId();
         if ($shopId < 1) {
             return [
-                Stat::make('今月累計', '0 DT')->color('gray'),
-                Stat::make('今週累計', '0 DT')->color('gray'),
-                Stat::make('90日平均日販', '0 DT')->color('gray'),
+                Stat::make('月累計', '0 DT')->description('1日04:00〜')->color('gray'),
+                Stat::make('週累計', '0 DT')->description('月曜04:00〜')->color('gray'),
+                Stat::make('90日平均', '0 DT')->description('直近90営業日')->color('gray'),
             ];
         }
 
@@ -38,33 +38,33 @@ class SalesDashboardStatsWidget extends StatsOverviewWidget
         $thisWeekStartLocal = $currentBusinessStart->copy()->startOfWeek(Carbon::MONDAY)->setTime(4, 0, 0);
         $window90StartLocal = $currentBusinessStart->copy()->subDays(89)->setTime(4, 0, 0);
 
-        $toUtc = $nowLocal->copy()->utc();
-        $monthlyMinor = $this->sumMinor($shopId, $thisMonthStartLocal->copy()->utc(), $toUtc);
-        $weeklyMinor = $this->sumMinor($shopId, $thisWeekStartLocal->copy()->utc(), $toUtc);
-        $window90Minor = $this->sumMinor($shopId, $window90StartLocal->copy()->utc(), $toUtc);
+        $toLocal = $nowLocal;
+        $monthlyMinor = $this->sumMinor($shopId, $thisMonthStartLocal, $toLocal);
+        $weeklyMinor = $this->sumMinor($shopId, $thisWeekStartLocal, $toLocal);
+        $window90Minor = $this->sumMinor($shopId, $window90StartLocal, $toLocal);
         $average90Minor = (int) floor($window90Minor / 90);
 
         return [
-            Stat::make('今月累計', $this->formatMinor($monthlyMinor))
-                ->description('当月1日 04:00〜現在')
+            Stat::make('月累計', $this->formatMinor($monthlyMinor))
+                ->description('1日04:00〜現在')
                 ->icon('heroicon-o-calendar-days')
                 ->color('success'),
-            Stat::make('今週累計', $this->formatMinor($weeklyMinor))
-                ->description('月曜 04:00〜現在')
+            Stat::make('週累計', $this->formatMinor($weeklyMinor))
+                ->description('月曜04:00〜現在')
                 ->icon('heroicon-o-calendar')
                 ->color('info'),
-            Stat::make('90日平均日販', $this->formatMinor($average90Minor))
-                ->description('直近90営業日の1日平均')
+            Stat::make('90日平均', $this->formatMinor($average90Minor))
+                ->description('直近90営業日')
                 ->icon('heroicon-o-chart-bar')
                 ->color('warning'),
         ];
     }
 
-    private function sumMinor(int $shopId, Carbon $fromUtc, Carbon $toUtc): int
+    private function sumMinor(int $shopId, Carbon $fromLocal, Carbon $toLocal): int
     {
         return (int) TableSessionSettlement::query()
             ->where('shop_id', $shopId)
-            ->whereBetween('settled_at', [$fromUtc, $toUtc])
+            ->whereBetween('settled_at', [$fromLocal, $toLocal])
             ->sum('final_total_minor');
     }
 

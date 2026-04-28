@@ -6,6 +6,7 @@ use App\Enums\TableSessionStatus;
 use App\Exceptions\GuestOrderValidationException;
 use App\Models\RestaurantTable;
 use App\Models\TableSession;
+use App\Models\TableSessionSettlement;
 use Illuminate\Support\Str;
 
 /**
@@ -23,7 +24,21 @@ final class TableSessionLifecycleService
             ->first();
 
         if ($existing !== null) {
-            return $existing;
+            // Defensive recovery: if this active row was already settled, do not
+            // reuse it for new orders. Close it and continue with a fresh session.
+            $alreadySettled = TableSessionSettlement::query()
+                ->where('table_session_id', (int) $existing->id)
+                ->lockForUpdate()
+                ->exists();
+            if ($alreadySettled) {
+                $existing->forceFill([
+                    'status' => TableSessionStatus::Closed,
+                    'closed_at' => $existing->closed_at ?? now(),
+                    'session_revision' => (int) $existing->session_revision + 1,
+                ])->save();
+            } else {
+                return $existing;
+            }
         }
 
         return $this->createNewActiveSession($table);
@@ -42,6 +57,19 @@ final class TableSessionLifecycleService
             ->first();
 
         if ($existing === null) {
+            throw new GuestOrderValidationException(__('guest.no_active_table_session'));
+        }
+
+        $alreadySettled = TableSessionSettlement::query()
+            ->where('table_session_id', (int) $existing->id)
+            ->lockForUpdate()
+            ->exists();
+        if ($alreadySettled) {
+            $existing->forceFill([
+                'status' => TableSessionStatus::Closed,
+                'closed_at' => $existing->closed_at ?? now(),
+                'session_revision' => (int) $existing->session_revision + 1,
+            ])->save();
             throw new GuestOrderValidationException(__('guest.no_active_table_session'));
         }
 

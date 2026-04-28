@@ -900,17 +900,27 @@
                 x-data="{
                     drafts: [],
                     hasUnackedPlaced: @js((bool) $this->hasUnackedPlaced),
+                    makeDraftKey(draft) {
+                        const d = draft && typeof draft === 'object' ? draft : {}
+                        const id = Number(d.menu_item_id || 0)
+                        const styleId = typeof d.styleId === 'string' && d.styleId !== '' ? d.styleId : ''
+                        const toppings = Array.isArray(d.toppings) ? d.toppings.map((v) => String(v)).sort() : []
+                        const note = typeof d.note === 'string' ? d.note : ''
+                        return JSON.stringify({ id, styleId, toppings, note })
+                    },
                     addItem(menuItemId, menuItemName = '') {
                         const id = Number(menuItemId || 0)
                         if (!Number.isFinite(id) || id < 1) {
                             return
                         }
-                        const hit = this.drafts.find((d) => Number(d.menu_item_id) === id && (d.styleId || null) === null && (!Array.isArray(d.toppings) || d.toppings.length === 0) && (!d.note || d.note === ''))
+                        const simpleKey = JSON.stringify({ id, styleId: '', toppings: [], note: '' })
+                        const hit = this.drafts.find((d) => d.draftKey === simpleKey)
                         if (hit) {
                             hit.qty = Math.min(200, Number(hit.qty || 1) + 1)
                             return
                         }
                         this.drafts.push({
+                            draftKey: simpleKey,
                             menu_item_id: id,
                             name: typeof menuItemName === 'string' ? menuItemName : '',
                             qty: 1,
@@ -935,21 +945,16 @@
                         const toppings = Array.isArray(d.toppings) ? d.toppings.map((v) => String(v)) : []
                         const toppingsLabel = Array.isArray(d.toppingsLabel) ? d.toppingsLabel.map((v) => String(v)) : []
                         const note = typeof d.note === 'string' ? d.note : ''
-                        const sig = JSON.stringify({ id, styleId, toppings, note })
+                        const sig = JSON.stringify({ id, styleId: styleId || '', toppings: toppings.slice().sort(), note })
                         const hit = this.drafts.find((row) => {
-                            const rowSig = JSON.stringify({
-                                id: Number(row.menu_item_id || 0),
-                                styleId: typeof row.styleId === 'string' && row.styleId !== '' ? row.styleId : null,
-                                toppings: Array.isArray(row.toppings) ? row.toppings.map((v) => String(v)) : [],
-                                note: typeof row.note === 'string' ? row.note : '',
-                            })
-                            return rowSig === sig
+                            return row.draftKey === sig
                         })
                         if (hit) {
                             hit.qty = Math.min(200, Number(hit.qty || 1) + Math.max(1, Math.min(200, Number(d.qty || 1))))
                             return
                         }
                         this.drafts.push({
+                            draftKey: sig,
                             menu_item_id: id,
                             name: typeof d.name === 'string' ? d.name : '',
                             qty: Math.max(1, Math.min(200, Number(d.qty || 1))),
@@ -977,9 +982,9 @@
                         }
                         return parts.join(' | ')
                     },
-                    decItem(menuItemId) {
-                        const id = Number(menuItemId || 0)
-                        const idx = this.drafts.findIndex((d) => Number(d.menu_item_id) === id)
+                    decItem(draftKey) {
+                        const key = typeof draftKey === 'string' ? draftKey : ''
+                        const idx = this.drafts.findIndex((d) => d.draftKey === key)
                         if (idx < 0) {
                             return
                         }
@@ -990,17 +995,17 @@
                         }
                         this.drafts[idx].qty = next
                     },
-                    incItem(menuItemId) {
-                        const id = Number(menuItemId || 0)
-                        const hit = this.drafts.find((d) => Number(d.menu_item_id) === id)
+                    incItem(draftKey) {
+                        const key = typeof draftKey === 'string' ? draftKey : ''
+                        const hit = this.drafts.find((d) => d.draftKey === key)
                         if (!hit) {
                             return
                         }
                         hit.qty = Math.min(200, Number(hit.qty || 1) + 1)
                     },
-                    removeItem(menuItemId) {
-                        const id = Number(menuItemId || 0)
-                        this.drafts = this.drafts.filter((d) => Number(d.menu_item_id) !== id)
+                    removeItem(draftKey) {
+                        const key = typeof draftKey === 'string' ? draftKey : ''
+                        this.drafts = this.drafts.filter((d) => d.draftKey !== key)
                     },
                     async submitDrafts() {
                         if (bulkSyncing || $wire.uiState === 'in_flight') {
@@ -1134,7 +1139,7 @@
                         class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
                     >
                         <div x-show="drafts.length > 0" x-cloak class="max-h-36 overflow-y-auto rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-slate-600 dark:bg-slate-800/60">
-                            <template x-for="d in drafts" :key="d.menu_item_id">
+                            <template x-for="d in drafts" :key="d.draftKey">
                                 <div class="mb-1 grid grid-cols-[1fr_auto] items-center gap-2 last:mb-0">
                                     <div class="min-w-0">
                                         <div class="truncate text-xs font-bold text-gray-900 dark:text-gray-100">
@@ -1147,10 +1152,10 @@
                                         ></div>
                                     </div>
                                     <div class="flex items-center gap-1">
-                                        <button type="button" x-on:click="decItem(d.menu_item_id)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">−</button>
+                                        <button type="button" x-on:click="decItem(d.draftKey)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">−</button>
                                         <span class="w-6 text-center text-sm font-black tabular-nums text-gray-950 dark:text-white" x-text="d.qty"></span>
-                                        <button type="button" x-on:click="incItem(d.menu_item_id)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">＋</button>
-                                        <button type="button" x-on:click="removeItem(d.menu_item_id)" class="h-7 rounded border border-rose-700 bg-rose-600 px-2 text-xs font-black text-white">×</button>
+                                        <button type="button" x-on:click="incItem(d.draftKey)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">＋</button>
+                                        <button type="button" x-on:click="removeItem(d.draftKey)" class="h-7 rounded border border-rose-700 bg-rose-600 px-2 text-xs font-black text-white">×</button>
                                     </div>
                                 </div>
                             </template>

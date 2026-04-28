@@ -19,6 +19,7 @@ use App\Services\Pos\TableDashboardQueryService;
 use App\Support\MenuItemMoney;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -117,8 +118,26 @@ class ClotureModal extends Component
             return;
         }
         $this->uiState = 'in_flight';
+        // TEMP: POS_SETTLE_DEBUG
+        $traceId = sprintf(
+            'settle-%d-%d-%d',
+            $this->shopId,
+            (int) $this->tableSessionId,
+            (int) round(microtime(true) * 1000)
+        );
 
         try {
+            $actorUserId = (int) (auth()->id() ?? 0);
+            $this->debugSettleLog('confirm_enter', [
+                'trace_id' => $traceId,
+                'shop_id' => $this->shopId,
+                'table_session_id' => (int) $this->tableSessionId,
+                'expected_revision' => $this->expectedSessionRevision,
+                'actor_user_id' => $actorUserId,
+                'ui_state' => $this->uiState,
+                'tendered_dt_input' => $this->tenderedDtInput,
+                'final_total_minor' => $this->finalTotalMinor,
+            ]);
             $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
             $tendered = (int) ($this->tenderedMinor ?? 0);
             $this->changeMinor = $tendered - $this->finalTotalMinor;
@@ -130,21 +149,28 @@ class ClotureModal extends Component
                 return;
             }
 
-            app(FinalizeTableSettlementAction::class)->execute(
+            $settlement = app(FinalizeTableSettlementAction::class)->execute(
                 new FinalizeTableSettlementRequest(
                     shopId: $this->shopId,
                     tableSessionId: (int) $this->tableSessionId,
                     expectedSessionRevision: $this->expectedSessionRevision,
                     tenderedMinor: $tendered,
                     paymentMethod: PaymentMethod::Cash,
-                    actorUserId: (int) (auth()->id() ?? 0),
+                    actorUserId: $actorUserId,
+                    debugTraceId: $traceId,
                 )
             );
+            $this->debugSettleLog('confirm_action_success', [
+                'trace_id' => $traceId,
+                'settlement_id' => (int) $settlement->id,
+                'table_session_id' => (int) $this->tableSessionId,
+            ]);
 
             $this->dispatch(
                 'pos-settlement-completed',
-                table_session_id: (int) $this->tableSessionId,
+                table_session_id: (int) $settlement->table_session_id,
                 open_receipt_preview: true,
+                settlement_trace_id: $traceId,
             );
             if ($this->shopId > 0) {
                 app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
@@ -153,12 +179,27 @@ class ClotureModal extends Component
             $this->uiState = 'success';
             $this->closeModal();
         } catch (InsufficientTenderException $e) {
+            $this->debugSettleLog('confirm_insufficient_tender', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
             $this->uiState = 'failed';
             Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
         } catch (PendingOrdersRemainException $e) {
+            $this->debugSettleLog('confirm_pending_orders_remain', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
             $this->uiState = 'failed';
             Notification::make()->title(__('rad_table.cannot_close_with_unacked'))->danger()->send();
         } catch (SessionAlreadySettledException $e) {
+            $this->debugSettleLog('confirm_session_already_settled', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
             Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
             // Idempotent completion path:
             // another in-flight confirm may have already settled this session.
@@ -167,6 +208,7 @@ class ClotureModal extends Component
                 'pos-settlement-completed',
                 table_session_id: (int) $this->tableSessionId,
                 open_receipt_preview: true,
+                settlement_trace_id: $traceId,
             );
             if ($this->shopId > 0) {
                 app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
@@ -175,6 +217,11 @@ class ClotureModal extends Component
             $this->uiState = 'success';
             $this->closeModal();
         } catch (RevisionConflictException $e) {
+            $this->debugSettleLog('confirm_revision_conflict', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
             $this->uiState = 'failed';
             Notification::make()->title(__('pos.data_stale_title'))->body(__('pos.revision_conflict_reload'))->warning()->send();
             if ($this->shopId > 0) {
@@ -183,6 +230,12 @@ class ClotureModal extends Component
             $this->dispatch('pos-refresh-tiles');
             $this->loadPricing();
         } catch (Throwable $e) {
+            $this->debugSettleLog('confirm_throwable', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
             $this->uiState = 'failed';
             Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
         }
@@ -255,5 +308,15 @@ class ClotureModal extends Component
         $this->changeMinor = 0;
 
         return true;
+    }
+
+    // TEMP: POS_SETTLE_DEBUG
+    private function debugSettleLog(string $event, array $context = []): void
+    {
+        if (! config('app.debug')) {
+            return;
+        }
+
+        Log::info('POS_SETTLE_DEBUG '.$event, $context);
     }
 }

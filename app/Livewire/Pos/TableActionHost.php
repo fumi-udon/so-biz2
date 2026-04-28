@@ -36,6 +36,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Js;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
@@ -1694,10 +1695,24 @@ class TableActionHost extends Component
     }
 
     #[On('pos-settlement-completed')]
-    public function onPosSettlementCompleted(mixed $table_session_id = null, mixed $open_receipt_preview = null): void
+    public function onPosSettlementCompleted(
+        mixed $table_session_id = null,
+        mixed $open_receipt_preview = null,
+        mixed $settlement_trace_id = null
+    ): void
     {
         $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
         $openPreview = $open_receipt_preview === true;
+        if (config('app.debug')) {
+            // TEMP: POS_SETTLE_DEBUG
+            Log::info('POS_SETTLE_DEBUG host_event_received', [
+                'trace_id' => is_string($settlement_trace_id) ? $settlement_trace_id : null,
+                'shop_id' => $this->shopId,
+                'event_session_id' => $sid,
+                'active_session_id' => $this->activeTableSessionId,
+                'open_preview' => $openPreview,
+            ]);
+        }
 
         if ($sid > 0 && $this->shopId > 0) {
             $clearPayload = Js::from([(int) $this->shopId, $sid])->toHtml();
@@ -1707,7 +1722,16 @@ class TableActionHost extends Component
             );
         }
 
-        if ($sid > 0 && $this->activeTableSessionId === $sid) {
+        $isCurrentContextSettlement = $sid > 0 && $this->activeTableSessionId === $sid;
+        if (! $isCurrentContextSettlement && $sid > 0 && $this->activeRestaurantTableId !== null && $this->shopId > 0) {
+            $isCurrentContextSettlement = TableSession::query()
+                ->where('shop_id', $this->shopId)
+                ->whereKey($sid)
+                ->where('restaurant_table_id', (int) $this->activeRestaurantTableId)
+                ->exists();
+        }
+
+        if ($isCurrentContextSettlement) {
             if ($openPreview) {
                 $this->loadSessionData($sid);
                 $this->previewIntent = PrintIntent::Receipt->value;
@@ -1715,8 +1739,22 @@ class TableActionHost extends Component
                 $this->showReceiptPreview = true;
                 // Settlement must always release active table context regardless of preview display.
                 $this->closeHost(preserveReceiptPreview: true);
+                if (config('app.debug')) {
+                    // TEMP: POS_SETTLE_DEBUG
+                    Log::info('POS_SETTLE_DEBUG host_close_with_preview', [
+                        'trace_id' => is_string($settlement_trace_id) ? $settlement_trace_id : null,
+                        'event_session_id' => $sid,
+                    ]);
+                }
             } else {
                 $this->closeHost();
+                if (config('app.debug')) {
+                    // TEMP: POS_SETTLE_DEBUG
+                    Log::info('POS_SETTLE_DEBUG host_close_no_preview', [
+                        'trace_id' => is_string($settlement_trace_id) ? $settlement_trace_id : null,
+                        'event_session_id' => $sid,
+                    ]);
+                }
             }
             $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
 

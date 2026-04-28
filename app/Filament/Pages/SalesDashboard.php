@@ -53,17 +53,21 @@ class SalesDashboard extends AdminOnlyPage implements HasTable
             ->columns([
                 TextColumn::make('business_date')
                     ->label('営業日')
+                    ->extraAttributes(['class' => 'px-1 py-1 text-[11px] leading-none'])
                     ->date('Y-m-d'),
                 TextColumn::make('lunch_total_minor')
-                    ->label('ランチ合計')
+                    ->label('ランチ')
+                    ->extraAttributes(['class' => 'px-1 py-1 text-[11px] leading-none'])
                     ->alignEnd()
                     ->formatStateUsing(fn (mixed $state): string => $this->formatMinor((int) $state)),
                 TextColumn::make('dinner_total_minor')
-                    ->label('ディナー合計')
+                    ->label('ディナー')
+                    ->extraAttributes(['class' => 'px-1 py-1 text-[11px] leading-none'])
                     ->alignEnd()
                     ->formatStateUsing(fn (mixed $state): string => $this->formatMinor((int) $state)),
                 TextColumn::make('day_total_minor')
-                    ->label('一日合計')
+                    ->label('日計')
+                    ->extraAttributes(['class' => 'px-1 py-1 text-[11px] leading-none'])
                     ->alignEnd()
                     ->weight('bold')
                     ->formatStateUsing(fn (mixed $state): string => $this->formatMinor((int) $state)),
@@ -77,17 +81,17 @@ class SalesDashboard extends AdminOnlyPage implements HasTable
         $currentBusinessStart = $this->currentBusinessStart($nowLocal);
 
         $fromLocal = $currentBusinessStart->copy()->subDays(89);
-        $fromUtc = $fromLocal->copy()->utc();
-        $toUtc = $nowLocal->copy()->utc();
+        $toLocal = $nowLocal;
 
-        $offsetMinutes = (int) $nowLocal->utcOffset();
-        $localExpr = "DATE_ADD(settled_at, INTERVAL {$offsetMinutes} MINUTE)";
+        // Keep aggregation boundaries aligned with Cloture history:
+        // settled_at is queried in local business-time windows (04:00 start).
+        $localExpr = 'settled_at';
         $businessDateExpr = "DATE(DATE_SUB({$localExpr}, INTERVAL 4 HOUR))";
         $lunchCondition = "TIME({$localExpr}) >= '04:00:00' AND TIME({$localExpr}) < '17:00:00'";
 
         return TableSessionSettlement::query()
             ->where('shop_id', $this->shopId)
-            ->whereBetween('settled_at', [$fromUtc, $toUtc])
+            ->whereBetween('settled_at', [$fromLocal, $toLocal])
             ->selectRaw('MIN(id) as id')
             ->selectRaw("{$businessDateExpr} as business_date")
             ->selectRaw("SUM(CASE WHEN {$lunchCondition} THEN final_total_minor ELSE 0 END) as lunch_total_minor")

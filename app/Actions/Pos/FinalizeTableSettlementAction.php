@@ -15,9 +15,11 @@ use App\Models\PosOrder;
 use App\Models\RestaurantTable;
 use App\Models\TableSession;
 use App\Models\TableSessionSettlement;
+use App\Services\Pos\TableSessionLifecycleService;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -47,19 +49,36 @@ final class FinalizeTableSettlementAction
 {
     public function __construct(
         private readonly PricingEngine $pricingEngine,
+        private readonly TableSessionLifecycleService $tableSessionLifecycleService,
     ) {}
 
     public function execute(FinalizeTableSettlementRequest $req): TableSessionSettlement
     {
-        return DB::transaction(function () use ($req): TableSessionSettlement {
-            // I1 early-out: if a settlement already exists, fail fast with a
-            // friendly error rather than deferring to the unique-violation
-            // thrown by the DB during insert. Cheaper than a failed INSERT.
-            if (TableSessionSettlement::query()
+        // TEMP: POS_SETTLE_DEBUG
+        $traceId = $req->debugTraceId ?: sprintf('settle-action-%d-%d', $req->shopId, $req->tableSessionId);
+        $this->debugSettleLog('action_enter', [
+            'trace_id' => $traceId,
+            'shop_id' => $req->shopId,
+            'table_session_id' => $req->tableSessionId,
+            'expected_revision' => $req->expectedSessionRevision,
+            'actor_user_id' => $req->actorUserId,
+        ]);
+
+        return DB::transaction(function () use ($req, $traceId): TableSessionSettlement {
+            // I1 idempotent path: if settlement already exists, recover any
+            // drifted session/order state and return the canonical snapshot.
+            $existingSettlement = TableSessionSettlement::query()
                 ->where('table_session_id', $req->tableSessionId)
-                ->exists()
-            ) {
-                throw new SessionAlreadySettledException($req->tableSessionId);
+                ->lockForUpdate()
+                ->first();
+            if ($existingSettlement !== null) {
+                $this->debugSettleLog('action_already_settled_detected', [
+                    'trace_id' => $traceId,
+                    'table_session_id' => $req->tableSessionId,
+                    'settlement_id' => (int) $existingSettlement->id,
+                ]);
+
+                return $this->repairSettledSessionState($req, $existingSettlement, $traceId);
             }
 
             // Lock the physical table first (mirrors AddPosOrderFromStaffAction
@@ -90,8 +109,20 @@ final class FinalizeTableSettlementAction
             if ($session === null) {
                 throw new SessionAlreadySettledException($req->tableSessionId);
             }
+            $this->debugSettleLog('action_session_locked', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) $session->id,
+                'actual_revision' => (int) $session->session_revision,
+                'expected_revision' => $req->expectedSessionRevision,
+            ]);
 
             if ((int) $session->session_revision !== $req->expectedSessionRevision) {
+                $this->debugSettleLog('action_revision_conflict', [
+                    'trace_id' => $traceId,
+                    'table_session_id' => (int) $session->id,
+                    'actual_revision' => (int) $session->session_revision,
+                    'expected_revision' => $req->expectedSessionRevision,
+                ]);
                 throw new RevisionConflictException(
                     resource: 'table_session',
                     id: (int) $session->id,
@@ -103,6 +134,11 @@ final class FinalizeTableSettlementAction
             $pendingCount = (int) $session->posOrders()
                 ->where('status', OrderStatus::Placed)
                 ->count();
+            $this->debugSettleLog('action_pending_count', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) $session->id,
+                'pending_count' => $pendingCount,
+            ]);
 
             if ($pendingCount > 0) {
                 throw new PendingOrdersRemainException(
@@ -154,15 +190,116 @@ final class FinalizeTableSettlementAction
                 'bypass_reason' => $req->printBypassed ? $req->bypassReason : null,
                 'bypassed_by_user_id' => $req->printBypassed ? $req->bypassedByUserId : null,
             ]);
+            $this->debugSettleLog('action_settlement_created', [
+                'trace_id' => $traceId,
+                'settlement_id' => (int) $settlement->id,
+                'table_session_id' => (int) $session->id,
+                'final_total_minor' => $pricing->finalTotalMinor,
+            ]);
 
             $session->forceFill([
                 'status' => TableSessionStatus::Closed,
                 'closed_at' => now(),
                 'session_revision' => (int) $session->session_revision + 1,
             ])->save();
+            $this->debugSettleLog('action_session_closed', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) $session->id,
+                'new_revision' => (int) $session->session_revision,
+            ]);
 
             return $settlement->refresh();
         });
+    }
+
+    private function repairSettledSessionState(
+        FinalizeTableSettlementRequest $req,
+        TableSessionSettlement $settlement,
+        string $traceId
+    ): TableSessionSettlement {
+        $session = TableSession::query()
+            ->whereKey($req->tableSessionId)
+            ->where('shop_id', $req->shopId)
+            ->lockForUpdate()
+            ->first();
+
+        if ($session === null) {
+            throw new SessionAlreadySettledException($req->tableSessionId);
+        }
+
+        $needsSessionCloseRepair = $session->status !== TableSessionStatus::Closed || $session->closed_at === null;
+        if ($needsSessionCloseRepair) {
+            $session->forceFill([
+                'status' => TableSessionStatus::Closed,
+                'closed_at' => $session->closed_at ?? now(),
+                'session_revision' => (int) $session->session_revision + 1,
+            ])->save();
+            $this->debugSettleLog('action_repair_closed_session', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) $session->id,
+                'new_revision' => (int) $session->session_revision,
+            ]);
+        }
+
+        $unpaidOrders = PosOrder::query()
+            ->where('table_session_id', (int) $session->id)
+            ->where('status', '!=', OrderStatus::Voided)
+            ->where('status', '!=', OrderStatus::Paid)
+            ->lockForUpdate()
+            ->get();
+        if ($unpaidOrders->isNotEmpty()) {
+            $table = RestaurantTable::query()
+                ->whereKey((int) $session->restaurant_table_id)
+                ->where('shop_id', $req->shopId)
+                ->lockForUpdate()
+                ->first();
+            if ($table === null) {
+                throw new RuntimeException(__('pos.table_not_found'));
+            }
+
+            if ($session->status !== TableSessionStatus::Closed || $session->closed_at === null) {
+                $session->forceFill([
+                    'status' => TableSessionStatus::Closed,
+                    'closed_at' => $session->closed_at ?? now(),
+                    'session_revision' => (int) $session->session_revision + 1,
+                ])->save();
+            }
+
+            $freshSession = $this->tableSessionLifecycleService->getOrCreateActiveSession($table);
+            if ((int) $freshSession->id === (int) $session->id) {
+                throw new RuntimeException('Settlement integrity error: failed to fork a fresh table session for unpaid orders.');
+            }
+
+            foreach ($unpaidOrders as $order) {
+                $order->forceFill([
+                    'table_session_id' => (int) $freshSession->id,
+                ])->save();
+            }
+
+            $this->debugSettleLog('action_detect_unpaid_orders_on_settled_session', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) $session->id,
+                'unpaid_order_count' => $unpaidOrders->count(),
+                'moved_to_session_id' => (int) $freshSession->id,
+            ]);
+
+            // Complete settlement in one confirm flow:
+            // immediately settle the freshly forked active session.
+            return $this->execute(new FinalizeTableSettlementRequest(
+                shopId: $req->shopId,
+                tableSessionId: (int) $freshSession->id,
+                expectedSessionRevision: (int) $freshSession->session_revision,
+                tenderedMinor: $req->tenderedMinor,
+                paymentMethod: $req->paymentMethod,
+                actorUserId: $req->actorUserId,
+                printBypassed: $req->printBypassed,
+                bypassReason: $req->bypassReason,
+                bypassedByUserId: $req->bypassedByUserId,
+                debugTraceId: $traceId,
+            ));
+        }
+
+        return $settlement->refresh();
     }
 
     /**
@@ -235,5 +372,15 @@ final class FinalizeTableSettlementAction
 
             $order->forceFill(['rounding_adjustment_minor' => $newRounding])->save();
         }
+    }
+
+    // TEMP: POS_SETTLE_DEBUG
+    private function debugSettleLog(string $event, array $context = []): void
+    {
+        if (! config('app.debug')) {
+            return;
+        }
+
+        Log::info('POS_SETTLE_DEBUG '.$event, $context);
     }
 }

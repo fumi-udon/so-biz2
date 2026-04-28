@@ -24,6 +24,8 @@ final readonly class FinalizeTableSettlementRequest
         public bool $printBypassed = false,
         public ?string $bypassReason = null,
         public ?int $bypassedByUserId = null,
+        // TEMP: POS_SETTLE_DEBUG correlation key (safe no-op in production flow)
+        public ?string $debugTraceId = null,
     ) {
         if ($this->shopId < 1) {
             throw new InvalidArgumentException('shopId must be positive');
