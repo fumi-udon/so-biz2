@@ -39,6 +39,9 @@
         <div
             class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 print:grid-cols-2 print:gap-3"
         >
+            @php
+                $brandName = $shopName !== '' ? $shopName : config('app.name');
+            @endphp
             @foreach ($tables as $table)
                 @php
                     $guestUrl = $this->guestUrlForTable($table);
@@ -49,9 +52,6 @@
                 <div
                     class="flex flex-col items-center rounded-xl border border-gray-200 bg-white p-4 text-center shadow-sm print:break-inside-avoid print:border-gray-400 print:shadow-none dark:border-gray-700 dark:bg-gray-900"
                 >
-                    <p class="mb-3 text-lg font-bold text-gray-950 dark:text-white print:text-xl">
-                        {{ $table->name }}
-                    </p>
                     @if ($qrSrc !== '')
                         <img
                             src="{{ $qrSrc }}"
@@ -63,6 +63,16 @@
                     @else
                         <span class="text-xs text-gray-500 dark:text-gray-400">Missing URL</span>
                     @endif
+                    <div class="mt-3 flex h-[58px] w-full flex-col">
+                        <div class="flex flex-1 items-center justify-center">
+                            <p class="text-base font-semibold tracking-widest text-gray-900 dark:text-gray-100 print:text-lg">
+                                {{ $table->name }}
+                            </p>
+                        </div>
+                        <p class="pb-0.5 text-center text-[8px] tracking-widest text-gray-500 dark:text-gray-400">
+                            {{ $brandName !== '' ? $brandName : '—' }}
+                        </p>
+                    </div>
                 </div>
             @endforeach
         </div>
