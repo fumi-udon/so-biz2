@@ -361,6 +361,31 @@
                                 x-show="!previewTableName"
                             >{{ $this->activeSessionLabel }}</span>
                         </span>
+                        <button
+                            type="button"
+                            wire:click="manualSyncAllTables"
+                            wire:loading.attr="disabled"
+                            wire:target="manualSyncAllTables"
+                            class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-emerald-900 bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-400"
+                            title="Sync"
+                            aria-label="Sync"
+                        >
+                            <svg
+                                class="h-3.5 w-3.5"
+                                wire:loading.class="animate-spin"
+                                wire:target="manualSyncAllTables"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                                <polyline points="21 3 21 9 15 9" />
+                            </svg>
+                        </button>
                         @if ($this->isBilledState)
                             <span class="shrink-0 rounded-full border-2 border-amber-500 bg-amber-200 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-amber-900 max-md:px-1.5 max-md:text-[9px] md:px-2 md:text-[10px] dark:border-amber-400 dark:bg-amber-900/50 dark:text-amber-100">
                                 {{ __('rad_table.badge_printed') }}
@@ -369,33 +394,7 @@
                     </div>
                 </div>
             </div>
-            <div class="grid w-full shrink-0 grid-cols-3 gap-1 max-md:gap-1 md:flex md:w-auto md:items-center md:gap-1.5">
-                <button
-                    type="button"
-                    wire:click="manualSyncAllTables"
-                    wire:loading.attr="disabled"
-                    wire:target="manualSyncAllTables"
-                    class="touch-manipulation inline-flex min-h-9 flex-col items-center justify-center gap-0.5 rounded-md border-2 border-emerald-900 bg-emerald-500 px-1 py-1 text-[9px] font-extrabold uppercase leading-tight tracking-wide text-white shadow-md hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-9 max-md:px-1 max-md:py-1 max-md:text-[9px] md:min-h-12 md:flex-row md:gap-1 md:px-2.5 md:py-2 md:text-xs"
-                    title="Sync"
-                >
-                    <svg
-                        class="h-3 w-3 shrink-0 max-md:h-3 max-md:w-3 md:h-4 md:w-4"
-                        wire:loading.class="animate-spin"
-                        wire:target="manualSyncAllTables"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                    >
-                        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                        <polyline points="21 3 21 9 15 9" />
-                    </svg>
-                    <span class="leading-none max-md:text-[9px] md:inline md:text-xs">Sync</span>
-                    <span class="max-w-full truncate text-[9px] font-bold normal-case opacity-90 max-md:text-center md:text-[10px]" x-text="lastSyncedAt"></span>
-                </button>
+            <div class="grid w-full shrink-0 grid-cols-2 gap-1 max-md:gap-1 md:flex md:w-auto md:items-center md:gap-1.5">
                 <button
                     type="button"
                     wire:click="ajouter"
