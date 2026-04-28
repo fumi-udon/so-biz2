@@ -44,6 +44,7 @@ final class TableActionHostSettlementReceiptPreviewTest extends TestCase
 
         $component
             ->dispatch('pos-settlement-completed', table_session_id: (int) $session->id, open_receipt_preview: true)
+            ->assertSet('activeTableSessionId', null)
             ->assertSet('showReceiptPreview', true)
             ->assertSet('previewIntent', PrintIntent::Receipt->value)
             ->assertSet('previewSessionId', (int) $session->id);

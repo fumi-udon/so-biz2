@@ -755,7 +755,7 @@ class TableActionHost extends Component
         $this->closeHost();
     }
 
-    public function closeHost(): void
+    public function closeHost(bool $preserveReceiptPreview = false): void
     {
         $draftShopId = (int) $this->shopId;
         $draftTableId = $this->activeRestaurantTableId;
@@ -773,7 +773,9 @@ class TableActionHost extends Component
         $this->isOrdersLoaded = false;
         $this->uiState = 'idle';
         $this->pendingEchoReload = false;
-        $this->expectedSessionRevision = 0;
+        if (! $preserveReceiptPreview) {
+            $this->expectedSessionRevision = 0;
+        }
         $this->removeAuthPanelOpen = false;
         $this->removeAuthLineId = null;
         $this->removeApproverStaffId = null;
@@ -782,9 +784,11 @@ class TableActionHost extends Component
         $this->staffMealAuthStaffId = null;
         $this->staffMealAuthPin = '';
         $this->staffMealAuthModalDismissed = false;
-        $this->showReceiptPreview = false;
-        $this->previewIntent = PrintIntent::Addition->value;
-        $this->previewSessionId = 0;
+        if (! $preserveReceiptPreview) {
+            $this->showReceiptPreview = false;
+            $this->previewIntent = PrintIntent::Addition->value;
+            $this->previewSessionId = 0;
+        }
         $this->dispatch('pos-tile-interaction-ended');
         $this->dispatchBrowserFloorClear();
     }
@@ -981,6 +985,88 @@ class TableActionHost extends Component
         }
     }
 
+    public function queueConfiguredDraft(?int $clientQty = null): void
+    {
+        if ($clientQty !== null) {
+            $this->addQty = max(1, min(200, $clientQty));
+        }
+        if ($this->activeRestaurantTableId === null || $this->addConfigMenuItemId === null) {
+            return;
+        }
+        if ($this->activeTableSessionId === null) {
+            $this->ensureTableSession();
+        }
+        if ($this->activeTableSessionId === null) {
+            return;
+        }
+        if ($this->requiresStaffMealAuth) {
+            return;
+        }
+
+        $item = $this->addItemForConfig;
+        if ($item === null) {
+            Notification::make()
+                ->title(__('pos.add_item_load_error'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $style = (is_string($this->addStyleId) && trim($this->addStyleId) !== '') ? $this->addStyleId : null;
+        if ($this->isStyleRequiredFor($item) && $style === null) {
+            Notification::make()
+                ->title(__('pos.style_required'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $qty = max(1, min(200, (int) $this->addQty));
+        $styleLabel = '';
+        if ($style !== null) {
+            foreach ($this->getStylesListForItem($item) as $row) {
+                if ((string) ($row['id'] ?? '') === $style) {
+                    $styleLabel = (string) ($row['name'] ?? '');
+                    break;
+                }
+            }
+        }
+        $toppingLabels = [];
+        $toppingLabelById = [];
+        foreach ($this->getToppingsListForItem($item) as $row) {
+            $rid = (string) ($row['id'] ?? '');
+            if ($rid !== '') {
+                $toppingLabelById[$rid] = (string) ($row['name'] ?? $rid);
+            }
+        }
+        foreach (array_values($this->addToppings) as $tid) {
+            $tidStr = (string) $tid;
+            if ($tidStr === '') {
+                continue;
+            }
+            $toppingLabels[] = $toppingLabelById[$tidStr] ?? $tidStr;
+        }
+        $detail = Js::from([
+            'menu_item_id' => (int) $this->addConfigMenuItemId,
+            'name' => (string) $item->name,
+            'qty' => $qty,
+            'styleId' => $style,
+            'styleLabel' => $styleLabel,
+            'toppings' => array_values($this->addToppings),
+            'toppingsLabel' => $toppingLabels,
+            'note' => (string) $this->addNote,
+        ])->toHtml();
+        $this->js(
+            "window.dispatchEvent(new CustomEvent('pos-add-draft-queued', { bubbles: true, detail: {$detail} }));"
+        );
+
+        $this->addModalStep = 'list';
+        $this->addConfigMenuItemId = null;
+        $this->resetAddLineForm();
+    }
+
     public function getAddItemForConfigProperty(): ?MenuItem
     {
         if ($this->addConfigMenuItemId === null || $this->shopId === 0) {
@@ -1114,10 +1200,16 @@ class TableActionHost extends Component
                 foreach ($categories as $cat) {
                     $rows = [];
                     foreach ($cat->menuItems as $m) {
+                        $payload = is_array($m->options_payload) ? $m->options_payload : [];
+                        $styles = is_array($payload['styles'] ?? null) ? $payload['styles'] : [];
+                        $toppings = is_array($payload['toppings'] ?? null) ? $payload['toppings'] : [];
+                        $rules = is_array($payload['rules'] ?? null) ? $payload['rules'] : [];
+                        $styleRequired = (bool) ($rules['style_required'] ?? false);
                         $rows[] = [
                             'id' => (int) $m->id,
                             'name' => (string) $m->name,
                             'from_label' => MenuItemMoney::formatMinorForDisplay((int) $m->from_price_minor),
+                            'requires_config' => $styleRequired || count($styles) > 0 || count($toppings) > 0,
                         ];
                     }
                     if (count($rows) > 0) {
@@ -1359,6 +1451,98 @@ class TableActionHost extends Component
      *
      * @param  list<array<string, mixed>>  $drafts
      */
+    public function bulkAddDraftsOnly(array $drafts): void
+    {
+        if ($this->requiresStaffMealAuth) {
+            return;
+        }
+        if ($this->uiState === 'in_flight') {
+            return;
+        }
+        if ($this->activeRestaurantTableId === null || $this->activeRestaurantTableId < 1) {
+            return;
+        }
+        if ($this->activeTableSessionId === null) {
+            $this->ensureTableSession();
+        }
+        if ($this->activeTableSessionId === null || $this->session === null) {
+            Notification::make()
+                ->title(__('pos.detail_pick_table'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $anyValidDraft = false;
+        foreach ($drafts as $draft) {
+            if (! is_array($draft)) {
+                continue;
+            }
+            $mid = $draft['menu_item_id'] ?? null;
+            if (is_numeric($mid) && (int) $mid > 0) {
+                $anyValidDraft = true;
+                break;
+            }
+        }
+        if (! $anyValidDraft) {
+            return;
+        }
+
+        $this->markAfterimageSelfActionForBrowser();
+        $this->uiState = 'in_flight';
+        try {
+            DB::transaction(function () use ($drafts): void {
+                foreach ($drafts as $draft) {
+                    if (! is_array($draft)) {
+                        continue;
+                    }
+                    $menuItemId = is_numeric($draft['menu_item_id'] ?? null) ? (int) $draft['menu_item_id'] : 0;
+                    if ($menuItemId < 1) {
+                        continue;
+                    }
+                    $qty = max(1, min(200, (int) ($draft['qty'] ?? 1)));
+                    $style = isset($draft['styleId']) && is_string($draft['styleId']) && trim($draft['styleId']) !== ''
+                        ? (string) $draft['styleId']
+                        : null;
+                    $toppings = is_array($draft['toppings'] ?? null) ? array_values($draft['toppings']) : [];
+                    $note = isset($draft['note']) ? (string) $draft['note'] : '';
+
+                    app(AddPosOrderFromStaffAction::class)->execute(
+                        $this->shopId,
+                        (int) $this->activeRestaurantTableId,
+                        $menuItemId,
+                        $qty,
+                        $style,
+                        $toppings,
+                        $note
+                    );
+                }
+            });
+
+            $this->uiState = 'success';
+            $this->loadSessionData((int) $this->activeTableSessionId);
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
+            $this->closeAddModal();
+            $this->refocusAjouterButtonIfTakeaway();
+        } catch (Throwable $e) {
+            $this->uiState = 'failed';
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        } finally {
+            $this->applyPendingEchoReloadIfAny();
+            $this->uiState = 'idle';
+        }
+    }
+
+    /**
+     * Bulk draft submit (Alpine local cart) + Recu staff.
+     *
+     * @param  list<array<string, mixed>>  $drafts
+     */
     public function bulkAddAndConfirm(array $drafts): void
     {
         if ($this->requiresStaffMealAuth) {
@@ -1526,7 +1710,11 @@ class TableActionHost extends Component
         if ($sid > 0 && $this->activeTableSessionId === $sid) {
             if ($openPreview) {
                 $this->loadSessionData($sid);
-                $this->openReceiptPreview(PrintIntent::Receipt->value);
+                $this->previewIntent = PrintIntent::Receipt->value;
+                $this->previewSessionId = $sid;
+                $this->showReceiptPreview = true;
+                // Settlement must always release active table context regardless of preview display.
+                $this->closeHost(preserveReceiptPreview: true);
             } else {
                 $this->closeHost();
             }

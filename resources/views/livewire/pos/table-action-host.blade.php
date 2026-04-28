@@ -887,6 +887,9 @@
             style="isolation: isolate"
             role="dialog"
             aria-modal="true"
+            x-data="{ addModalVisible: true }"
+            x-show="addModalVisible"
+            x-on:pos-add-modal-close-now.window="addModalVisible = false"
         >
             <div
                 class="absolute inset-0 bg-slate-950/70"
@@ -894,6 +897,149 @@
             ></div>
             <div
                 @click.stop
+                x-data="{
+                    drafts: [],
+                    hasUnackedPlaced: @js((bool) $this->hasUnackedPlaced),
+                    addItem(menuItemId, menuItemName = '') {
+                        const id = Number(menuItemId || 0)
+                        if (!Number.isFinite(id) || id < 1) {
+                            return
+                        }
+                        const hit = this.drafts.find((d) => Number(d.menu_item_id) === id && (d.styleId || null) === null && (!Array.isArray(d.toppings) || d.toppings.length === 0) && (!d.note || d.note === ''))
+                        if (hit) {
+                            hit.qty = Math.min(200, Number(hit.qty || 1) + 1)
+                            return
+                        }
+                        this.drafts.push({
+                            menu_item_id: id,
+                            name: typeof menuItemName === 'string' ? menuItemName : '',
+                            qty: 1,
+                            styleId: null,
+                            styleLabel: '',
+                            toppings: [],
+                            toppingsLabel: [],
+                            note: '',
+                        })
+                    },
+                    addConfiguredDraft(draft) {
+                        const d = draft && typeof draft === 'object' ? draft : null
+                        if (!d) {
+                            return
+                        }
+                        const id = Number(d.menu_item_id || 0)
+                        if (!Number.isFinite(id) || id < 1) {
+                            return
+                        }
+                        const styleId = typeof d.styleId === 'string' && d.styleId !== '' ? d.styleId : null
+                        const styleLabel = typeof d.styleLabel === 'string' ? d.styleLabel : ''
+                        const toppings = Array.isArray(d.toppings) ? d.toppings.map((v) => String(v)) : []
+                        const toppingsLabel = Array.isArray(d.toppingsLabel) ? d.toppingsLabel.map((v) => String(v)) : []
+                        const note = typeof d.note === 'string' ? d.note : ''
+                        const sig = JSON.stringify({ id, styleId, toppings, note })
+                        const hit = this.drafts.find((row) => {
+                            const rowSig = JSON.stringify({
+                                id: Number(row.menu_item_id || 0),
+                                styleId: typeof row.styleId === 'string' && row.styleId !== '' ? row.styleId : null,
+                                toppings: Array.isArray(row.toppings) ? row.toppings.map((v) => String(v)) : [],
+                                note: typeof row.note === 'string' ? row.note : '',
+                            })
+                            return rowSig === sig
+                        })
+                        if (hit) {
+                            hit.qty = Math.min(200, Number(hit.qty || 1) + Math.max(1, Math.min(200, Number(d.qty || 1))))
+                            return
+                        }
+                        this.drafts.push({
+                            menu_item_id: id,
+                            name: typeof d.name === 'string' ? d.name : '',
+                            qty: Math.max(1, Math.min(200, Number(d.qty || 1))),
+                            styleId: styleId,
+                            styleLabel: styleLabel,
+                            toppings: toppings,
+                            toppingsLabel: toppingsLabel,
+                            note: note,
+                        })
+                    },
+                    summaryFor(draft) {
+                        const d = draft && typeof draft === 'object' ? draft : null
+                        if (!d) {
+                            return ''
+                        }
+                        const parts = []
+                        if (typeof d.styleLabel === 'string' && d.styleLabel !== '') {
+                            parts.push(d.styleLabel)
+                        }
+                        if (Array.isArray(d.toppingsLabel) && d.toppingsLabel.length > 0) {
+                            parts.push(d.toppingsLabel.join(', '))
+                        }
+                        if (typeof d.note === 'string' && d.note !== '') {
+                            parts.push(d.note)
+                        }
+                        return parts.join(' | ')
+                    },
+                    decItem(menuItemId) {
+                        const id = Number(menuItemId || 0)
+                        const idx = this.drafts.findIndex((d) => Number(d.menu_item_id) === id)
+                        if (idx < 0) {
+                            return
+                        }
+                        const next = Number(this.drafts[idx].qty || 1) - 1
+                        if (next <= 0) {
+                            this.drafts.splice(idx, 1)
+                            return
+                        }
+                        this.drafts[idx].qty = next
+                    },
+                    incItem(menuItemId) {
+                        const id = Number(menuItemId || 0)
+                        const hit = this.drafts.find((d) => Number(d.menu_item_id) === id)
+                        if (!hit) {
+                            return
+                        }
+                        hit.qty = Math.min(200, Number(hit.qty || 1) + 1)
+                    },
+                    removeItem(menuItemId) {
+                        const id = Number(menuItemId || 0)
+                        this.drafts = this.drafts.filter((d) => Number(d.menu_item_id) !== id)
+                    },
+                    async submitDrafts() {
+                        if (bulkSyncing || $wire.uiState === 'in_flight') {
+                            return
+                        }
+                        const payload = this.drafts
+                            .map((d) => {
+                                const id = Number(d.menu_item_id || 0)
+                                const qty = Math.max(1, Math.min(200, Number(d.qty || 1)))
+                                if (!Number.isFinite(id) || id < 1) {
+                                    return null
+                                }
+                                return {
+                                    menu_item_id: id,
+                                    qty: qty,
+                                    styleId: d.styleId || null,
+                                    toppings: Array.isArray(d.toppings) ? d.toppings : [],
+                                    note: typeof d.note === 'string' ? d.note : '',
+                                }
+                            })
+                            .filter((d) => d !== null)
+                        if (payload.length === 0 && !this.hasUnackedPlaced) {
+                            return
+                        }
+                        window.dispatchEvent(new CustomEvent('pos-add-modal-close-now', { bubbles: true }))
+                        bulkSyncing = true
+                        const s = Alpine.store('posDraft')
+                        try {
+                            await $wire.bulkAddDraftsOnly(payload)
+                            if (s && s.shopId && s.sessionId) {
+                                s.clearSession(s.shopId, s.sessionId, true)
+                            }
+                            this.drafts = []
+                        } finally {
+                            bulkSyncing = false
+                        }
+                    },
+                }"
+                x-on:pos-add-draft-queued.window="addConfiguredDraft($event.detail)"
                 class="relative {{ $zAddModalPanel }} m-0 flex h-[90dvh] max-h-[90dvh] w-full max-w-7xl flex-col overflow-hidden rounded-t-2xl border-4 border-blue-600 bg-white text-slate-950 shadow-2xl sm:m-4 sm:w-[90vw] sm:rounded-2xl dark:border-blue-500 dark:bg-slate-900 dark:text-white"
             >
                 <div
@@ -917,6 +1063,12 @@
                     </button>
                 </div>
                 @if ($addModalStep === 'list')
+                    @php
+                        $addCatalogScriptId = 'pos-add-catalog-'.$this->getId();
+                    @endphp
+                    <script type="application/json" id="{{ $addCatalogScriptId }}">
+                        {!! json_encode($addCatalog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
+                    </script>
                     <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div class="flex min-h-0 flex-1 overflow-hidden">
                         @if (count($addCatalog) > 0)
@@ -956,9 +1108,13 @@
                                                 <button
                                                     type="button"
                                                     class="touch-manipulation flex min-h-[80px] w-full items-center justify-between gap-3 rounded-xl border-2 border-blue-400 bg-white px-4 py-3 text-left text-base font-bold text-gray-950 shadow-sm hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:border-blue-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
-                                                    wire:click="beginConfigureItem({{ (int) $m['id'] }})"
-                                                    wire:loading.attr="disabled"
-                                                    wire:target="beginConfigureItem"
+                                                    @if (($m['requires_config'] ?? false) === true)
+                                                        x-on:click="$wire.beginConfigureItem({{ (int) $m['id'] }})"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="beginConfigureItem"
+                                                    @else
+                                                        x-on:click="addItem({{ (int) $m['id'] }}, @js((string) $m['name']))"
+                                                    @endif
                                                 >
                                                     <span
                                                         class="min-w-0 flex-1 leading-snug text-gray-950 dark:text-white"
@@ -977,6 +1133,28 @@
                     <div
                         class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
                     >
+                        <div x-show="drafts.length > 0" x-cloak class="max-h-36 overflow-y-auto rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-slate-600 dark:bg-slate-800/60">
+                            <template x-for="d in drafts" :key="d.menu_item_id">
+                                <div class="mb-1 grid grid-cols-[1fr_auto] items-center gap-2 last:mb-0">
+                                    <div class="min-w-0">
+                                        <div class="truncate text-xs font-bold text-gray-900 dark:text-gray-100">
+                                            <span x-text="d.name || ('#' + d.menu_item_id)"></span>
+                                        </div>
+                                        <div
+                                            x-show="summaryFor(d) !== ''"
+                                            x-text="summaryFor(d)"
+                                            class="truncate text-[10px] font-medium text-slate-700 dark:text-slate-300"
+                                        ></div>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <button type="button" x-on:click="decItem(d.menu_item_id)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">−</button>
+                                        <span class="w-6 text-center text-sm font-black tabular-nums text-gray-950 dark:text-white" x-text="d.qty"></span>
+                                        <button type="button" x-on:click="incItem(d.menu_item_id)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">＋</button>
+                                        <button type="button" x-on:click="removeItem(d.menu_item_id)" class="h-7 rounded border border-rose-700 bg-rose-600 px-2 text-xs font-black text-white">×</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                         <p class="text-xs leading-snug text-gray-700 dark:text-gray-200">
                             {{ __('pos.add_modal_list_footer_hint') }}
                         </p>
@@ -990,34 +1168,24 @@
                             >{{ __('pos.add_modal_close') }}</button>
                             <button
                                 type="button"
-                                x-on:click="
-                                    if (bulkSyncing || $wire.uiState === 'in_flight') { return; }
-                                    bulkSyncing = true;
-                                    const s = Alpine.store('posDraft');
-                                    $wire.bulkAddAndConfirm([]).then(() => {
-                                        if (s && s.shopId && s.sessionId) {
-                                            s.clearSession(s.shopId, s.sessionId, true);
-                                        }
-                                    }).finally(() => {
-                                        bulkSyncing = false;
-                                    });
-                                "
+                                x-on:click="submitDrafts()"
                                 x-bind:disabled="
                                     bulkSyncing
                                     || isLocalSkeletonVisible
+                                    || (drafts.length === 0 && !hasUnackedPlaced)
                                     || @js(($this->activeTableSessionId === null || $this->session === null) || $footerLocked)
                                 "
                                 wire:loading.attr="disabled"
-                                wire:target="bulkAddAndConfirm"
+                                wire:target="bulkAddDraftsOnly"
                                 class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-blue-950 bg-blue-500 px-3 py-2.5 text-sm font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-blue-600 focus:ring-2 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-50 dark:text-white"
                             >
                                 <span
                                     wire:loading.remove
-                                    wire:target="bulkAddAndConfirm"
-                                >{{ __('pos.action_recu_staff') }}</span>
+                                    wire:target="bulkAddDraftsOnly"
+                                >{{ __('pos.add_submit') }}</span>
                                 <span
                                     wire:loading
-                                    wire:target="bulkAddAndConfirm"
+                                    wire:target="bulkAddDraftsOnly"
                                 >{{ __('pos.ui_working') }}</span>
                             </button>
                         </div>
@@ -1206,10 +1374,10 @@
                             @if ($this->addItemForConfig)
                                 <button
                                     type="button"
-                                    x-on:click="$wire.submitAddLine(q)"
+                                    x-on:click="$wire.queueConfiguredDraft(q)"
                                     x-bind:disabled="typeof q !== 'number' || q < 1"
                                     wire:loading.attr="disabled"
-                                    wire:target="submitAddLine"
+                                    wire:target="queueConfiguredDraft"
                                     class="touch-manipulation min-h-14 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-3 text-base font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
                                 >{{ __('pos.add_submit') }}</button>
                             @endif
