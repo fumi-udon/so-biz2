@@ -30,14 +30,35 @@ final class TableActionHostAuthoritativePayloadTest extends TestCase
 
     private static function scriptsBlob(mixed $effects): string
     {
-        $scripts = is_array($effects) ? ($effects['scripts'] ?? []) : [];
-        if (! is_array($scripts)) {
+        if (! is_array($effects)) {
             return '';
         }
+
+        $scripts = $effects['scripts'] ?? [];
+        $js = $effects['js'] ?? [];
+        $xjs = $effects['xjs'] ?? [];
+        $chunks = [];
+        if (is_array($scripts)) {
+            $chunks = array_merge($chunks, $scripts);
+        }
+        if (is_array($js)) {
+            $chunks = array_merge($chunks, $js);
+        }
+        if (is_array($xjs)) {
+            $chunks = array_merge($chunks, $xjs);
+        }
+
         $parts = [];
-        foreach ($scripts as $chunk) {
+        foreach ($chunks as $chunk) {
             if (is_string($chunk)) {
                 $parts[] = $chunk;
+                continue;
+            }
+            if (is_array($chunk)) {
+                $expression = $chunk['expression'] ?? $chunk['script'] ?? null;
+                if (is_string($expression) && $expression !== '') {
+                    $parts[] = $expression;
+                }
             }
         }
 

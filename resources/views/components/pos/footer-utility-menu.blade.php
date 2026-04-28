@@ -54,7 +54,7 @@
                 x-on:click="
                     posUtilityMenuOpen = false;
                     if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
-                        window.Livewire.dispatch('pos-tile-interaction-ended');
+                        window.Livewire.dispatch('pos-change-table-modal-open');
                     }
                 "
             >

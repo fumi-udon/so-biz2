@@ -3,6 +3,7 @@
 namespace App\Livewire\Pos;
 
 use App\Actions\Pos\AddPosOrderFromStaffAction;
+use App\Actions\Pos\ChangeTableSessionAction;
 use App\Actions\Pos\DeleteOrderLineWithPolicyAction;
 use App\Actions\RadTable\RecordAdditionPrintForSessionAction;
 use App\Actions\RadTable\RecuPlacedOrdersForSessionAction;
@@ -15,6 +16,8 @@ use App\Enums\OrderStatus;
 use App\Enums\PrintIntent;
 use App\Enums\TableSessionStatus;
 use App\Exceptions\RevisionConflictException;
+use App\Exceptions\Pos\SessionRevisionMismatchException;
+use App\Exceptions\Pos\TableAlreadyOccupiedException;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\OrderLine;
@@ -1233,6 +1236,69 @@ class TableActionHost extends Component
     /**
      * Confirm Placed → Confirmed (Recu staff).
      */
+    public function changeTable(int $destTableId): void
+    {
+        if ($this->requiresStaffMealAuth) {
+            return;
+        }
+        if ($this->uiState === 'in_flight') {
+            return;
+        }
+        if ($this->shopId < 1 || $this->activeTableSessionId === null || $this->activeTableSessionId < 1) {
+            return;
+        }
+        if ($destTableId < 1) {
+            return;
+        }
+
+        $this->uiState = 'in_flight';
+        try {
+            app(ChangeTableSessionAction::class)->execute(
+                shopId: $this->shopId,
+                sourceTableSessionId: (int) $this->activeTableSessionId,
+                destTableId: $destTableId,
+                expectedSessionRevision: $this->expectedSessionRevision,
+            );
+
+            $newTableName = (string) (RestaurantTable::query()
+                ->where('shop_id', $this->shopId)
+                ->whereKey($destTableId)
+                ->value('name') ?? '');
+
+            $this->activeRestaurantTableId = $destTableId;
+            $this->activeRestaurantTableName = $newTableName;
+            $this->loadSessionData((int) $this->activeTableSessionId);
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
+            $this->posDraftSyncContextToBrowser();
+            $this->dispatchAuthoritativeLinePayload();
+        } catch (TableAlreadyOccupiedException $e) {
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body(__('pos.change_table_dest_occupied'))
+                ->danger()
+                ->send();
+        } catch (SessionRevisionMismatchException $e) {
+            Notification::make()
+                ->title(__('pos.data_stale_title'))
+                ->body(__('pos.change_table_revision_conflict_syncing'))
+                ->warning()
+                ->send();
+            $this->loadSessionData((int) $this->activeTableSessionId);
+            $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
+        } catch (Throwable $e) {
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        } finally {
+            $this->uiState = 'idle';
+        }
+    }
+
+    /**
+     * Confirm Placed → Confirmed (Recu staff).
+     */
     public function confirmOrders(): void
     {
         if ($this->requiresStaffMealAuth) {
@@ -1812,6 +1878,39 @@ class TableActionHost extends Component
             && $this->session !== null
             && ! $this->hasUnackedPlaced
             && $this->posOrders->isNotEmpty();
+    }
+
+    /**
+     * @return list<array{id:int,name:string}>
+     */
+    public function getChangeTableCandidatesProperty(): array
+    {
+        if ($this->shopId < 1 || $this->activeTableSessionId === null || $this->activeTableSessionId < 1) {
+            return [];
+        }
+
+        $currentTableId = (int) ($this->activeRestaurantTableId ?? 0);
+        $data = app(TableDashboardQueryService::class)->getDashboardData($this->shopId);
+        $out = [];
+        foreach ($data->tiles as $tile) {
+            $row = $tile->toArray();
+            $tableId = (int) ($row['restaurantTableId'] ?? 0);
+            if ($tableId < 1 || $tableId === $currentTableId) {
+                continue;
+            }
+            if (TableCategory::tryResolveFromId($tableId) !== TableCategory::Customer) {
+                continue;
+            }
+            if (($row['activeTableSessionId'] ?? null) !== null) {
+                continue;
+            }
+            $out[] = [
+                'id' => $tableId,
+                'name' => (string) ($row['restaurantTableName'] ?? __('pos.table_name_fallback', ['id' => $tableId])),
+            ];
+        }
+
+        return $out;
     }
 
     public function getFooterActionsLockedProperty(): bool

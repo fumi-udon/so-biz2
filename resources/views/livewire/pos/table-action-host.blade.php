@@ -30,6 +30,7 @@
          */
         lineSurfaceMode: 'live',
         afterimageLines: [],
+        changeTableModalOpen: false,
         /** Next authoritative may reveal Livewire lines (user/Sync/first skeleton load). */
         selfActionPending: false,
         seenUnsentLineKeys: {},
@@ -46,6 +47,7 @@
             this.previewSessionId = null;
             this.lineSurfaceMode = 'live';
             this.afterimageLines = [];
+            this.changeTableModalOpen = false;
             this.selfActionPending = false;
             $wire.closeHost();
         },
@@ -298,6 +300,12 @@
     x-on:pos-afterimage-self-action.window="selfActionPending = true"
     x-on:pos-afterimage-sync-request.window="selfActionPending = true"
     x-on:pos-draft-context-switched.window="seenUnsentLineKeys = {}"
+    x-on:pos-change-table-modal-open.window="
+        const sid = Number($wire.activeTableSessionId || 0)
+        if (sid > 0) {
+            changeTableModalOpen = true
+        }
+    "
     x-on:pos-tile-interaction-ended.window="
         isLocalSkeletonVisible = false
         localSkeletonToken = null
@@ -1228,4 +1236,49 @@
             />
         </div>
     @endif
+
+    <div
+        x-cloak
+        x-show="changeTableModalOpen"
+        class="fixed inset-0 z-[340] flex items-center justify-center bg-black/70 p-3"
+        role="dialog"
+        aria-modal="true"
+    >
+        <div class="absolute inset-0" x-on:click="changeTableModalOpen = false"></div>
+        <div class="relative z-[345] w-full max-w-md rounded-xl border-2 border-slate-400 bg-white p-3 text-gray-950 shadow-xl dark:border-slate-600 dark:bg-slate-900 dark:text-white">
+            <div class="mb-2 rounded-lg border-2 border-rose-700 bg-rose-100 px-2 py-2 text-center shadow-sm dark:border-rose-400 dark:bg-rose-950/60">
+                <p class="text-[11px] font-black uppercase tracking-wider text-rose-900 dark:text-rose-100">
+                    {{ __('pos.change_table_selected_label') }}
+                </p>
+                <p class="mt-0.5 animate-pulse text-base font-black uppercase tracking-wide text-rose-950 dark:text-white">
+                    {{ $this->activeSessionLabel }}
+                </p>
+            </div>
+            <div class="mb-2 flex items-center justify-between gap-2">
+                <p class="text-sm font-extrabold text-gray-950 dark:text-white">{{ __('pos.action_changer_table') }}</p>
+                <button
+                    type="button"
+                    x-on:click="changeTableModalOpen = false"
+                    class="rounded border border-slate-400 bg-slate-100 px-2 py-1 text-xs font-bold text-slate-800 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                >
+                    {{ __('pos.close') }}
+                </button>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                @forelse ($this->changeTableCandidates as $candidate)
+                    <button
+                        type="button"
+                        x-on:click="changeTableModalOpen = false; $wire.changeTable({{ (int) $candidate['id'] }})"
+                        class="touch-manipulation rounded-md border-2 border-emerald-700 bg-emerald-500 px-2 py-2 text-left text-sm font-bold text-white hover:bg-emerald-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                    >
+                        {{ $candidate['name'] }}
+                    </button>
+                @empty
+                    <p class="col-span-2 text-sm text-gray-700 dark:text-gray-200">
+                        {{ __('pos.change_table_no_available') }}
+                    </p>
+                @endforelse
+            </div>
+        </div>
+    </div>
 </div>
