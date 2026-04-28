@@ -900,6 +900,163 @@
                 x-data="{
                     drafts: [],
                     hasUnackedPlaced: @js((bool) $this->hasUnackedPlaced),
+                    catalog: [],
+                    catalogById: {},
+                    localConfig: {
+                        open: false,
+                        menu_item_id: 0,
+                        name: '',
+                        style_required: false,
+                        styles: [],
+                        toppings: [],
+                        styleId: null,
+                        selectedToppings: [],
+                        note: '',
+                        qty: 1,
+                    },
+                    catalogStorageKey() {
+                        return 'pos_catalog_' + String(@js((int) $this->shopId))
+                    },
+                    normalizeOptionRows(rows, priceField) {
+                        if (!Array.isArray(rows)) {
+                            return []
+                        }
+                        return rows
+                            .filter((r) => r && typeof r === 'object' && String(r.id || '') !== '')
+                            .map((r) => ({
+                                id: String(r.id || ''),
+                                name: typeof r.name === 'string' ? r.name : String(r.id || ''),
+                                priceLabel: this.formatPriceLabel(r, priceField),
+                            }))
+                    },
+                    formatPriceLabel(row, priceField) {
+                        const v = row && typeof row === 'object' ? row[priceField] : null
+                        if (typeof v === 'number' && Number.isFinite(v)) {
+                            return this.moneyMinorToLabel(v)
+                        }
+                        if (typeof row?.price_label === 'string') {
+                            return row.price_label
+                        }
+                        return ''
+                    },
+                    moneyMinorToLabel(minor) {
+                        const n = Number(minor || 0)
+                        const safe = Number.isFinite(n) ? n : 0
+                        const abs = Math.abs(safe)
+                        const intPart = Math.floor(abs / 1000)
+                        const fracPart = abs % 1000
+                        const sign = safe < 0 ? '-' : ''
+                        if (fracPart === 0) {
+                            return sign + String(intPart) + ' DT'
+                        }
+                        const frac = String(fracPart).padStart(3, '0').replace(/0+$/, '')
+                        return sign + String(intPart) + '.' + frac + ' DT'
+                    },
+                    hydrateCatalog() {
+                        let payload = null
+                        try {
+                            const raw = window.localStorage.getItem(this.catalogStorageKey())
+                            if (raw) {
+                                const parsed = JSON.parse(raw)
+                                if (parsed && parsed.schemaVersion === 1 && Array.isArray(parsed.catalog)) {
+                                    payload = parsed
+                                }
+                            }
+                        } catch (_) {}
+                        if (!payload) {
+                            const el = document.getElementById(@js('pos-add-catalog-'.$this->getId()))
+                            if (!el) {
+                                return
+                            }
+                            try {
+                                const catalog = JSON.parse(el.textContent || '[]')
+                                payload = {
+                                    schemaVersion: 1,
+                                    masterVersion: Date.now(),
+                                    shopId: @js((int) $this->shopId),
+                                    catalog: Array.isArray(catalog) ? catalog : [],
+                                }
+                                window.localStorage.setItem(this.catalogStorageKey(), JSON.stringify(payload))
+                            } catch (_) {
+                                return
+                            }
+                        }
+                        this.catalog = Array.isArray(payload.catalog) ? payload.catalog : []
+                        const map = {}
+                        this.catalog.forEach((b) => {
+                            const items = Array.isArray(b && b.items) ? b.items : []
+                            items.forEach((i) => {
+                                const id = Number(i && i.id)
+                                if (Number.isFinite(id) && id > 0) {
+                                    map[id] = i
+                                }
+                            })
+                        })
+                        this.catalogById = map
+                    },
+                    openConfigModal(menuItemId) {
+                        const id = Number(menuItemId || 0)
+                        if (!Number.isFinite(id) || id < 1) {
+                            return
+                        }
+                        const row = this.catalogById[id]
+                        if (!row || row.is_active === false) {
+                            return
+                        }
+                        this.localConfig.open = true
+                        this.localConfig.menu_item_id = id
+                        this.localConfig.name = typeof row.name === 'string' ? row.name : ''
+                        this.localConfig.style_required = Boolean(row.style_required)
+                        this.localConfig.styles = this.normalizeOptionRows(row.styles, 'price_minor')
+                        this.localConfig.toppings = this.normalizeOptionRows(row.toppings, 'price_delta_minor')
+                        this.localConfig.styleId = null
+                        this.localConfig.selectedToppings = []
+                        this.localConfig.note = ''
+                        this.localConfig.qty = 1
+                    },
+                    closeConfigModal() {
+                        this.localConfig.open = false
+                    },
+                    localToggleTopping(id) {
+                        const sid = String(id || '')
+                        if (sid === '') {
+                            return
+                        }
+                        const idx = this.localConfig.selectedToppings.indexOf(sid)
+                        if (idx >= 0) {
+                            this.localConfig.selectedToppings.splice(idx, 1)
+                            return
+                        }
+                        this.localConfig.selectedToppings.push(sid)
+                    },
+                    localHasTopping(id) {
+                        return this.localConfig.selectedToppings.includes(String(id || ''))
+                    },
+                    localStyleRequiredMissing() {
+                        return this.localConfig.style_required === true
+                            && (this.localConfig.styleId === null || this.localConfig.styleId === '')
+                    },
+                    queueLocalConfiguredDraft() {
+                        if (this.localConfig.menu_item_id < 1 || this.localStyleRequiredMissing()) {
+                            return
+                        }
+                        const styleHit = this.localConfig.styles.find((s) => s.id === String(this.localConfig.styleId || ''))
+                        const toppingLabels = this.localConfig.selectedToppings.map((tid) => {
+                            const hit = this.localConfig.toppings.find((t) => t.id === String(tid))
+                            return hit ? hit.name : String(tid)
+                        })
+                        this.addConfiguredDraft({
+                            menu_item_id: this.localConfig.menu_item_id,
+                            name: this.localConfig.name,
+                            qty: Math.max(1, Math.min(200, Number(this.localConfig.qty || 1))),
+                            styleId: this.localConfig.styleId || null,
+                            styleLabel: styleHit ? styleHit.name : '',
+                            toppings: this.localConfig.selectedToppings.slice(),
+                            toppingsLabel: toppingLabels,
+                            note: this.localConfig.note || '',
+                        })
+                        this.closeConfigModal()
+                    },
                     makeDraftKey(draft) {
                         const d = draft && typeof draft === 'object' ? draft : {}
                         const id = Number(d.menu_item_id || 0)
@@ -1044,6 +1201,7 @@
                         }
                     },
                 }"
+                x-init="hydrateCatalog()"
                 x-on:pos-add-draft-queued.window="addConfiguredDraft($event.detail)"
                 class="relative {{ $zAddModalPanel }} m-0 flex h-[90dvh] max-h-[90dvh] w-full max-w-7xl flex-col overflow-hidden rounded-t-2xl border-4 border-blue-600 bg-white text-slate-950 shadow-2xl sm:m-4 sm:w-[90vw] sm:rounded-2xl dark:border-blue-500 dark:bg-slate-900 dark:text-white"
             >
@@ -1051,11 +1209,8 @@
                     class="flex shrink-0 items-center justify-between border-b-4 border-blue-600 bg-blue-100 px-3 py-2.5 dark:border-blue-500 dark:bg-blue-950/40"
                 >
                     <h3 class="min-w-0 truncate text-base font-bold text-gray-950 dark:text-white">
-                        @if ($addModalStep === 'config')
-                            {{ $this->addItemForConfig?->name }}
-                        @else
-                            {{ __('pos.add_modal_title') }}
-                        @endif
+                        <span x-show="!localConfig.open">{{ __('pos.add_modal_title') }}</span>
+                        <span x-show="localConfig.open" x-cloak x-text="localConfig.name || @js(__('pos.add_modal_title'))"></span>
                     </h3>
                     <button
                         type="button"
@@ -1075,7 +1230,7 @@
                         {!! json_encode($addCatalog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
                     </script>
                     <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div class="flex min-h-0 flex-1 overflow-hidden">
+                    <div class="flex min-h-0 flex-1 overflow-hidden" x-show="!localConfig.open">
                         @if (count($addCatalog) > 0)
                             <aside
                                 class="flex w-[25%] min-w-[10rem] max-w-[14rem] shrink-0 flex-col overflow-y-auto overscroll-contain border-e-4 border-blue-200 bg-slate-50 py-2 ps-2 pe-1.5 dark:border-blue-800 dark:bg-slate-800/80"
@@ -1114,9 +1269,7 @@
                                                     type="button"
                                                     class="touch-manipulation flex min-h-[80px] w-full items-center justify-between gap-3 rounded-xl border-2 border-blue-400 bg-white px-4 py-3 text-left text-base font-bold text-gray-950 shadow-sm hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:border-blue-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700"
                                                     @if (($m['requires_config'] ?? false) === true)
-                                                        x-on:click="$wire.beginConfigureItem({{ (int) $m['id'] }})"
-                                                        wire:loading.attr="disabled"
-                                                        wire:target="beginConfigureItem"
+                                                        x-on:click="openConfigModal({{ (int) $m['id'] }})"
                                                     @else
                                                         x-on:click="addItem({{ (int) $m['id'] }}, @js((string) $m['name']))"
                                                     @endif
@@ -1136,6 +1289,73 @@
                         </div>
                     </div>
                     <div
+                        x-show="localConfig.open"
+                        x-cloak
+                        class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2"
+                    >
+                        <p class="mb-2 text-sm text-gray-600 dark:text-gray-300">
+                            <span x-text="localConfig.name"></span>
+                        </p>
+                        <template x-if="localConfig.styles.length > 0">
+                            <div>
+                                <p class="mb-1 text-xs font-bold uppercase text-gray-800 dark:text-gray-200">{{ __('pos.add_select_style') }}</p>
+                                <ul class="mb-2 space-y-2">
+                                    <template x-for="s in localConfig.styles" :key="'cfg-style-' + s.id">
+                                        <li>
+                                            <label class="flex min-h-14 cursor-pointer touch-manipulation items-center justify-between gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base active:bg-gray-50 dark:border-gray-600 dark:bg-slate-900 dark:active:bg-slate-800">
+                                                <span class="inline-flex min-w-0 flex-1 items-center gap-3 text-gray-950 dark:text-white">
+                                                    <input type="radio" class="size-5 shrink-0 border-gray-400 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-500 dark:text-blue-500" name="local-add-style" :value="s.id" x-model="localConfig.styleId" />
+                                                    <span class="font-semibold leading-snug" x-text="s.name"></span>
+                                                </span>
+                                                <span class="shrink-0 text-sm font-medium tabular-nums text-gray-800 dark:text-gray-200" x-text="s.priceLabel"></span>
+                                            </label>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </template>
+                        <p x-show="localStyleRequiredMissing()" x-cloak class="mb-2 text-xs text-amber-800 dark:text-amber-200">{{ __('pos.add_style_required_hint') }}</p>
+                        <template x-if="localConfig.toppings.length > 0">
+                            <div>
+                                <p class="mb-1 text-xs font-bold uppercase text-gray-800 dark:text-gray-200">{{ __('pos.add_select_toppings') }}</p>
+                                <ul class="mb-2 space-y-2">
+                                    <template x-for="t in localConfig.toppings" :key="'cfg-top-' + t.id">
+                                        <li>
+                                            <button type="button" class="flex min-h-14 w-full touch-manipulation items-center justify-between gap-3 rounded-xl border-2 border-amber-500 bg-amber-50 px-4 py-3 text-left text-base font-bold text-slate-950 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 active:bg-amber-100 dark:border-amber-500 dark:bg-amber-950/30 dark:text-white dark:hover:bg-amber-900/40 dark:active:bg-amber-900/50" x-on:click="localToggleTopping(t.id)">
+                                                <span class="min-w-0 flex flex-1 items-center gap-2 leading-snug" x-bind:class="localHasTopping(t.id) ? 'font-extrabold' : 'font-semibold'">
+                                                    <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 text-[20px] font-black leading-none" x-bind:class="localHasTopping(t.id) ? 'border-amber-700 bg-amber-300 text-amber-950 dark:border-amber-300 dark:bg-amber-200 dark:text-amber-950' : 'border-slate-500 bg-white text-slate-700 dark:border-slate-400 dark:bg-slate-800 dark:text-slate-200'" aria-hidden="true" x-text="localHasTopping(t.id) ? '✓' : '□'"></span>
+                                                    <span class="min-w-0 flex-1" x-text="t.name"></span>
+                                                </span>
+                                                <span class="shrink-0 text-sm font-semibold tabular-nums text-gray-800 dark:text-gray-200" x-text="'+' + t.priceLabel"></span>
+                                            </button>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </template>
+                        <div class="mb-2 space-y-3">
+                            <div>
+                                <label class="mb-1.5 block text-sm font-extrabold text-gray-950 dark:text-white">{{ __('pos.add_qty') }}</label>
+                                <div class="flex max-w-md items-stretch gap-2" role="group" aria-label="{{ __('pos.add_qty') }}">
+                                    <button type="button" class="touch-manipulation flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-xl border-2 border-slate-600 bg-white text-2xl font-black leading-none text-slate-900 shadow-sm hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 dark:active:bg-slate-600" x-on:click="localConfig.qty = Math.max(1, Number(localConfig.qty || 1) - 1)" aria-label="{{ __('pos.add_qty') }} −1">−</button>
+                                    <div class="flex min-h-14 min-w-0 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-50 px-3 dark:border-amber-500 dark:bg-amber-950/40">
+                                        <span class="text-3xl font-black tabular-nums text-gray-950 dark:text-white" x-text="Math.max(1, Math.min(200, Number(localConfig.qty || 1)))" aria-live="polite"></span>
+                                    </div>
+                                    <button type="button" class="touch-manipulation flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-xl border-2 border-slate-600 bg-white text-2xl font-black leading-none text-slate-900 shadow-sm hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 dark:active:bg-slate-600" x-on:click="localConfig.qty = Math.min(200, Number(localConfig.qty || 1) + 1)" aria-label="{{ __('pos.add_qty') }} +1">+</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="mb-0.5 block text-[10px] font-medium text-slate-500 dark:text-slate-400" for="pos-local-add-note-field">{{ __('pos.add_note') }}</label>
+                                <input id="pos-local-add-note-field" type="text" class="w-full max-w-md rounded-md border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-xs text-gray-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/60 dark:border-slate-600 dark:bg-slate-800/50 dark:text-gray-200 dark:placeholder:text-slate-500" x-model.debounce.300ms="localConfig.note" autocomplete="off" />
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="button" x-on:click="closeConfigModal()" class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-slate-600 bg-white py-2.5 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700">{{ __('pos.add_back') }}</button>
+                            <button type="button" x-on:click="queueLocalConfiguredDraft()" x-bind:disabled="localStyleRequiredMissing()" class="touch-manipulation min-h-14 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-3 text-base font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50">{{ __('pos.add_submit') }}</button>
+                        </div>
+                    </div>
+                    <div
+                        x-show="!localConfig.open"
                         class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
                     >
                         <div x-show="drafts.length > 0" x-cloak class="max-h-36 overflow-y-auto rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-slate-600 dark:bg-slate-800/60">
@@ -1193,199 +1413,6 @@
                                     wire:target="bulkAddDraftsOnly"
                                 >{{ __('pos.ui_working') }}</span>
                             </button>
-                        </div>
-                    </div>
-                    </div>
-                @elseif ($addModalStep === 'config')
-                    <div
-                        wire:key="pos-add-config-touch-{{ (int) ($this->addConfigMenuItemId ?? 0) }}"
-                        class="flex min-h-0 flex-1 flex-col overflow-hidden"
-                        x-data="{
-                            q: {{ max(1, min(200, (int) $this->addQty)) }},
-                            dec() { this.q = Math.max(1, this.q - 1); },
-                            inc() { this.q = Math.min(200, this.q + 1); },
-                        }"
-                        x-init="q = {{ max(1, min(200, (int) $this->addQty)) }}"
-                    >
-                    <div
-                        class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2"
-                    >
-                        @if ($this->addItemForConfig)
-                            @php
-                                $i = $this->addItemForConfig;
-                                $stylesL = $this->getStylesListForItem($i);
-                                $topsL = $this->getToppingsListForItem($i);
-                                $styleReq = $this->isStyleRequiredFor($i);
-                            @endphp
-                            <p class="mb-2 text-sm text-gray-600 dark:text-gray-300">
-                                {{ $i->name }} ·
-                                <span class="font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                                    {{ $this->formatMinor((int) $i->from_price_minor) }}
-                                </span>
-                            </p>
-                            @if (count($stylesL) > 0)
-                                <p
-                                    class="mb-1 text-xs font-bold uppercase text-gray-800 dark:text-gray-200"
-                                >
-                                    {{ __('pos.add_select_style') }}
-                                </p>
-                                <ul class="mb-2 space-y-2">
-                                    @foreach ($stylesL as $s)
-                                        <li>
-                                            <label
-                                                class="flex min-h-14 cursor-pointer touch-manipulation items-center justify-between gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-base active:bg-gray-50 dark:border-gray-600 dark:bg-slate-900 dark:active:bg-slate-800"
-                                            >
-                                                <span
-                                                    class="inline-flex min-w-0 flex-1 items-center gap-3 text-gray-950 dark:text-white"
-                                                >
-                                                    <input
-                                                        type="radio"
-                                                        class="size-5 shrink-0 border-gray-400 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-500 dark:text-blue-500"
-                                                        name="add-style"
-                                                        value="{{ $s['id'] }}"
-                                                        wire:model="addStyleId"
-                                                    />
-                                                    <span class="font-semibold leading-snug">{{ $s['name'] }}</span>
-                                                </span>
-                                                <span
-                                                    class="shrink-0 text-sm font-medium tabular-nums text-gray-800 dark:text-gray-200"
-                                                >{{ $s['price_label'] }}</span>
-                                            </label>
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            @endif
-                            @if ($styleReq && count($stylesL) > 0 && ($addStyleId === null || $addStyleId === ''))
-                                <p class="mb-2 text-xs text-amber-800 dark:text-amber-200">
-                                    {{ __('pos.add_style_required_hint') }}
-                                </p>
-                            @endif
-                            @if (count($topsL) > 0)
-                                <p
-                                    class="mb-1 text-xs font-bold uppercase text-gray-800 dark:text-gray-200"
-                                >
-                                    {{ __('pos.add_select_toppings') }}
-                                </p>
-                                <ul class="mb-2 space-y-2">
-                                    @foreach ($topsL as $t)
-                                        @php
-                                            $tChecked = in_array(
-                                                (string) $t['id'],
-                                                $addToppings,
-                                                true,
-                                            );
-                                        @endphp
-                                        <li>
-                                            <button
-                                                type="button"
-                                                class="flex min-h-14 w-full touch-manipulation items-center justify-between gap-3 rounded-xl border-2 border-amber-500 bg-amber-50 px-4 py-3 text-left text-base font-bold text-slate-950 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 active:bg-amber-100 dark:border-amber-500 dark:bg-amber-950/30 dark:text-white dark:hover:bg-amber-900/40 dark:active:bg-amber-900/50"
-                                                wire:click="toggleAddTopping('{{ $t['id'] }}')"
-                                                wire:loading.attr="disabled"
-                                                wire:target="toggleAddTopping"
-                                            >
-                                                <span
-                                                    @class([
-                                                        'min-w-0 flex flex-1 items-center gap-2 leading-snug',
-                                                        'font-extrabold' => $tChecked,
-                                                        'font-semibold' => ! $tChecked,
-                                                    ])
-                                                >
-                                                    <span
-                                                        @class([
-                                                            'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 text-[20px] font-black leading-none',
-                                                            'border-amber-700 bg-amber-300 text-amber-950 dark:border-amber-300 dark:bg-amber-200 dark:text-amber-950' => $tChecked,
-                                                            'border-slate-500 bg-white text-slate-700 dark:border-slate-400 dark:bg-slate-800 dark:text-slate-200' => ! $tChecked,
-                                                        ])
-                                                        aria-hidden="true"
-                                                    >{{ $tChecked ? '✓' : '□' }}</span>
-                                                    <span class="min-w-0 flex-1">{{ $t['name'] }}</span>
-                                                </span>
-                                                <span
-                                                    class="shrink-0 text-sm font-semibold tabular-nums text-gray-800 dark:text-gray-200"
-                                                >+{{ $t['price_label'] }}</span>
-                                            </button>
-                                        </li>
-                                    @endforeach
-                                </ul>
-                            @endif
-                            <div class="mb-2 space-y-3">
-                                <div wire:ignore>
-                                    <label
-                                        class="mb-1.5 block text-sm font-extrabold text-gray-950 dark:text-white"
-                                    >{{ __('pos.add_qty') }}</label>
-                                    <div
-                                        class="flex max-w-md items-stretch gap-2"
-                                        role="group"
-                                        aria-label="{{ __('pos.add_qty') }}"
-                                    >
-                                        <button
-                                            type="button"
-                                            class="touch-manipulation flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-xl border-2 border-slate-600 bg-white text-2xl font-black leading-none text-slate-900 shadow-sm hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 dark:active:bg-slate-600"
-                                            x-on:click="dec()"
-                                            aria-label="{{ __('pos.add_qty') }} −1"
-                                        >
-                                            −
-                                        </button>
-                                        <div
-                                            class="flex min-h-14 min-w-0 flex-1 items-center justify-center rounded-xl border-2 border-amber-600 bg-amber-50 px-3 dark:border-amber-500 dark:bg-amber-950/40"
-                                        >
-                                            <span
-                                                class="text-3xl font-black tabular-nums text-gray-950 dark:text-white"
-                                                x-text="q"
-                                                aria-live="polite"
-                                            ></span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            class="touch-manipulation flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-xl border-2 border-slate-600 bg-white text-2xl font-black leading-none text-slate-900 shadow-sm hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-slate-500 dark:bg-slate-800 dark:text-white dark:hover:bg-slate-700 dark:active:bg-slate-600"
-                                            x-on:click="inc()"
-                                            aria-label="{{ __('pos.add_qty') }} +1"
-                                        >
-                                            +
-                                        </button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label
-                                        class="mb-0.5 block text-[10px] font-medium text-slate-500 dark:text-slate-400"
-                                        for="pos-add-note-field"
-                                    >{{ __('pos.add_note') }}</label>
-                                    <input
-                                        id="pos-add-note-field"
-                                        type="text"
-                                        class="w-full max-w-md rounded-md border border-slate-200 bg-slate-50/80 px-2 py-1.5 text-xs text-gray-800 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/60 dark:border-slate-600 dark:bg-slate-800/50 dark:text-gray-200 dark:placeholder:text-slate-500"
-                                        wire:model.debounce.500ms="addNote"
-                                        autocomplete="off"
-                                    />
-                                </div>
-                            </div>
-                        @else
-                            <p
-                                class="text-sm text-gray-800 dark:text-gray-200"
-                            >{{ __('pos.add_item_load_error') }}</p>
-                        @endif
-                    </div>
-                    <div
-                        class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
-                    >
-                        <div class="flex gap-2">
-                            <button
-                                type="button"
-                                wire:click="backToAddList"
-                                wire:loading.attr="disabled"
-                                wire:target="backToAddList"
-                                class="touch-manipulation min-h-12 flex-1 rounded-md border-2 border-slate-600 bg-white py-2.5 text-sm font-extrabold uppercase tracking-wide text-slate-900 hover:bg-slate-100 dark:border-slate-500 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
-                            >{{ __('pos.add_back') }}</button>
-                            @if ($this->addItemForConfig)
-                                <button
-                                    type="button"
-                                    x-on:click="$wire.queueConfiguredDraft(q)"
-                                    x-bind:disabled="typeof q !== 'number' || q < 1"
-                                    wire:loading.attr="disabled"
-                                    wire:target="queueConfiguredDraft"
-                                    class="touch-manipulation min-h-14 flex-1 rounded-md border-2 border-amber-950 bg-amber-500 py-3 text-base font-extrabold uppercase tracking-wide text-slate-950 hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
-                                >{{ __('pos.add_submit') }}</button>
-                            @endif
                         </div>
                     </div>
                     </div>

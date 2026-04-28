@@ -1211,6 +1211,10 @@ class TableActionHost extends Component
                             'name' => (string) $m->name,
                             'from_label' => MenuItemMoney::formatMinorForDisplay((int) $m->from_price_minor),
                             'requires_config' => $styleRequired || count($styles) > 0 || count($toppings) > 0,
+                            'styles' => $styles,
+                            'toppings' => $toppings,
+                            'style_required' => $styleRequired,
+                            'is_active' => true,
                         ];
                     }
                     if (count($rows) > 0) {
@@ -1225,6 +1229,32 @@ class TableActionHost extends Component
                 return $blocks;
             }
         );
+    }
+
+    /**
+     * Local catalog payload for SPA-like Add modal.
+     *
+     * @return array{schemaVersion:int,masterVersion:int,shopId:int,catalog:list<array<string,mixed>>}
+     */
+    public function getAddCatalogForLocal(): array
+    {
+        if ($this->shopId < 1) {
+            return [
+                'schemaVersion' => 1,
+                'masterVersion' => now()->timestamp,
+                'shopId' => 0,
+                'catalog' => [],
+            ];
+        }
+
+        $this->loadAddCatalog();
+
+        return [
+            'schemaVersion' => 1,
+            'masterVersion' => now()->timestamp,
+            'shopId' => (int) $this->shopId,
+            'catalog' => $this->addCatalog,
+        ];
     }
 
     /**

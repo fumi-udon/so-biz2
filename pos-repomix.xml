@@ -981,6 +981,152 @@ class Setting extends Model
 }
 </file>
 
+<file path="app/Models/Staff.php">
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Staff extends Model
+{
+    use SoftDeletes;
+
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'staff';
+
+    /**
+     * @var list<string>
+     */
+    protected $fillable = [
+        'shop_id',
+        'name',
+        'pin_code',
+        'role',
+        'target_weekly_hours',
+        'wage',
+        'hourly_wage',
+        'is_manager',
+        'job_level_id',
+        'age',
+        'gender',
+        'origin',
+        'note',
+        'fixed_shifts',
+        'extra_profile',
+        'is_active',
+    ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'fixed_shifts' => 'array',
+            'extra_profile' => 'array',
+            'is_active' => 'boolean',
+            'is_manager' => 'boolean',
+            'hourly_wage' => 'decimal:3',
+        ];
+    }
+
+    /**
+     * @return BelongsTo<Shop, $this>
+     */
+    public function shop(): BelongsTo
+    {
+        return $this->belongsTo(Shop::class);
+    }
+
+    /**
+     * @return BelongsTo<JobLevel, $this>
+     */
+    public function jobLevel(): BelongsTo
+    {
+        return $this->belongsTo(JobLevel::class);
+    }
+
+    /**
+     * @return HasMany<Attendance, $this>
+     */
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(Attendance::class);
+    }
+
+    /**
+     * @return HasMany<StaffAbsence, $this>
+     */
+    public function staffAbsences(): HasMany
+    {
+        return $this->hasMany(StaffAbsence::class);
+    }
+
+    /**
+     * @return HasMany<RoutineTask, $this>
+     */
+    public function assignedRoutineTasks(): HasMany
+    {
+        return $this->hasMany(RoutineTask::class, 'assigned_staff_id');
+    }
+
+    /**
+     * @return HasMany<InventoryItem, $this>
+     */
+    public function assignedInventoryItems(): HasMany
+    {
+        return $this->hasMany(InventoryItem::class, 'assigned_staff_id');
+    }
+
+    /**
+     * 給与計算用の基本給（スタブ）。
+     * 固定給カラムが未確定のため、現状は wage を返す。
+     */
+    public function calculateMonthlyBaseSalary(int $year, int $month): int
+    {
+        return (int) ($this->wage ?? 0);
+    }
+
+    /**
+     * 月間遅刻ペナルティ額を計算する。
+     */
+    public function calculateMonthlyPenalty(int $year, int $month): int
+    {
+        $lateMinutes = (int) Attendance::query()
+            ->where('staff_id', $this->id)
+            ->whereYear('date', $year)
+            ->whereMonth('date', $month)
+            ->sum('late_minutes');
+
+        $penaltyPerMinute = (int) config('payroll.late_penalty_per_minute', 10);
+
+        return $lateMinutes * max($penaltyPerMinute, 0);
+    }
+
+    /**
+     * 月間チップ分配総額を計算する。
+     */
+    public function calculateMonthlyTotalTips(int $year, int $month): float
+    {
+        return (float) StaffTip::query()
+            ->where('staff_id', $this->id)
+            ->whereHas('dailyTip', function ($query) use ($year, $month): void {
+                $query->whereYear('business_date', $year)
+                    ->whereMonth('business_date', $month);
+            })
+            ->sum('amount');
+    }
+}
+</file>
+
 <file path="app/Models/StaffAbsence.php">
 <?php
 
@@ -1835,6 +1981,26 @@ final class StaffPinAuthenticationService
 
         return null;
     }
+}
+</file>
+
+<file path="app/Services/TimecardPunchOutcome.php">
+<?php
+
+namespace App\Services;
+
+final class TimecardPunchOutcome
+{
+    /**
+     * @param  'none'|'mypage_late'|'mypage_success'|'timecard_success'  $postFlow
+     */
+    public function __construct(
+        public bool $ok,
+        public ?string $errorMessage = null,
+        public string $postFlow = 'none',
+        public ?int $lateMinutes = null,
+        public bool $tipAutoApplied = false,
+    ) {}
 }
 </file>
 
@@ -3513,152 +3679,6 @@ class ShopPrinterSetting extends Model
 }
 </file>
 
-<file path="app/Models/Staff.php">
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
-
-class Staff extends Model
-{
-    use SoftDeletes;
-
-    /**
-     * The table associated with the model.
-     *
-     * @var string
-     */
-    protected $table = 'staff';
-
-    /**
-     * @var list<string>
-     */
-    protected $fillable = [
-        'shop_id',
-        'name',
-        'pin_code',
-        'role',
-        'target_weekly_hours',
-        'wage',
-        'hourly_wage',
-        'is_manager',
-        'job_level_id',
-        'age',
-        'gender',
-        'origin',
-        'note',
-        'fixed_shifts',
-        'extra_profile',
-        'is_active',
-    ];
-
-    /**
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'fixed_shifts' => 'array',
-            'extra_profile' => 'array',
-            'is_active' => 'boolean',
-            'is_manager' => 'boolean',
-            'hourly_wage' => 'decimal:3',
-        ];
-    }
-
-    /**
-     * @return BelongsTo<Shop, $this>
-     */
-    public function shop(): BelongsTo
-    {
-        return $this->belongsTo(Shop::class);
-    }
-
-    /**
-     * @return BelongsTo<JobLevel, $this>
-     */
-    public function jobLevel(): BelongsTo
-    {
-        return $this->belongsTo(JobLevel::class);
-    }
-
-    /**
-     * @return HasMany<Attendance, $this>
-     */
-    public function attendances(): HasMany
-    {
-        return $this->hasMany(Attendance::class);
-    }
-
-    /**
-     * @return HasMany<StaffAbsence, $this>
-     */
-    public function staffAbsences(): HasMany
-    {
-        return $this->hasMany(StaffAbsence::class);
-    }
-
-    /**
-     * @return HasMany<RoutineTask, $this>
-     */
-    public function assignedRoutineTasks(): HasMany
-    {
-        return $this->hasMany(RoutineTask::class, 'assigned_staff_id');
-    }
-
-    /**
-     * @return HasMany<InventoryItem, $this>
-     */
-    public function assignedInventoryItems(): HasMany
-    {
-        return $this->hasMany(InventoryItem::class, 'assigned_staff_id');
-    }
-
-    /**
-     * 給与計算用の基本給（スタブ）。
-     * 固定給カラムが未確定のため、現状は wage を返す。
-     */
-    public function calculateMonthlyBaseSalary(int $year, int $month): int
-    {
-        return (int) ($this->wage ?? 0);
-    }
-
-    /**
-     * 月間遅刻ペナルティ額を計算する。
-     */
-    public function calculateMonthlyPenalty(int $year, int $month): int
-    {
-        $lateMinutes = (int) Attendance::query()
-            ->where('staff_id', $this->id)
-            ->whereYear('date', $year)
-            ->whereMonth('date', $month)
-            ->sum('late_minutes');
-
-        $penaltyPerMinute = (int) config('payroll.late_penalty_per_minute', 10);
-
-        return $lateMinutes * max($penaltyPerMinute, 0);
-    }
-
-    /**
-     * 月間チップ分配総額を計算する。
-     */
-    public function calculateMonthlyTotalTips(int $year, int $month): float
-    {
-        return (float) StaffTip::query()
-            ->where('staff_id', $this->id)
-            ->whereHas('dailyTip', function ($query) use ($year, $month): void {
-                $query->whereYear('business_date', $year)
-                    ->whereMonth('business_date', $month);
-            })
-            ->sum('amount');
-    }
-}
-</file>
-
 <file path="app/Models/TableSessionSettlement.php">
 <?php
 
@@ -4043,82 +4063,6 @@ final class PosLineComputationService
 }
 </file>
 
-<file path="app/Services/Pos/TableSessionLifecycleService.php">
-<?php
-
-namespace App\Services\Pos;
-
-use App\Enums\TableSessionStatus;
-use App\Exceptions\GuestOrderValidationException;
-use App\Models\RestaurantTable;
-use App\Models\TableSession;
-use Illuminate\Support\Str;
-
-/**
- * ゲスト/スタッフ双方で、卓の有効 {@see TableSession} を一貫して取得/作成。
- */
-final class TableSessionLifecycleService
-{
-    public function getOrCreateActiveSession(RestaurantTable $table): TableSession
-    {
-        $existing = TableSession::query()
-            ->where('restaurant_table_id', $table->id)
-            ->where('status', TableSessionStatus::Active)
-            ->orderByDesc('id')
-            ->lockForUpdate()
-            ->first();
-
-        if ($existing !== null) {
-            return $existing;
-        }
-
-        return $this->createNewActiveSession($table);
-    }
-
-    /**
-     * ゲスト注文のみ: 卓に Active セッションが無い（未開局・会計済みのみ等）場合は作成せず拒否する。
-     */
-    public function requireActiveSessionForGuestOrder(RestaurantTable $table): TableSession
-    {
-        $existing = TableSession::query()
-            ->where('restaurant_table_id', $table->id)
-            ->where('status', TableSessionStatus::Active)
-            ->orderByDesc('id')
-            ->lockForUpdate()
-            ->first();
-
-        if ($existing === null) {
-            throw new GuestOrderValidationException(__('guest.no_active_table_session'));
-        }
-
-        return $existing;
-    }
-
-    private function createNewActiveSession(RestaurantTable $table): TableSession
-    {
-        for ($i = 0; $i < 5; $i += 1) {
-            $token = Str::lower(Str::random(48));
-
-            $exists = TableSession::query()->where('token', $token)->exists();
-            if ($exists) {
-                continue;
-            }
-
-            return TableSession::query()->create([
-                'shop_id' => $table->shop_id,
-                'restaurant_table_id' => $table->id,
-                'token' => $token,
-                'status' => TableSessionStatus::Active,
-                'opened_at' => now(),
-                'closed_at' => null,
-            ]);
-        }
-
-        throw new GuestOrderValidationException(__('Could not start table session.'));
-    }
-}
-</file>
-
 <file path="app/Services/RadTable/RadTableTileResolver.php">
 <?php
 
@@ -4434,23 +4378,429 @@ final class StaffDirectoryService
 }
 </file>
 
-<file path="app/Services/TimecardPunchOutcome.php">
+<file path="app/Services/TimecardPunchService.php">
 <?php
 
 namespace App\Services;
 
-final class TimecardPunchOutcome
+use App\Models\Attendance;
+use App\Models\Staff;
+use App\Models\User;
+use App\Support\AttendanceLateCalculator;
+use App\Support\BusinessDate;
+use App\Support\FixedShiftSchedule;
+use Filament\Notifications\Notification;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+
+final class TimecardPunchService
 {
     /**
-     * @param  'none'|'mypage_late'|'mypage_success'|'timecard_success'  $postFlow
+     * @var array<string, string>
      */
-    public function __construct(
-        public bool $ok,
-        public ?string $errorMessage = null,
-        public string $postFlow = 'none',
-        public ?int $lateMinutes = null,
-        public bool $tipAutoApplied = false,
-    ) {}
+    private const ACTION_TO_COLUMN = [
+        'lunch_in' => 'lunch_in_at',
+        'lunch_out' => 'lunch_out_at',
+        'dinner_in' => 'dinner_in_at',
+        'dinner_out' => 'dinner_out_at',
+    ];
+
+    public function resolveTargetBusinessDate(): Carbon
+    {
+        return BusinessDate::current();
+    }
+
+    private function englishDayKey(Carbon $moment): string
+    {
+        return strtolower($moment->copy()->locale('en')->dayName);
+    }
+
+    /**
+     * @param  'lunch'|'dinner'  $meal
+     */
+    public function isMealScheduled(Staff $staff, Carbon $businessDate, string $meal): bool
+    {
+        $shifts = $staff->fixed_shifts;
+
+        if (! is_array($shifts)) {
+            return false;
+        }
+
+        $dayKey = $this->englishDayKey($businessDate);
+        $dayShifts = $shifts[$dayKey] ?? null;
+
+        if (! is_array($dayShifts)) {
+            return false;
+        }
+
+        $mealShift = $dayShifts[$meal] ?? null;
+        $planned = is_array($mealShift) ? ($mealShift[0] ?? null) : null;
+
+        return $planned !== null && $planned !== '';
+    }
+
+    /**
+     * シフト開始時刻を Carbon に変換して返す。
+     * パース不能・シフト未登録の場合は null（= 打刻不可として扱う）。
+     *
+     * @param  'lunch'|'dinner'  $meal
+     */
+    public function shiftStartCarbon(Staff $staff, Carbon $businessDate, string $meal): ?Carbon
+    {
+        $dayKey = $this->englishDayKey($businessDate);
+        $startStr = FixedShiftSchedule::start($staff, $dayKey, $meal);
+
+        if ($startStr === null || $startStr === '') {
+            return null;
+        }
+
+        try {
+            [$h, $m] = array_map('intval', explode(':', $startStr, 2));
+
+            return $businessDate->copy()->setTime($h, $m, 0);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * 出勤打刻ウィンドウが開いているかを判定する。
+     *
+     * ルール:
+     *   - シフトが登録されていない → false（Extra Shift フローへ）
+     *   - シフト開始の N 分前（config: punch_in_open_before_shift_minutes）以降 → true
+     *   - それより前 → false
+     *
+     * @param  'lunch'|'dinner'  $meal
+     */
+    public function isPunchInWindowOpen(Staff $staff, Carbon $businessDate, string $meal): bool
+    {
+        $startAt = $this->shiftStartCarbon($staff, $businessDate, $meal);
+
+        if ($startAt === null) {
+            return false;
+        }
+
+        $openMinutes = (int) config('timecard.punch_in_open_before_shift_minutes', 60);
+        $windowOpensAt = $startAt->copy()->subMinutes($openMinutes);
+
+        return now()->greaterThanOrEqualTo($windowOpensAt);
+    }
+
+    /**
+     * 出勤打刻が解禁される時刻文字列（"HH:MM"）を返す。
+     * 解禁時刻が計算できない場合は null。
+     *
+     * @param  'lunch'|'dinner'  $meal
+     */
+    public function punchInOpensAtDisplay(Staff $staff, Carbon $businessDate, string $meal): ?string
+    {
+        $startAt = $this->shiftStartCarbon($staff, $businessDate, $meal);
+
+        if ($startAt === null) {
+            return null;
+        }
+
+        $openMinutes = (int) config('timecard.punch_in_open_before_shift_minutes', 60);
+
+        return $startAt->copy()->subMinutes($openMinutes)->format('H:i');
+    }
+
+    /**
+     * 打刻アクションに対応する食事の予定だけをスナップショットする。
+     * ランチ打刻でディナー予定を固定しない（ディナー打刻前のシフト変更を反映するため）。
+     *
+     * @param  'lunch_in'|'lunch_out'|'dinner_in'|'dinner_out'  $punchAction
+     */
+    private function ensureScheduledSnapshotsForPunch(Attendance $attendance, Staff $staff, Carbon $businessDate, string $punchAction): void
+    {
+        $snaps = AttendanceLateCalculator::snapshotScheduledTimesFromFixedShifts($staff, $businessDate);
+
+        $lane = match ($punchAction) {
+            'lunch_in', 'lunch_out' => 'lunch',
+            'dinner_in', 'dinner_out' => 'dinner',
+            default => null,
+        };
+
+        if ($lane === 'lunch') {
+            if ($attendance->scheduled_in_at === null && $this->isMealScheduled($staff, $businessDate, 'lunch')) {
+                $attendance->scheduled_in_at = $snaps['scheduled_in_at'];
+            }
+
+            return;
+        }
+
+        if ($lane === 'dinner') {
+            if ($attendance->scheduled_dinner_at === null && $this->isMealScheduled($staff, $businessDate, 'dinner')) {
+                $attendance->scheduled_dinner_at = $snaps['scheduled_dinner_at'];
+            }
+        }
+    }
+
+    /**
+     * @param  'lunch_in'|'lunch_out'|'dinner_in'|'dinner_out'  $action
+     */
+    public function processNormalPunch(Staff $staff, string $action): TimecardPunchOutcome
+    {
+        $targetDate = $this->resolveTargetBusinessDate();
+        $dateString = $targetDate->toDateString();
+
+        if ($action === 'lunch_in' && ! $this->isMealScheduled($staff, $targetDate, 'lunch')) {
+            return new TimecardPunchOutcome(false, 'Aucun shift dejeuner prevu aujourd\'hui. Utilisez la demande d\'aide.');
+        }
+
+        if ($action === 'dinner_in' && ! $this->isMealScheduled($staff, $targetDate, 'dinner')) {
+            return new TimecardPunchOutcome(false, 'Aucun shift diner prevu aujourd\'hui. Utilisez la demande d\'aide.');
+        }
+
+        // ── 1時間前ルール（サーバ側強制）────────────────────────────────────────
+        // OUT アクションは時刻制限なし。IN のみ窓判定を適用。
+        if ($action === 'lunch_in' && ! $this->isPunchInWindowOpen($staff, $targetDate, 'lunch')) {
+            $at = $this->punchInOpensAtDisplay($staff, $targetDate, 'lunch') ?? '—';
+
+            return new TimecardPunchOutcome(false, "Pointage dejeuner disponible a partir de {$at}.");
+        }
+
+        if ($action === 'dinner_in' && ! $this->isPunchInWindowOpen($staff, $targetDate, 'dinner')) {
+            $at = $this->punchInOpensAtDisplay($staff, $targetDate, 'dinner') ?? '—';
+
+            return new TimecardPunchOutcome(false, "Pointage diner disponible a partir de {$at}.");
+        }
+
+        $existing = Attendance::query()
+            ->where('staff_id', $staff->id)
+            ->where('date', $dateString)
+            ->first();
+
+        if ($action === 'lunch_out' && ($existing === null || $existing->lunch_in_at === null)) {
+            return new TimecardPunchOutcome(false, 'Aucun pointage d\'entree dejeuner trouve.');
+        }
+
+        if ($action === 'dinner_out' && ($existing === null || $existing->dinner_in_at === null)) {
+            return new TimecardPunchOutcome(false, 'Aucun pointage d\'entree diner trouve.');
+        }
+
+        if (in_array($action, ['lunch_out', 'dinner_out'], true)) {
+            $gate = app(RoutineInventoryCompletionService::class);
+
+            if (! $gate->staffHasAllRoutineAndInventoryDone($staff, $dateString)) {
+                return new TimecardPunchOutcome(false, 'Des taches ou inventaires restent incomplets. Verifiez Mon espace.');
+            }
+        }
+
+        $column = self::ACTION_TO_COLUMN[$action];
+        $clockAt = now();
+
+        $recordedLate = false;
+        $lateDelta = 0;
+        $tipAutoApplied = false;
+
+        try {
+            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $targetDate, $action, &$recordedLate, &$lateDelta, &$tipAutoApplied): void {
+                $attendance = Attendance::query()->firstOrCreate(
+                    [
+                        'staff_id' => $staff->id,
+                        'date' => $dateString,
+                    ],
+                    [
+                        'late_minutes' => 0,
+                        'is_tip_eligible' => false,
+                        'is_edited_by_admin' => false,
+                    ],
+                );
+
+                $attendance = Attendance::query()->whereKey($attendance->id)->lockForUpdate()->first();
+
+                if ($attendance === null) {
+                    throw new \RuntimeException('Impossible de traiter le pointage. Reessayez.');
+                }
+
+                if ($attendance->getAttribute($column) !== null) {
+                    throw new \RuntimeException('Ce pointage est deja enregistre.');
+                }
+
+                $beforeLate = (int) ($attendance->late_minutes ?? 0);
+
+                $this->ensureScheduledSnapshotsForPunch($attendance, $staff, $targetDate, $action);
+
+                $attendance->{$column} = $clockAt;
+                $attendance->late_minutes = AttendanceLateCalculator::totalLateMinutes($attendance);
+
+                $lateDelta = max(0, $attendance->late_minutes - $beforeLate);
+                $recordedLate = $attendance->late_minutes > $beforeLate;
+
+                if ($action === 'lunch_in') {
+                    $mealLate = AttendanceLateCalculator::lateMinutesForMeal(
+                        $attendance->lunch_in_at,
+                        $attendance->scheduled_in_at
+                    );
+                    if ($mealLate === 0) {
+                        $attendance->is_lunch_tip_applied = true;
+                        $tipAutoApplied = true;
+                    }
+                } elseif ($action === 'dinner_in') {
+                    $mealLate = AttendanceLateCalculator::lateMinutesForMeal(
+                        $attendance->dinner_in_at,
+                        $attendance->scheduled_dinner_at
+                    );
+                    if ($mealLate === 0) {
+                        $attendance->is_dinner_tip_applied = true;
+                        $tipAutoApplied = true;
+                    }
+                }
+
+                $attendance->save();
+            });
+        } catch (QueryException $e) {
+            if ($this->isAttendanceDuplicateKeyException($e)) {
+                return new TimecardPunchOutcome(false, 'Ce pointage est deja enregistre.');
+            }
+
+            throw $e;
+        } catch (\RuntimeException $e) {
+            return new TimecardPunchOutcome(false, $e->getMessage());
+        }
+
+        $this->notifyNormalPunch($staff, $action);
+
+        $isClockIn = in_array($action, ['lunch_in', 'dinner_in'], true);
+
+        if ($isClockIn) {
+            if ($recordedLate && $lateDelta > 0) {
+                return new TimecardPunchOutcome(true, null, 'mypage_late', $lateDelta, false);
+            }
+
+            return new TimecardPunchOutcome(true, null, 'mypage_success', null, $tipAutoApplied);
+        }
+
+        return new TimecardPunchOutcome(true, null, 'timecard_success');
+    }
+
+    /**
+     * @param  'lunch'|'dinner'  $meal
+     */
+    public function processExtraShift(Staff $staff, string $meal, string $reason): TimecardPunchOutcome
+    {
+        $targetDate = $this->resolveTargetBusinessDate();
+        $dateString = $targetDate->toDateString();
+        $action = $meal === 'lunch' ? 'lunch_in' : 'dinner_in';
+        $column = self::ACTION_TO_COLUMN[$action];
+
+        if ($this->isMealScheduled($staff, $targetDate, $meal)) {
+            return new TimecardPunchOutcome(false, 'Ce shift est deja planifie. Utilisez le bouton normal d\'entree.');
+        }
+
+        $clockAt = now();
+        $reasonTrim = trim($reason);
+        $shiftLabel = $meal === 'lunch' ? 'Dejeuner' : 'Diner';
+
+        try {
+            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $shiftLabel, $reasonTrim, $targetDate, $action): void {
+                $attendance = Attendance::query()->firstOrCreate(
+                    [
+                        'staff_id' => $staff->id,
+                        'date' => $dateString,
+                    ],
+                    [
+                        'late_minutes' => 0,
+                        'is_tip_eligible' => false,
+                        'is_edited_by_admin' => false,
+                    ],
+                );
+
+                $attendance = Attendance::query()->whereKey($attendance->id)->lockForUpdate()->first();
+
+                if ($attendance === null) {
+                    throw new \RuntimeException('Impossible de traiter le pointage. Reessayez.');
+                }
+
+                if ($attendance->getAttribute($column) !== null) {
+                    throw new \RuntimeException('Ce pointage est deja enregistre.');
+                }
+
+                $this->ensureScheduledSnapshotsForPunch($attendance, $staff, $targetDate, $action);
+
+                $attendance->{$column} = $clockAt;
+                $attendance->late_minutes = AttendanceLateCalculator::totalLateMinutes($attendance);
+
+                $line = sprintf(
+                    '[%s] [Entree exceptionnelle] Aide %s%s',
+                    $clockAt->format('Y-m-d H:i'),
+                    $shiftLabel,
+                    $reasonTrim !== '' ? ' Motif: '.$reasonTrim : ''
+                );
+                $prev = $attendance->in_note;
+                $attendance->in_note = $prev !== null && $prev !== ''
+                    ? trim($prev."\n".$line)
+                    : $line;
+
+                $attendance->save();
+            });
+        } catch (QueryException $e) {
+            if ($this->isAttendanceDuplicateKeyException($e)) {
+                return new TimecardPunchOutcome(false, 'Ce pointage est deja enregistre.');
+            }
+
+            throw $e;
+        } catch (\RuntimeException $e) {
+            return new TimecardPunchOutcome(false, $e->getMessage());
+        }
+
+        $adminUsers = User::all();
+        Notification::make()
+            ->title('[Entree exceptionnelle] '.$staff->name.' a ete ajoute(e). Verifiez le tip.')
+            ->body($staff->name.' a rejoint l\'aide '.$shiftLabel.'. Merci de verifier le tip.'.($reasonTrim !== '' ? ' ('.$reasonTrim.')' : ''))
+            ->warning()
+            ->sendToDatabase($adminUsers);
+
+        return new TimecardPunchOutcome(true, null, 'mypage_success');
+    }
+
+    /**
+     * @param  'lunch_in'|'lunch_out'|'dinner_in'|'dinner_out'  $action
+     */
+    private function notifyNormalPunch(Staff $staff, string $action): void
+    {
+        $actionLabel = match ($action) {
+            'lunch_in' => 'entree dejeuner',
+            'lunch_out' => 'sortie dejeuner',
+            'dinner_in' => 'entree diner',
+            'dinner_out' => 'sortie diner',
+            default => 'pointage',
+        };
+
+        $adminUsers = User::all();
+
+        $notification = Notification::make()
+            ->title("{$staff->name} a fait {$actionLabel}")
+            ->success();
+
+        $notification->sendToDatabase($adminUsers);
+
+        try {
+            $notification->broadcast($adminUsers);
+        } catch (\Throwable) {
+            // ブロードキャスト失敗時は DB 通知だけ確実に残す。
+        }
+    }
+
+    private function isAttendanceDuplicateKeyException(QueryException $e): bool
+    {
+        if (($e->errorInfo[0] ?? null) === '23505') {
+            return true;
+        }
+
+        if (isset($e->errorInfo[1]) && (int) $e->errorInfo[1] === 1062) {
+            return true;
+        }
+
+        $msg = $e->getMessage();
+
+        return str_contains($msg, 'Duplicate entry')
+            || str_contains($msg, 'UNIQUE constraint failed')
+            || str_contains($msg, 'duplicate key value violates unique constraint');
+    }
 }
 </file>
 
@@ -5293,428 +5643,106 @@ class User extends Authenticatable implements FilamentUser
 }
 </file>
 
-<file path="app/Services/TimecardPunchService.php">
+<file path="app/Services/Pos/TableSessionLifecycleService.php">
 <?php
 
-namespace App\Services;
+namespace App\Services\Pos;
 
-use App\Models\Attendance;
-use App\Models\Staff;
-use App\Models\User;
-use App\Support\AttendanceLateCalculator;
-use App\Support\BusinessDate;
-use App\Support\FixedShiftSchedule;
-use Filament\Notifications\Notification;
-use Illuminate\Database\QueryException;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
+use App\Enums\TableSessionStatus;
+use App\Exceptions\GuestOrderValidationException;
+use App\Models\RestaurantTable;
+use App\Models\TableSession;
+use App\Models\TableSessionSettlement;
+use Illuminate\Support\Str;
 
-final class TimecardPunchService
+/**
+ * ゲスト/スタッフ双方で、卓の有効 {@see TableSession} を一貫して取得/作成。
+ */
+final class TableSessionLifecycleService
 {
-    /**
-     * @var array<string, string>
-     */
-    private const ACTION_TO_COLUMN = [
-        'lunch_in' => 'lunch_in_at',
-        'lunch_out' => 'lunch_out_at',
-        'dinner_in' => 'dinner_in_at',
-        'dinner_out' => 'dinner_out_at',
-    ];
-
-    public function resolveTargetBusinessDate(): Carbon
+    public function getOrCreateActiveSession(RestaurantTable $table): TableSession
     {
-        return BusinessDate::current();
-    }
-
-    private function englishDayKey(Carbon $moment): string
-    {
-        return strtolower($moment->copy()->locale('en')->dayName);
-    }
-
-    /**
-     * @param  'lunch'|'dinner'  $meal
-     */
-    public function isMealScheduled(Staff $staff, Carbon $businessDate, string $meal): bool
-    {
-        $shifts = $staff->fixed_shifts;
-
-        if (! is_array($shifts)) {
-            return false;
-        }
-
-        $dayKey = $this->englishDayKey($businessDate);
-        $dayShifts = $shifts[$dayKey] ?? null;
-
-        if (! is_array($dayShifts)) {
-            return false;
-        }
-
-        $mealShift = $dayShifts[$meal] ?? null;
-        $planned = is_array($mealShift) ? ($mealShift[0] ?? null) : null;
-
-        return $planned !== null && $planned !== '';
-    }
-
-    /**
-     * シフト開始時刻を Carbon に変換して返す。
-     * パース不能・シフト未登録の場合は null（= 打刻不可として扱う）。
-     *
-     * @param  'lunch'|'dinner'  $meal
-     */
-    public function shiftStartCarbon(Staff $staff, Carbon $businessDate, string $meal): ?Carbon
-    {
-        $dayKey = $this->englishDayKey($businessDate);
-        $startStr = FixedShiftSchedule::start($staff, $dayKey, $meal);
-
-        if ($startStr === null || $startStr === '') {
-            return null;
-        }
-
-        try {
-            [$h, $m] = array_map('intval', explode(':', $startStr, 2));
-
-            return $businessDate->copy()->setTime($h, $m, 0);
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    /**
-     * 出勤打刻ウィンドウが開いているかを判定する。
-     *
-     * ルール:
-     *   - シフトが登録されていない → false（Extra Shift フローへ）
-     *   - シフト開始の N 分前（config: punch_in_open_before_shift_minutes）以降 → true
-     *   - それより前 → false
-     *
-     * @param  'lunch'|'dinner'  $meal
-     */
-    public function isPunchInWindowOpen(Staff $staff, Carbon $businessDate, string $meal): bool
-    {
-        $startAt = $this->shiftStartCarbon($staff, $businessDate, $meal);
-
-        if ($startAt === null) {
-            return false;
-        }
-
-        $openMinutes = (int) config('timecard.punch_in_open_before_shift_minutes', 60);
-        $windowOpensAt = $startAt->copy()->subMinutes($openMinutes);
-
-        return now()->greaterThanOrEqualTo($windowOpensAt);
-    }
-
-    /**
-     * 出勤打刻が解禁される時刻文字列（"HH:MM"）を返す。
-     * 解禁時刻が計算できない場合は null。
-     *
-     * @param  'lunch'|'dinner'  $meal
-     */
-    public function punchInOpensAtDisplay(Staff $staff, Carbon $businessDate, string $meal): ?string
-    {
-        $startAt = $this->shiftStartCarbon($staff, $businessDate, $meal);
-
-        if ($startAt === null) {
-            return null;
-        }
-
-        $openMinutes = (int) config('timecard.punch_in_open_before_shift_minutes', 60);
-
-        return $startAt->copy()->subMinutes($openMinutes)->format('H:i');
-    }
-
-    /**
-     * 打刻アクションに対応する食事の予定だけをスナップショットする。
-     * ランチ打刻でディナー予定を固定しない（ディナー打刻前のシフト変更を反映するため）。
-     *
-     * @param  'lunch_in'|'lunch_out'|'dinner_in'|'dinner_out'  $punchAction
-     */
-    private function ensureScheduledSnapshotsForPunch(Attendance $attendance, Staff $staff, Carbon $businessDate, string $punchAction): void
-    {
-        $snaps = AttendanceLateCalculator::snapshotScheduledTimesFromFixedShifts($staff, $businessDate);
-
-        $lane = match ($punchAction) {
-            'lunch_in', 'lunch_out' => 'lunch',
-            'dinner_in', 'dinner_out' => 'dinner',
-            default => null,
-        };
-
-        if ($lane === 'lunch') {
-            if ($attendance->scheduled_in_at === null && $this->isMealScheduled($staff, $businessDate, 'lunch')) {
-                $attendance->scheduled_in_at = $snaps['scheduled_in_at'];
-            }
-
-            return;
-        }
-
-        if ($lane === 'dinner') {
-            if ($attendance->scheduled_dinner_at === null && $this->isMealScheduled($staff, $businessDate, 'dinner')) {
-                $attendance->scheduled_dinner_at = $snaps['scheduled_dinner_at'];
-            }
-        }
-    }
-
-    /**
-     * @param  'lunch_in'|'lunch_out'|'dinner_in'|'dinner_out'  $action
-     */
-    public function processNormalPunch(Staff $staff, string $action): TimecardPunchOutcome
-    {
-        $targetDate = $this->resolveTargetBusinessDate();
-        $dateString = $targetDate->toDateString();
-
-        if ($action === 'lunch_in' && ! $this->isMealScheduled($staff, $targetDate, 'lunch')) {
-            return new TimecardPunchOutcome(false, 'Aucun shift dejeuner prevu aujourd\'hui. Utilisez la demande d\'aide.');
-        }
-
-        if ($action === 'dinner_in' && ! $this->isMealScheduled($staff, $targetDate, 'dinner')) {
-            return new TimecardPunchOutcome(false, 'Aucun shift diner prevu aujourd\'hui. Utilisez la demande d\'aide.');
-        }
-
-        // ── 1時間前ルール（サーバ側強制）────────────────────────────────────────
-        // OUT アクションは時刻制限なし。IN のみ窓判定を適用。
-        if ($action === 'lunch_in' && ! $this->isPunchInWindowOpen($staff, $targetDate, 'lunch')) {
-            $at = $this->punchInOpensAtDisplay($staff, $targetDate, 'lunch') ?? '—';
-
-            return new TimecardPunchOutcome(false, "Pointage dejeuner disponible a partir de {$at}.");
-        }
-
-        if ($action === 'dinner_in' && ! $this->isPunchInWindowOpen($staff, $targetDate, 'dinner')) {
-            $at = $this->punchInOpensAtDisplay($staff, $targetDate, 'dinner') ?? '—';
-
-            return new TimecardPunchOutcome(false, "Pointage diner disponible a partir de {$at}.");
-        }
-
-        $existing = Attendance::query()
-            ->where('staff_id', $staff->id)
-            ->where('date', $dateString)
+        $existing = TableSession::query()
+            ->where('restaurant_table_id', $table->id)
+            ->where('status', TableSessionStatus::Active)
+            ->orderByDesc('id')
+            ->lockForUpdate()
             ->first();
 
-        if ($action === 'lunch_out' && ($existing === null || $existing->lunch_in_at === null)) {
-            return new TimecardPunchOutcome(false, 'Aucun pointage d\'entree dejeuner trouve.');
-        }
-
-        if ($action === 'dinner_out' && ($existing === null || $existing->dinner_in_at === null)) {
-            return new TimecardPunchOutcome(false, 'Aucun pointage d\'entree diner trouve.');
-        }
-
-        if (in_array($action, ['lunch_out', 'dinner_out'], true)) {
-            $gate = app(RoutineInventoryCompletionService::class);
-
-            if (! $gate->staffHasAllRoutineAndInventoryDone($staff, $dateString)) {
-                return new TimecardPunchOutcome(false, 'Des taches ou inventaires restent incomplets. Verifiez Mon espace.');
+        if ($existing !== null) {
+            // Defensive recovery: if this active row was already settled, do not
+            // reuse it for new orders. Close it and continue with a fresh session.
+            $alreadySettled = TableSessionSettlement::query()
+                ->where('table_session_id', (int) $existing->id)
+                ->lockForUpdate()
+                ->exists();
+            if ($alreadySettled) {
+                $existing->forceFill([
+                    'status' => TableSessionStatus::Closed,
+                    'closed_at' => $existing->closed_at ?? now(),
+                    'session_revision' => (int) $existing->session_revision + 1,
+                ])->save();
+            } else {
+                return $existing;
             }
         }
 
-        $column = self::ACTION_TO_COLUMN[$action];
-        $clockAt = now();
-
-        $recordedLate = false;
-        $lateDelta = 0;
-        $tipAutoApplied = false;
-
-        try {
-            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $targetDate, $action, &$recordedLate, &$lateDelta, &$tipAutoApplied): void {
-                $attendance = Attendance::query()->firstOrCreate(
-                    [
-                        'staff_id' => $staff->id,
-                        'date' => $dateString,
-                    ],
-                    [
-                        'late_minutes' => 0,
-                        'is_tip_eligible' => false,
-                        'is_edited_by_admin' => false,
-                    ],
-                );
-
-                $attendance = Attendance::query()->whereKey($attendance->id)->lockForUpdate()->first();
-
-                if ($attendance === null) {
-                    throw new \RuntimeException('Impossible de traiter le pointage. Reessayez.');
-                }
-
-                if ($attendance->getAttribute($column) !== null) {
-                    throw new \RuntimeException('Ce pointage est deja enregistre.');
-                }
-
-                $beforeLate = (int) ($attendance->late_minutes ?? 0);
-
-                $this->ensureScheduledSnapshotsForPunch($attendance, $staff, $targetDate, $action);
-
-                $attendance->{$column} = $clockAt;
-                $attendance->late_minutes = AttendanceLateCalculator::totalLateMinutes($attendance);
-
-                $lateDelta = max(0, $attendance->late_minutes - $beforeLate);
-                $recordedLate = $attendance->late_minutes > $beforeLate;
-
-                if ($action === 'lunch_in') {
-                    $mealLate = AttendanceLateCalculator::lateMinutesForMeal(
-                        $attendance->lunch_in_at,
-                        $attendance->scheduled_in_at
-                    );
-                    if ($mealLate === 0) {
-                        $attendance->is_lunch_tip_applied = true;
-                        $tipAutoApplied = true;
-                    }
-                } elseif ($action === 'dinner_in') {
-                    $mealLate = AttendanceLateCalculator::lateMinutesForMeal(
-                        $attendance->dinner_in_at,
-                        $attendance->scheduled_dinner_at
-                    );
-                    if ($mealLate === 0) {
-                        $attendance->is_dinner_tip_applied = true;
-                        $tipAutoApplied = true;
-                    }
-                }
-
-                $attendance->save();
-            });
-        } catch (QueryException $e) {
-            if ($this->isAttendanceDuplicateKeyException($e)) {
-                return new TimecardPunchOutcome(false, 'Ce pointage est deja enregistre.');
-            }
-
-            throw $e;
-        } catch (\RuntimeException $e) {
-            return new TimecardPunchOutcome(false, $e->getMessage());
-        }
-
-        $this->notifyNormalPunch($staff, $action);
-
-        $isClockIn = in_array($action, ['lunch_in', 'dinner_in'], true);
-
-        if ($isClockIn) {
-            if ($recordedLate && $lateDelta > 0) {
-                return new TimecardPunchOutcome(true, null, 'mypage_late', $lateDelta, false);
-            }
-
-            return new TimecardPunchOutcome(true, null, 'mypage_success', null, $tipAutoApplied);
-        }
-
-        return new TimecardPunchOutcome(true, null, 'timecard_success');
+        return $this->createNewActiveSession($table);
     }
 
     /**
-     * @param  'lunch'|'dinner'  $meal
+     * ゲスト注文のみ: 卓に Active セッションが無い（未開局・会計済みのみ等）場合は作成せず拒否する。
      */
-    public function processExtraShift(Staff $staff, string $meal, string $reason): TimecardPunchOutcome
+    public function requireActiveSessionForGuestOrder(RestaurantTable $table): TableSession
     {
-        $targetDate = $this->resolveTargetBusinessDate();
-        $dateString = $targetDate->toDateString();
-        $action = $meal === 'lunch' ? 'lunch_in' : 'dinner_in';
-        $column = self::ACTION_TO_COLUMN[$action];
+        $existing = TableSession::query()
+            ->where('restaurant_table_id', $table->id)
+            ->where('status', TableSessionStatus::Active)
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first();
 
-        if ($this->isMealScheduled($staff, $targetDate, $meal)) {
-            return new TimecardPunchOutcome(false, 'Ce shift est deja planifie. Utilisez le bouton normal d\'entree.');
+        if ($existing === null) {
+            throw new GuestOrderValidationException(__('guest.no_active_table_session'));
         }
 
-        $clockAt = now();
-        $reasonTrim = trim($reason);
-        $shiftLabel = $meal === 'lunch' ? 'Dejeuner' : 'Diner';
+        $alreadySettled = TableSessionSettlement::query()
+            ->where('table_session_id', (int) $existing->id)
+            ->lockForUpdate()
+            ->exists();
+        if ($alreadySettled) {
+            $existing->forceFill([
+                'status' => TableSessionStatus::Closed,
+                'closed_at' => $existing->closed_at ?? now(),
+                'session_revision' => (int) $existing->session_revision + 1,
+            ])->save();
+            throw new GuestOrderValidationException(__('guest.no_active_table_session'));
+        }
 
-        try {
-            DB::transaction(function () use ($staff, $dateString, $column, $clockAt, $shiftLabel, $reasonTrim, $targetDate, $action): void {
-                $attendance = Attendance::query()->firstOrCreate(
-                    [
-                        'staff_id' => $staff->id,
-                        'date' => $dateString,
-                    ],
-                    [
-                        'late_minutes' => 0,
-                        'is_tip_eligible' => false,
-                        'is_edited_by_admin' => false,
-                    ],
-                );
+        return $existing;
+    }
 
-                $attendance = Attendance::query()->whereKey($attendance->id)->lockForUpdate()->first();
+    private function createNewActiveSession(RestaurantTable $table): TableSession
+    {
+        for ($i = 0; $i < 5; $i += 1) {
+            $token = Str::lower(Str::random(48));
 
-                if ($attendance === null) {
-                    throw new \RuntimeException('Impossible de traiter le pointage. Reessayez.');
-                }
-
-                if ($attendance->getAttribute($column) !== null) {
-                    throw new \RuntimeException('Ce pointage est deja enregistre.');
-                }
-
-                $this->ensureScheduledSnapshotsForPunch($attendance, $staff, $targetDate, $action);
-
-                $attendance->{$column} = $clockAt;
-                $attendance->late_minutes = AttendanceLateCalculator::totalLateMinutes($attendance);
-
-                $line = sprintf(
-                    '[%s] [Entree exceptionnelle] Aide %s%s',
-                    $clockAt->format('Y-m-d H:i'),
-                    $shiftLabel,
-                    $reasonTrim !== '' ? ' Motif: '.$reasonTrim : ''
-                );
-                $prev = $attendance->in_note;
-                $attendance->in_note = $prev !== null && $prev !== ''
-                    ? trim($prev."\n".$line)
-                    : $line;
-
-                $attendance->save();
-            });
-        } catch (QueryException $e) {
-            if ($this->isAttendanceDuplicateKeyException($e)) {
-                return new TimecardPunchOutcome(false, 'Ce pointage est deja enregistre.');
+            $exists = TableSession::query()->where('token', $token)->exists();
+            if ($exists) {
+                continue;
             }
 
-            throw $e;
-        } catch (\RuntimeException $e) {
-            return new TimecardPunchOutcome(false, $e->getMessage());
+            return TableSession::query()->create([
+                'shop_id' => $table->shop_id,
+                'restaurant_table_id' => $table->id,
+                'token' => $token,
+                'status' => TableSessionStatus::Active,
+                'opened_at' => now(),
+                'closed_at' => null,
+            ]);
         }
 
-        $adminUsers = User::all();
-        Notification::make()
-            ->title('[Entree exceptionnelle] '.$staff->name.' a ete ajoute(e). Verifiez le tip.')
-            ->body($staff->name.' a rejoint l\'aide '.$shiftLabel.'. Merci de verifier le tip.'.($reasonTrim !== '' ? ' ('.$reasonTrim.')' : ''))
-            ->warning()
-            ->sendToDatabase($adminUsers);
-
-        return new TimecardPunchOutcome(true, null, 'mypage_success');
-    }
-
-    /**
-     * @param  'lunch_in'|'lunch_out'|'dinner_in'|'dinner_out'  $action
-     */
-    private function notifyNormalPunch(Staff $staff, string $action): void
-    {
-        $actionLabel = match ($action) {
-            'lunch_in' => 'entree dejeuner',
-            'lunch_out' => 'sortie dejeuner',
-            'dinner_in' => 'entree diner',
-            'dinner_out' => 'sortie diner',
-            default => 'pointage',
-        };
-
-        $adminUsers = User::all();
-
-        $notification = Notification::make()
-            ->title("{$staff->name} a fait {$actionLabel}")
-            ->success();
-
-        $notification->sendToDatabase($adminUsers);
-
-        try {
-            $notification->broadcast($adminUsers);
-        } catch (\Throwable) {
-            // ブロードキャスト失敗時は DB 通知だけ確実に残す。
-        }
-    }
-
-    private function isAttendanceDuplicateKeyException(QueryException $e): bool
-    {
-        if (($e->errorInfo[0] ?? null) === '23505') {
-            return true;
-        }
-
-        if (isset($e->errorInfo[1]) && (int) $e->errorInfo[1] === 1062) {
-            return true;
-        }
-
-        $msg = $e->getMessage();
-
-        return str_contains($msg, 'Duplicate entry')
-            || str_contains($msg, 'UNIQUE constraint failed')
-            || str_contains($msg, 'duplicate key value violates unique constraint');
+        throw new GuestOrderValidationException(__('Could not start table session.'));
     }
 }
 </file>
@@ -8702,268 +8730,6 @@ class TakeawayBar extends Component
 @endif
 </file>
 
-<file path="app/Livewire/Pos/ClotureModal.php">
-<?php
-
-namespace App\Livewire\Pos;
-
-use App\Actions\Pos\FinalizeTableSettlementAction;
-use App\Actions\Pos\FinalizeTableSettlementRequest;
-use App\Domains\Pos\Pricing\PricingEngine;
-use App\Domains\Pos\Settlement\SettlementSuggestionService;
-use App\Domains\Pos\Tables\TableCategory;
-use App\Enums\OrderStatus;
-use App\Enums\PaymentMethod;
-use App\Exceptions\Pos\InsufficientTenderException;
-use App\Exceptions\Pos\PendingOrdersRemainException;
-use App\Exceptions\Pos\SessionAlreadySettledException;
-use App\Exceptions\RevisionConflictException;
-use App\Models\PosOrder;
-use App\Models\TableSession;
-use App\Services\Pos\TableDashboardQueryService;
-use App\Support\MenuItemMoney;
-use App\Support\Pos\StaffTableSettlementPricing;
-use Filament\Notifications\Notification;
-use Livewire\Attributes\Locked;
-use Livewire\Attributes\On;
-use Livewire\Component;
-use Throwable;
-
-/**
- * Cloture (checkout) modal Livewire component.
- *
- * Orchestrates the cashier-facing checkout flow:
- *   1. (re)prices the open session via PricingEngine (int-minor only).
- *   2. suggests Juste / Proche tender amounts via SettlementSuggestionService.
- *   3. delegates the transactional settlement to FinalizeTableSettlementAction (cash only in UI).
- *   4. dispatches `pos-settlement-completed` with `open_receipt_preview: true` so
- *      {@see TableActionHost} opens {@see ReceiptPreview} (intent=receipt); the
- *      cashier prints once from the preview (single `pos-trigger-print` path).
- */
-class ClotureModal extends Component
-{
-    #[Locked]
-    public int $shopId = 0;
-
-    public bool $open = false;
-
-    public ?int $tableSessionId = null;
-
-    public int $expectedSessionRevision = 0;
-
-    public string $tableLabel = '';
-
-    public string $shopName = '';
-
-    /** @var 'idle'|'in_flight'|'success'|'failed' */
-    public string $uiState = 'idle';
-
-    public int $subtotalMinor = 0;
-
-    public int $discountAppliedMinor = 0;
-
-    public int $roundingAdjustmentMinor = 0;
-
-    public int $finalTotalMinor = 0;
-
-    public int $justeMinor = 0;
-
-    /** @var list<int> */
-    public array $procheMinor = [];
-
-    public ?int $tenderedMinor = null;
-
-    /** Human-editable tender string (DT); synced to {@see $tenderedMinor}. */
-    public string $tenderedDtInput = '';
-
-    public int $changeMinor = 0;
-
-    public function mount(int $shopId): void
-    {
-        $this->shopId = $shopId;
-    }
-
-    #[On('pos-cloture-open')]
-    public function onOpen(mixed $shop_id = null, mixed $table_session_id = null, mixed $expected_revision = null): void
-    {
-        if ((int) $shop_id !== $this->shopId) {
-            return;
-        }
-        $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
-        if ($sid < 1) {
-            return;
-        }
-        $this->reset([
-            'tenderedMinor',
-            'tenderedDtInput',
-            'changeMinor',
-        ]);
-        $this->uiState = 'idle';
-        $this->tableSessionId = $sid;
-        $this->expectedSessionRevision = is_numeric($expected_revision) ? (int) $expected_revision : 0;
-
-        if (! $this->loadPricing()) {
-            return;
-        }
-
-        $this->open = true;
-    }
-
-    public function closeModal(): void
-    {
-        $this->open = false;
-        $this->tableSessionId = null;
-        $this->uiState = 'idle';
-    }
-
-    public function confirm(): void
-    {
-        if ($this->uiState === 'in_flight' || $this->tableSessionId === null) {
-            return;
-        }
-        $this->uiState = 'in_flight';
-
-        try {
-            $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
-            $tendered = (int) ($this->tenderedMinor ?? 0);
-            $this->changeMinor = $tendered - $this->finalTotalMinor;
-
-            if ($tendered < $this->finalTotalMinor) {
-                $this->uiState = 'failed';
-                Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
-
-                return;
-            }
-
-            app(FinalizeTableSettlementAction::class)->execute(
-                new FinalizeTableSettlementRequest(
-                    shopId: $this->shopId,
-                    tableSessionId: (int) $this->tableSessionId,
-                    expectedSessionRevision: $this->expectedSessionRevision,
-                    tenderedMinor: $tendered,
-                    paymentMethod: PaymentMethod::Cash,
-                    actorUserId: (int) (auth()->id() ?? 0),
-                )
-            );
-
-            $this->dispatch(
-                'pos-settlement-completed',
-                table_session_id: (int) $this->tableSessionId,
-                open_receipt_preview: true,
-            );
-            if ($this->shopId > 0) {
-                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
-            }
-            $this->dispatch('pos-refresh-tiles');
-            $this->uiState = 'success';
-            $this->closeModal();
-        } catch (InsufficientTenderException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
-        } catch (PendingOrdersRemainException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('rad_table.cannot_close_with_unacked'))->danger()->send();
-        } catch (SessionAlreadySettledException $e) {
-            Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
-            // Idempotent completion path:
-            // another in-flight confirm may have already settled this session.
-            // Continue with the same post-settlement flow so cashier always reaches preview.
-            $this->dispatch(
-                'pos-settlement-completed',
-                table_session_id: (int) $this->tableSessionId,
-                open_receipt_preview: true,
-            );
-            if ($this->shopId > 0) {
-                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
-            }
-            $this->dispatch('pos-refresh-tiles');
-            $this->uiState = 'success';
-            $this->closeModal();
-        } catch (RevisionConflictException $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('pos.data_stale_title'))->body(__('pos.revision_conflict_reload'))->warning()->send();
-            if ($this->shopId > 0) {
-                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
-            }
-            $this->dispatch('pos-refresh-tiles');
-            $this->loadPricing();
-        } catch (Throwable $e) {
-            $this->uiState = 'failed';
-            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
-        }
-    }
-
-    public function formatMinor(int $minor): string
-    {
-        return MenuItemMoney::formatMinorForDisplay($minor);
-    }
-
-    public function render()
-    {
-        return view('livewire.pos.cloture-modal');
-    }
-
-    private function loadPricing(): bool
-    {
-        $session = TableSession::query()
-            ->with('restaurantTable:id,name')
-            ->where('shop_id', $this->shopId)
-            ->whereKey($this->tableSessionId)
-            ->first();
-
-        if ($session === null) {
-            Notification::make()->title(__('rad_table.active_session_not_found'))->danger()->send();
-            $this->closeModal();
-
-            return false;
-        }
-
-        $tid = (int) $session->restaurant_table_id;
-        if (StaffTableSettlementPricing::isStaffMealTableId($tid)
-            && is_string($session->staff_name)
-            && trim($session->staff_name) !== '') {
-            $this->tableLabel = trim($session->staff_name);
-        } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
-            && is_string($session->customer_name)
-            && trim($session->customer_name) !== '') {
-            $this->tableLabel = trim($session->customer_name);
-        } else {
-            $this->tableLabel = (string) ($session->restaurantTable->name ?? '');
-        }
-        $this->shopName = (string) (config('app.name') ?? 'Restaurant');
-
-        $orders = PosOrder::query()
-            ->where('shop_id', $this->shopId)
-            ->where('table_session_id', $session->id)
-            ->where('status', '!=', OrderStatus::Voided)
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get();
-
-        $pricing = StaffTableSettlementPricing::calculateFromPosOrders(
-            $orders,
-            $tid,
-            app(PricingEngine::class),
-        );
-
-        $this->subtotalMinor = $pricing->orderSubtotalMinor;
-        $this->discountAppliedMinor = $pricing->orderDiscountAppliedMinor;
-        $this->roundingAdjustmentMinor = $pricing->roundingAdjustmentMinor;
-        $this->finalTotalMinor = $pricing->finalTotalMinor;
-
-        $sugg = app(SettlementSuggestionService::class)->suggest($pricing->finalTotalMinor);
-        $this->justeMinor = $sugg->justeMinor;
-        $this->procheMinor = $sugg->procheMinor;
-
-        $this->tenderedMinor = null;
-        $this->tenderedDtInput = '';
-        $this->changeMinor = 0;
-
-        return true;
-    }
-}
-</file>
-
 <file path="app/Livewire/Pos/StaffMealBar.php">
 <?php
 
@@ -9226,6 +8992,331 @@ final class KdsQueryService
             ])
             ->orderByDesc('opened_at')
             ->get();
+    }
+}
+</file>
+
+<file path="app/Livewire/Pos/ClotureModal.php">
+<?php
+
+namespace App\Livewire\Pos;
+
+use App\Actions\Pos\FinalizeTableSettlementAction;
+use App\Actions\Pos\FinalizeTableSettlementRequest;
+use App\Domains\Pos\Pricing\PricingEngine;
+use App\Domains\Pos\Settlement\SettlementSuggestionService;
+use App\Domains\Pos\Tables\TableCategory;
+use App\Enums\OrderStatus;
+use App\Enums\PaymentMethod;
+use App\Exceptions\Pos\InsufficientTenderException;
+use App\Exceptions\Pos\PendingOrdersRemainException;
+use App\Exceptions\Pos\SessionAlreadySettledException;
+use App\Exceptions\RevisionConflictException;
+use App\Models\PosOrder;
+use App\Models\TableSession;
+use App\Services\Pos\TableDashboardQueryService;
+use App\Support\MenuItemMoney;
+use App\Support\Pos\StaffTableSettlementPricing;
+use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
+use Livewire\Component;
+use Throwable;
+
+/**
+ * Cloture (checkout) modal Livewire component.
+ *
+ * Orchestrates the cashier-facing checkout flow:
+ *   1. (re)prices the open session via PricingEngine (int-minor only).
+ *   2. suggests Juste / Proche tender amounts via SettlementSuggestionService.
+ *   3. delegates the transactional settlement to FinalizeTableSettlementAction (cash only in UI).
+ *   4. dispatches `pos-settlement-completed` with `open_receipt_preview: true` so
+ *      {@see TableActionHost} opens {@see ReceiptPreview} (intent=receipt); the
+ *      cashier prints once from the preview (single `pos-trigger-print` path).
+ */
+class ClotureModal extends Component
+{
+    #[Locked]
+    public int $shopId = 0;
+
+    public bool $open = false;
+
+    public ?int $tableSessionId = null;
+
+    public int $expectedSessionRevision = 0;
+
+    public string $tableLabel = '';
+
+    public string $shopName = '';
+
+    /** @var 'idle'|'in_flight'|'success'|'failed' */
+    public string $uiState = 'idle';
+
+    public int $subtotalMinor = 0;
+
+    public int $discountAppliedMinor = 0;
+
+    public int $roundingAdjustmentMinor = 0;
+
+    public int $finalTotalMinor = 0;
+
+    public int $justeMinor = 0;
+
+    /** @var list<int> */
+    public array $procheMinor = [];
+
+    public ?int $tenderedMinor = null;
+
+    /** Human-editable tender string (DT); synced to {@see $tenderedMinor}. */
+    public string $tenderedDtInput = '';
+
+    public int $changeMinor = 0;
+
+    public function mount(int $shopId): void
+    {
+        $this->shopId = $shopId;
+    }
+
+    #[On('pos-cloture-open')]
+    public function onOpen(mixed $shop_id = null, mixed $table_session_id = null, mixed $expected_revision = null): void
+    {
+        if ((int) $shop_id !== $this->shopId) {
+            return;
+        }
+        $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
+        if ($sid < 1) {
+            return;
+        }
+        $this->reset([
+            'tenderedMinor',
+            'tenderedDtInput',
+            'changeMinor',
+        ]);
+        $this->uiState = 'idle';
+        $this->tableSessionId = $sid;
+        $this->expectedSessionRevision = is_numeric($expected_revision) ? (int) $expected_revision : 0;
+
+        if (! $this->loadPricing()) {
+            return;
+        }
+
+        $this->open = true;
+    }
+
+    public function closeModal(): void
+    {
+        $this->open = false;
+        $this->tableSessionId = null;
+        $this->uiState = 'idle';
+    }
+
+    public function confirm(): void
+    {
+        if ($this->uiState === 'in_flight' || $this->tableSessionId === null) {
+            return;
+        }
+        $this->uiState = 'in_flight';
+        // TEMP: POS_SETTLE_DEBUG
+        $traceId = sprintf(
+            'settle-%d-%d-%d',
+            $this->shopId,
+            (int) $this->tableSessionId,
+            (int) round(microtime(true) * 1000)
+        );
+
+        try {
+            $actorUserId = (int) (auth()->id() ?? 0);
+            $this->debugSettleLog('confirm_enter', [
+                'trace_id' => $traceId,
+                'shop_id' => $this->shopId,
+                'table_session_id' => (int) $this->tableSessionId,
+                'expected_revision' => $this->expectedSessionRevision,
+                'actor_user_id' => $actorUserId,
+                'ui_state' => $this->uiState,
+                'tendered_dt_input' => $this->tenderedDtInput,
+                'final_total_minor' => $this->finalTotalMinor,
+            ]);
+            $this->tenderedMinor = MenuItemMoney::parseDtInputToMinor($this->tenderedDtInput);
+            $tendered = (int) ($this->tenderedMinor ?? 0);
+            $this->changeMinor = $tendered - $this->finalTotalMinor;
+
+            if ($tendered < $this->finalTotalMinor) {
+                $this->uiState = 'failed';
+                Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
+
+                return;
+            }
+
+            $settlement = app(FinalizeTableSettlementAction::class)->execute(
+                new FinalizeTableSettlementRequest(
+                    shopId: $this->shopId,
+                    tableSessionId: (int) $this->tableSessionId,
+                    expectedSessionRevision: $this->expectedSessionRevision,
+                    tenderedMinor: $tendered,
+                    paymentMethod: PaymentMethod::Cash,
+                    actorUserId: $actorUserId,
+                    debugTraceId: $traceId,
+                )
+            );
+            $this->debugSettleLog('confirm_action_success', [
+                'trace_id' => $traceId,
+                'settlement_id' => (int) $settlement->id,
+                'table_session_id' => (int) $this->tableSessionId,
+            ]);
+
+            $this->dispatch(
+                'pos-settlement-completed',
+                table_session_id: (int) $settlement->table_session_id,
+                open_receipt_preview: true,
+                settlement_trace_id: $traceId,
+            );
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
+            $this->dispatch('pos-refresh-tiles');
+            $this->uiState = 'success';
+            $this->closeModal();
+        } catch (InsufficientTenderException $e) {
+            $this->debugSettleLog('confirm_insufficient_tender', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
+            $this->uiState = 'failed';
+            Notification::make()->title(__('rad_table.insufficient_tender'))->danger()->send();
+        } catch (PendingOrdersRemainException $e) {
+            $this->debugSettleLog('confirm_pending_orders_remain', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
+            $this->uiState = 'failed';
+            Notification::make()->title(__('rad_table.cannot_close_with_unacked'))->danger()->send();
+        } catch (SessionAlreadySettledException $e) {
+            $this->debugSettleLog('confirm_session_already_settled', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
+            Notification::make()->title(__('rad_table.session_already_settled'))->warning()->send();
+            // Idempotent completion path:
+            // another in-flight confirm may have already settled this session.
+            // Continue with the same post-settlement flow so cashier always reaches preview.
+            $this->dispatch(
+                'pos-settlement-completed',
+                table_session_id: (int) $this->tableSessionId,
+                open_receipt_preview: true,
+                settlement_trace_id: $traceId,
+            );
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
+            $this->dispatch('pos-refresh-tiles');
+            $this->uiState = 'success';
+            $this->closeModal();
+        } catch (RevisionConflictException $e) {
+            $this->debugSettleLog('confirm_revision_conflict', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
+            $this->uiState = 'failed';
+            Notification::make()->title(__('pos.data_stale_title'))->body(__('pos.revision_conflict_reload'))->warning()->send();
+            if ($this->shopId > 0) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+            }
+            $this->dispatch('pos-refresh-tiles');
+            $this->loadPricing();
+        } catch (Throwable $e) {
+            $this->debugSettleLog('confirm_throwable', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+            $this->uiState = 'failed';
+            Notification::make()->title(__('pos.action_failed'))->body($e->getMessage())->danger()->send();
+        }
+    }
+
+    public function formatMinor(int $minor): string
+    {
+        return MenuItemMoney::formatMinorForDisplay($minor);
+    }
+
+    public function render()
+    {
+        return view('livewire.pos.cloture-modal');
+    }
+
+    private function loadPricing(): bool
+    {
+        $session = TableSession::query()
+            ->with('restaurantTable:id,name')
+            ->where('shop_id', $this->shopId)
+            ->whereKey($this->tableSessionId)
+            ->first();
+
+        if ($session === null) {
+            Notification::make()->title(__('rad_table.active_session_not_found'))->danger()->send();
+            $this->closeModal();
+
+            return false;
+        }
+
+        $tid = (int) $session->restaurant_table_id;
+        if (StaffTableSettlementPricing::isStaffMealTableId($tid)
+            && is_string($session->staff_name)
+            && trim($session->staff_name) !== '') {
+            $this->tableLabel = trim($session->staff_name);
+        } elseif (TableCategory::tryResolveFromId($tid) === TableCategory::Takeaway
+            && is_string($session->customer_name)
+            && trim($session->customer_name) !== '') {
+            $this->tableLabel = trim($session->customer_name);
+        } else {
+            $this->tableLabel = (string) ($session->restaurantTable->name ?? '');
+        }
+        $this->shopName = (string) (config('app.name') ?? 'Restaurant');
+
+        $orders = PosOrder::query()
+            ->where('shop_id', $this->shopId)
+            ->where('table_session_id', $session->id)
+            ->where('status', '!=', OrderStatus::Voided)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $pricing = StaffTableSettlementPricing::calculateFromPosOrders(
+            $orders,
+            $tid,
+            app(PricingEngine::class),
+        );
+
+        $this->subtotalMinor = $pricing->orderSubtotalMinor;
+        $this->discountAppliedMinor = $pricing->orderDiscountAppliedMinor;
+        $this->roundingAdjustmentMinor = $pricing->roundingAdjustmentMinor;
+        $this->finalTotalMinor = $pricing->finalTotalMinor;
+
+        $sugg = app(SettlementSuggestionService::class)->suggest($pricing->finalTotalMinor);
+        $this->justeMinor = $sugg->justeMinor;
+        $this->procheMinor = $sugg->procheMinor;
+
+        $this->tenderedMinor = null;
+        $this->tenderedDtInput = '';
+        $this->changeMinor = 0;
+
+        return true;
+    }
+
+    // TEMP: POS_SETTLE_DEBUG
+    private function debugSettleLog(string $event, array $context = []): void
+    {
+        if (! config('app.debug')) {
+            return;
+        }
+
+        Log::info('POS_SETTLE_DEBUG '.$event, $context);
     }
 }
 </file>
@@ -10587,6 +10678,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Js;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
@@ -12245,10 +12337,24 @@ class TableActionHost extends Component
     }
 
     #[On('pos-settlement-completed')]
-    public function onPosSettlementCompleted(mixed $table_session_id = null, mixed $open_receipt_preview = null): void
+    public function onPosSettlementCompleted(
+        mixed $table_session_id = null,
+        mixed $open_receipt_preview = null,
+        mixed $settlement_trace_id = null
+    ): void
     {
         $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
         $openPreview = $open_receipt_preview === true;
+        if (config('app.debug')) {
+            // TEMP: POS_SETTLE_DEBUG
+            Log::info('POS_SETTLE_DEBUG host_event_received', [
+                'trace_id' => is_string($settlement_trace_id) ? $settlement_trace_id : null,
+                'shop_id' => $this->shopId,
+                'event_session_id' => $sid,
+                'active_session_id' => $this->activeTableSessionId,
+                'open_preview' => $openPreview,
+            ]);
+        }
 
         if ($sid > 0 && $this->shopId > 0) {
             $clearPayload = Js::from([(int) $this->shopId, $sid])->toHtml();
@@ -12258,7 +12364,16 @@ class TableActionHost extends Component
             );
         }
 
-        if ($sid > 0 && $this->activeTableSessionId === $sid) {
+        $isCurrentContextSettlement = $sid > 0 && $this->activeTableSessionId === $sid;
+        if (! $isCurrentContextSettlement && $sid > 0 && $this->activeRestaurantTableId !== null && $this->shopId > 0) {
+            $isCurrentContextSettlement = TableSession::query()
+                ->where('shop_id', $this->shopId)
+                ->whereKey($sid)
+                ->where('restaurant_table_id', (int) $this->activeRestaurantTableId)
+                ->exists();
+        }
+
+        if ($isCurrentContextSettlement) {
             if ($openPreview) {
                 $this->loadSessionData($sid);
                 $this->previewIntent = PrintIntent::Receipt->value;
@@ -12266,8 +12381,22 @@ class TableActionHost extends Component
                 $this->showReceiptPreview = true;
                 // Settlement must always release active table context regardless of preview display.
                 $this->closeHost(preserveReceiptPreview: true);
+                if (config('app.debug')) {
+                    // TEMP: POS_SETTLE_DEBUG
+                    Log::info('POS_SETTLE_DEBUG host_close_with_preview', [
+                        'trace_id' => is_string($settlement_trace_id) ? $settlement_trace_id : null,
+                        'event_session_id' => $sid,
+                    ]);
+                }
             } else {
                 $this->closeHost();
+                if (config('app.debug')) {
+                    // TEMP: POS_SETTLE_DEBUG
+                    Log::info('POS_SETTLE_DEBUG host_close_no_preview', [
+                        'trace_id' => is_string($settlement_trace_id) ? $settlement_trace_id : null,
+                        'event_session_id' => $sid,
+                    ]);
+                }
             }
             $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
 
@@ -13759,17 +13888,27 @@ class TableActionHost extends Component
                 x-data="{
                     drafts: [],
                     hasUnackedPlaced: @js((bool) $this->hasUnackedPlaced),
+                    makeDraftKey(draft) {
+                        const d = draft && typeof draft === 'object' ? draft : {}
+                        const id = Number(d.menu_item_id || 0)
+                        const styleId = typeof d.styleId === 'string' && d.styleId !== '' ? d.styleId : ''
+                        const toppings = Array.isArray(d.toppings) ? d.toppings.map((v) => String(v)).sort() : []
+                        const note = typeof d.note === 'string' ? d.note : ''
+                        return JSON.stringify({ id, styleId, toppings, note })
+                    },
                     addItem(menuItemId, menuItemName = '') {
                         const id = Number(menuItemId || 0)
                         if (!Number.isFinite(id) || id < 1) {
                             return
                         }
-                        const hit = this.drafts.find((d) => Number(d.menu_item_id) === id && (d.styleId || null) === null && (!Array.isArray(d.toppings) || d.toppings.length === 0) && (!d.note || d.note === ''))
+                        const simpleKey = JSON.stringify({ id, styleId: '', toppings: [], note: '' })
+                        const hit = this.drafts.find((d) => d.draftKey === simpleKey)
                         if (hit) {
                             hit.qty = Math.min(200, Number(hit.qty || 1) + 1)
                             return
                         }
                         this.drafts.push({
+                            draftKey: simpleKey,
                             menu_item_id: id,
                             name: typeof menuItemName === 'string' ? menuItemName : '',
                             qty: 1,
@@ -13794,21 +13933,16 @@ class TableActionHost extends Component
                         const toppings = Array.isArray(d.toppings) ? d.toppings.map((v) => String(v)) : []
                         const toppingsLabel = Array.isArray(d.toppingsLabel) ? d.toppingsLabel.map((v) => String(v)) : []
                         const note = typeof d.note === 'string' ? d.note : ''
-                        const sig = JSON.stringify({ id, styleId, toppings, note })
+                        const sig = JSON.stringify({ id, styleId: styleId || '', toppings: toppings.slice().sort(), note })
                         const hit = this.drafts.find((row) => {
-                            const rowSig = JSON.stringify({
-                                id: Number(row.menu_item_id || 0),
-                                styleId: typeof row.styleId === 'string' && row.styleId !== '' ? row.styleId : null,
-                                toppings: Array.isArray(row.toppings) ? row.toppings.map((v) => String(v)) : [],
-                                note: typeof row.note === 'string' ? row.note : '',
-                            })
-                            return rowSig === sig
+                            return row.draftKey === sig
                         })
                         if (hit) {
                             hit.qty = Math.min(200, Number(hit.qty || 1) + Math.max(1, Math.min(200, Number(d.qty || 1))))
                             return
                         }
                         this.drafts.push({
+                            draftKey: sig,
                             menu_item_id: id,
                             name: typeof d.name === 'string' ? d.name : '',
                             qty: Math.max(1, Math.min(200, Number(d.qty || 1))),
@@ -13836,9 +13970,9 @@ class TableActionHost extends Component
                         }
                         return parts.join(' | ')
                     },
-                    decItem(menuItemId) {
-                        const id = Number(menuItemId || 0)
-                        const idx = this.drafts.findIndex((d) => Number(d.menu_item_id) === id)
+                    decItem(draftKey) {
+                        const key = typeof draftKey === 'string' ? draftKey : ''
+                        const idx = this.drafts.findIndex((d) => d.draftKey === key)
                         if (idx < 0) {
                             return
                         }
@@ -13849,17 +13983,17 @@ class TableActionHost extends Component
                         }
                         this.drafts[idx].qty = next
                     },
-                    incItem(menuItemId) {
-                        const id = Number(menuItemId || 0)
-                        const hit = this.drafts.find((d) => Number(d.menu_item_id) === id)
+                    incItem(draftKey) {
+                        const key = typeof draftKey === 'string' ? draftKey : ''
+                        const hit = this.drafts.find((d) => d.draftKey === key)
                         if (!hit) {
                             return
                         }
                         hit.qty = Math.min(200, Number(hit.qty || 1) + 1)
                     },
-                    removeItem(menuItemId) {
-                        const id = Number(menuItemId || 0)
-                        this.drafts = this.drafts.filter((d) => Number(d.menu_item_id) !== id)
+                    removeItem(draftKey) {
+                        const key = typeof draftKey === 'string' ? draftKey : ''
+                        this.drafts = this.drafts.filter((d) => d.draftKey !== key)
                     },
                     async submitDrafts() {
                         if (bulkSyncing || $wire.uiState === 'in_flight') {
@@ -13993,7 +14127,7 @@ class TableActionHost extends Component
                         class="flex shrink-0 flex-col gap-2 border-t-4 border-blue-600 bg-white px-3 py-2.5 shadow-[0_-6px_16px_rgba(15,23,42,0.12)] dark:border-blue-500 dark:bg-slate-900 dark:shadow-[0_-6px_16px_rgba(0,0,0,0.35)]"
                     >
                         <div x-show="drafts.length > 0" x-cloak class="max-h-36 overflow-y-auto rounded-md border border-slate-300 bg-slate-50 p-2 dark:border-slate-600 dark:bg-slate-800/60">
-                            <template x-for="d in drafts" :key="d.menu_item_id">
+                            <template x-for="d in drafts" :key="d.draftKey">
                                 <div class="mb-1 grid grid-cols-[1fr_auto] items-center gap-2 last:mb-0">
                                     <div class="min-w-0">
                                         <div class="truncate text-xs font-bold text-gray-900 dark:text-gray-100">
@@ -14006,10 +14140,10 @@ class TableActionHost extends Component
                                         ></div>
                                     </div>
                                     <div class="flex items-center gap-1">
-                                        <button type="button" x-on:click="decItem(d.menu_item_id)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">−</button>
+                                        <button type="button" x-on:click="decItem(d.draftKey)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">−</button>
                                         <span class="w-6 text-center text-sm font-black tabular-nums text-gray-950 dark:text-white" x-text="d.qty"></span>
-                                        <button type="button" x-on:click="incItem(d.menu_item_id)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">＋</button>
-                                        <button type="button" x-on:click="removeItem(d.menu_item_id)" class="h-7 rounded border border-rose-700 bg-rose-600 px-2 text-xs font-black text-white">×</button>
+                                        <button type="button" x-on:click="incItem(d.draftKey)" class="h-7 w-7 rounded border border-slate-500 bg-white text-sm font-black text-slate-900 dark:bg-slate-700 dark:text-white">＋</button>
+                                        <button type="button" x-on:click="removeItem(d.draftKey)" class="h-7 rounded border border-rose-700 bg-rose-600 px-2 text-xs font-black text-white">×</button>
                                     </div>
                                 </div>
                             </template>
