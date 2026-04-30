@@ -1,176 +1,87 @@
-## [CRITICAL] Version Constraints — DO NOT MODIFY
+## [CRITICAL] Version Constraints & Runtime — DO NOT MODIFY
 
 - PHP: 8.4.18 (FORBIDDEN: upgrade to 8.5+)
 - Laravel: 11.51.0 (FORBIDDEN: major update)
 - Filament: 3.3.49 (FORBIDDEN: v4 API or Schema patterns)
-- composer.json: NEVER change versions without explicit user approval
+- Vue: 3.x / Inertia.js (For POS V2 & KDS V2 only)
+- composer.json / package.json: NEVER change versions without explicit user approval
 - Sail runtime path: ./vendor/laravel/sail/runtimes/8.4 (fixed, do not alter)
 - compose.yaml: preserve structure and indentation exactly
 
-## [RULE] Color contrast (always)
+## [BOUNDARY] MIGRATION ARCHITECTURE (The Structural Firewall) - CRITICAL
 
-- Every background MUST have explicit foreground colors that remain readable in both light and dark (use `text-gray-950 dark:text-white` or a dedicated palette such as `bg-slate-900` + `text-slate-100`).
-- Never leave body text as default without checking: `bg-white` + `text-gray-900` / `dark:bg-gray-900` + `text-gray-100` (or equivalent) on the same element or its text children.
-- Custom modals/panels: either force a single contrast context (e.g. `dark` + dark `!bg-*` + light text) or duplicate Filament’s light/dark pairs; do not mix white Filament surfaces with theme-dependent text that can match the background.
-- After UI changes, mentally verify: light mode AND dark mode — no “invisible” text on tables, inputs, badges, or nested `fi-section` cards.
+We are currently running a hybrid migration phase. The project contains two completely different frontend architectures that MUST NEVER interact or share state mechanisms.
+
+1.  **POS V2 & KDS V2 (`/pos-v2`, `/kds2`):** Pure SPA. Uses **Vue 3 + Pinia + Inertia.js**.
+2.  **OLD POS & Filament Admin (Everything else):** SSR Hybrid. Uses **Livewire + Alpine.js + Blade**.
+
+**[FORBIDDEN ACTION]:** NEVER inject Livewire/Alpine.js directives into Vue/Inertia pages. NEVER inject Vue components into Livewire/Blade pages. Do not mix data stores (`posDraft` vs `Pinia`). Treat them as completely separate applications.
+
+---
+
+## [RULE] NEW POS V2 (Vue 3 + Inertia) - THE FUTURE
+
+This is the new architecture. Strict adherence to `docs/pos_v2_architecture.md` is mandatory.
+
+- **NO LIVEWIRE / NO ALPINE:** Do not use `wire:click`, `x-data`, or Blade layout wrappers.
+- **PINIA AS SSOT:** All UI state (selected table, cart drafts, category tabs) is managed in Pinia. Optimistic UI is required (update store instantly, POST to Laravel in the background).
+- **DRAFT KEY ISOLATION:** Unsubmitted cart drafts MUST be scoped to the session.
+  - ✅ ALLOWED: `pos_draft_{shopId}_{tableSessionId}`
+  - ❌ FORBIDDEN: `restaurant_table_id` as the sole key (prevents cross-customer billing errors).
+- **LOCAL MASTER DATA:** Static catalog data (items, styles, toppings) must be fetched once and cached in `localStorage`. Use an explicit "Sync" action for updates; avoid fetching master data on every render.
+- **LARAVEL'S ROLE:** Laravel simply provides JSON endpoints (via Axios/Inertia) for receiving orders, calculating taxes, and triggering hardware printers. Do not duplicate complex backend pricing logic in Vue.
+
+---
+
+## [RULE] OLD POS (Livewire + Alpine) - LEGACY MAINTENANCE ONLY
+
+This is the legacy system. The root cause of past critical bugs was overcomplicating Alpine.js to act like a SPA against Livewire's SSR nature (DOM race conditions). Maintain these inviolable safety principles when fixing bugs here:
+
+1. **WRITES ALWAYS GO THROUGH LIVEWIRE / DB**
+   - DB writes (`bulkAddAndConfirm`, `changeTable`) go via Livewire. DO NOT accumulate complex mutations in Alpine.
+2. **ALPINE CACHE IS READ-ONLY AFTERIMAGE (残像) ONLY**
+   - The right-pane `posDraft` store is strictly a read-only placeholder used during network latency.
+   - The authoritative source for order lines and totals is ALWAYS Livewire. Alpine values MUST be overwritten when the Livewire payload arrives.
+3. **ISOLATE ADD-MODAL DRAFTS**
+   - Draft items selected in the "Add" modal must live in a separate, isolated Alpine store (e.g., `addCatalogCacheStore`).
+   - Do NOT mix Add-Modal drafts with the right-pane `posDraft` afterimage.
+4. **SYNC ESCAPE HATCH**
+   - A visible "🔄 Sync" button must exist to force a fresh fetch from Livewire/DB, overriding any stuck Alpine state.
+
+---
+
+## [RULE] TALL Stack Hydration & State Safety (Old POS & Guest UI)
+
+- **ROOT TAG STRICTNESS:** The Blade view’s **first literal HTML tag** must be the Livewire root expected to carry `wire:id` (e.g. `#guest-order-root`). If `<script>` comes first, Morphdom hydration will completely break.
+- **SAFE JSON PASSING:** Inject large data to Alpine using `<script type="application/json" id="data-xxx">`.
+- **FORBIDDEN JSON INJECTION:** Never use `@json` or `@js` directly inside HTML attributes like `x-data="{ cat: @json($data) }"`. It causes quote collision and destroys the DOM.
+- **ALPINE INIT:** Extend Alpine only via `document.addEventListener('alpine:init', () => { ... })`. `import Alpine from 'alpinejs'` in standard JS files is FORBIDDEN when using Livewire.
+
+---
+
+## [RULE] KDS V2 SPA Architecture (Vue 3 + Inertia)
+
+- Operates under a strictly **Offline-First, Eventual Consistency** paradigm.
+- Mutations (e.g., marking 'Served') MUST update Pinia immediately.
+- Background Queuing: Write operations are pushed to a `pending_actions` queue in Pinia. Vue handles background retries. Do NOT block UI.
+- Zero-HTTP Pusher Sync: Echo/Pusher events contain minimal payloads (`{action: 'served', ticket_id: 892}`). Vue reacts by mutating Pinia directly without triggering an HTTP re-fetch.
+
+---
 
 ## [RULE] Filament v3 Frontend (Admin Panel)
 
-- USE: x-filament::_ and x-filament-tables::_ official Blade components
-- FORBIDDEN: custom <div>/<table> layouts, inline styles, <style> tags
-- CSS: Tailwind utility classes only
-- DO NOT break Filament-generated class structures (fi-section, fi-input-wrp, etc.)
+- USE: `x-filament::*` and official Blade components.
+- FORBIDDEN: Custom `<div>`/`<table>` layouts, inline styles, `<style>` tags.
+- Live inputs: `wire:model.live.debounce.500ms` required to prevent server overload.
+- Do NOT break Filament-generated class structures (`fi-section`, `fi-input-wrp`).
+- Prefer table layout over card layout for list views.
 
-## [RULE] Compact UI
+---
 
-- Reduce default spacing by one step (e.g. gap-y-4 → gap-y-2)
-- Remove empty fi-section-header via header(null)
-- Prefer table layout over card layout for list views
-- Use grid for horizontal input layout; avoid tall vertical pages
-- Responsive grid: grid-cols-1 md:grid-cols-2 lg:grid-cols-3
+## [RULE] UI, Layout Safety & Color Contrast (Global)
 
-## [RULE] Robustness
-
-- Live inputs (Admin Panel): wire:model.live.debounce.500ms required. (See High Latency rules below for POS exceptions).
-- Numeric inputs: numeric + step="0.001"
-- Images/large elements: aspect-video + overflow-hidden
-- On layout issues: replace custom implementation with standard Filament components first
-
-## [RULE] Frontend Layout Safety (No-Drift)
-
-- One page, one CSS ecosystem: NEVER mix Bootstrap and Tailwind on the same page.
-- If a page uses any `x-filament::*` component, ALWAYS include `@filamentStyles` and `@filamentScripts(withCore: true)`.
-- Keep Tailwind syntax version consistent per project setup (do not mix v3/v4 utility names).
-- Prefer `@vite(resources/css/app.css)` for stable class generation; use CDN only when explicitly required.
-- Keep layout responsibilities isolated (e.g. `timecard` layout must not depend on Bootstrap-only nav/modal components).
-- Standardize form controls: use consistent classes for `input/select/textarea`; for `select`, enforce `appearance-none` + custom arrow.
-- Keep Alpine.js local and minimal (`x-data` scoped per section; use `x-show` + `x-collapse` for toggles) **EXCEPT for POS/Guest UI**.
-- Do not put complex data logic in Blade; compute in Controller/Livewire and pass view-ready data **EXCEPT for POS/Guest UI local drafts**.
-- Before finalizing UI changes, verify mobile (390px) and tablet (768px) for: initial render, input, error state, modal state, and navigation.
-- Final grep check for Tailwind pages: no `btn-`, `row`, `col-`, `data-bs-`, or Bootstrap CDN links.
-
-## [RULE] High Latency Environment Architecture (POS & Guest UI) - CRITICAL
-
-- NO CHATTY LIVEWIRE REQUESTS: Do NOT use `wire:click` or `wire:model` for intermediate UI states (e.g., selecting items, toggling toppings, adding items to a draft cart). Every network request costs hundreds of milliseconds.
-- USE ALPINE.JS FOR LOCAL DRAFTS: Overriding the "minimal Alpine" rule, POS/Guest UI MUST manage draft states entirely client-side using `x-data`. Think like a SPA.
-- BULK MUTATIONS: Send aggregated data arrays to Livewire in a single bulk request (`$wire.bulkSubmit(drafts)`).
-- OPTIMISTIC UI UPDATES: UI MUST react instantly using Alpine.js (e.g., `x-on:click="open = false; setTimeout(()=> $wire.submit(), 50)"`). Do NOT wait for Livewire response cycles to close modals.
-
-## [RULE] TALL Stack Hydration & State Safety (Guest UI)
-
-- REQUIRED (Livewire 3 guest / full-page components): The Blade view’s **first literal HTML tag** must be the Livewire root you expect to carry `wire:id` (e.g. `#guest-order-root`). Livewire injects `wire:id` only into that first tag (`Livewire\Drawer\Utils::insertAttributesIntoHtmlRoot`). If `<script>` or any other tag comes first, `wire:id` attaches there and `Livewire.find` + `guest-order-root` break (e.g. “Service unavailable” on submit). Put `<script type="application/json" id="guest-order-data">` **inside** that root element, not before it.
-- FORBIDDEN: Injecting JSON data (`@json`, `@js`) directly into HTML attributes like `x-data` or `x-init`. It causes double-quote collision and DOM breakage.
-- REQUIRED: Use `<script type="application/json" id="data-xxx">` to pass large PHP arrays/objects to the frontend safely.
-- FORBIDDEN: `import Alpine from 'alpinejs'` in standard JS files when using Livewire 3 (causes double instantiation).
-- REQUIRED: Extend Alpine only via `document.addEventListener('alpine:init', () => { window.Alpine.store(...) })`.
-- REQUIRED: Ensure Tailwind v4 content scanning is configured via `@source` in `resources/css/app.css`, not `tailwind.config.js`.
-
-## [RULE] POS SPA-Hybrid Three Inviolable Principles（不可侵原則・変更禁止）
-
-This project pursues SPA-like UX on a high-latency link (Tunisia ↔ OVH Europe).
-The following three principles MUST hold simultaneously. Any change that violates
-even one of them is forbidden — they are the structural firewall against the
-Phase 2 failure (where draft accumulation in Alpine led to dual-source drift,
-DOM breakage, and "store にためれば速くなる" misconception).
-
-1. **WRITES ALWAYS GO THROUGH LIVEWIRE / DB**
-   - Adding, editing, or deleting order lines / sessions / discounts MUST be
-     performed via Livewire actions (DB write first, then UI update).
-   - FORBIDDEN: accumulating mutations in Alpine state and reconciling later.
-   - FORBIDDEN: any `addItem` / `removeItem` / `_persist` style API on Alpine
-     stores that hold business data.
-
-2. **ALPINE CACHE IS READ-ONLY AFTERIMAGE (残像) ONLY**
-   - Alpine may hold a thin, read-only snapshot of *recently viewed* server
-     state purely for instant context switching (e.g., last N tables' line
-     lists shown as a placeholder while Livewire re-fetches).
-   - The authoritative source for displayed business data (order lines,
-     prices, totals, KDS status) is ALWAYS the Livewire component
-     (`posOrders` etc.). Alpine values are overwritten on every Livewire
-     response.
-   - The cache MUST be visually marked as "syncing" (e.g., dim/badge) until
-     the matching Livewire payload arrives and confirms it.
-
-3. **A SYNC BUTTON ALWAYS EXISTS AS THE ESCAPE HATCH**
-   - The POS UI MUST provide a visible "🔄 Sync" control that forces a fresh
-     fetch from Livewire/DB and overwrites the read-only cache.
-   - Sync MUST NOT clear in-progress draft inputs (e.g., addModal fields).
-   - Sync is the contractually-promised path to the latest truth — staff are
-     trained to press it whenever in doubt or after multi-device operations.
-
-Operational consequence:
-- The `posDraft` Alpine store is restricted to context switching and
-  read-only afterimage cache. It MUST NOT carry mutation APIs.
-- Any future "let's just keep it in Alpine to make it faster" proposal is
-  rejected by these principles.
-
-## [RULE] POS Read-Only Cache & Sync Button（残像キャッシュと同期運用）
-
-Implementation rules derived from the three inviolable principles above.
-
-### Cache shape & lifetime
-
-- Scope: last 3–5 tables most recently opened in this browser tab.
-- Storage: in-memory Alpine store (preferred). `sessionStorage` allowed only
-  if scoped to a single tab and cleared on logout / shop switch.
-  `localStorage` is FORBIDDEN for line data (cross-tab drift risk).
-- Eviction: LRU on table count; per-entry soft-TTL of 60 seconds (after
-  which the "syncing" badge becomes prominent even if a payload arrives).
-- Content: minimal fields needed for placeholder render only
-  (line id, item name, qty, options summary, total). No mutation hooks.
-
-### Switch behaviour (right pane)
-
-- On table tap:
-  - If cache hit → render afterimage immediately + show "🔄 同期中…" badge.
-  - If cache miss → render skeleton placeholder (never blank).
-- On Livewire payload arrival:
-  - `posOrders` overwrites the displayed lines (authoritative).
-  - The cache entry for that table is updated from the payload.
-  - The "同期中…" badge is removed.
-
-### Sync button (mandatory UI)
-
-- Placement: visible at all times in the POS table dashboard header.
-- Action: triggers a Livewire fetch that refreshes the active table and
-  invalidates / refreshes all cache entries; MUST NOT touch in-progress
-  draft form fields.
-- Auto-trigger conditions (system-side safety net, in addition to manual
-  press):
-  - Browser tab regains visibility (`visibilitychange` → visible).
-  - Same table tapped twice consecutively.
-  - Cache entry exceeds soft-TTL while displayed.
-
-### Forbidden patterns
-
-- FORBIDDEN: writing user mutations into the cache (the cache is read-only).
-- FORBIDDEN: using the cache as the source of totals, KDS status, or any
-  value that influences money or kitchen flow.
-- FORBIDDEN: hydrating the cache via `@json` / `@js` inside `x-data` /
-  `x-init` attributes — use `<script type="application/json" id="...">`
-  or assign from Livewire response payloads.
-- FORBIDDEN: extending the cache to hold draft order lines (that is the
-  Phase 2 anti-pattern).
-
-### Staff-facing operating rule (to be communicated)
-
-- 「テーブル切替は前回の残像が一瞬出ます」
-- 「他端末の最新状況を見たいときは 🔄 Sync を押す」
-- 「入力途中で Sync を押しても入力は消えません」
-
-## [RULE] POS Draft Store 責務（旧ルール — 上記 SPA-Hybrid 三原則に統合済み）
-
-- The previous "POS Draft Store 責務" rule is superseded by, and fully
-  contained in, "[RULE] POS SPA-Hybrid Three Inviolable Principles" and
-  "[RULE] POS Read-Only Cache & Sync Button" above.
-- Concretely retained constraints:
-  - `posDraft` store role: table-switch context + read-only afterimage cache
-    only.
-  - FORBIDDEN: adding `addItem` / `removeItem` / `_persist` APIs.
-  - Authoritative display source remains `posOrders` (Livewire).
-  - Item creation: `submitAddLine` writes to DB immediately; never queued
-    in Alpine.
-
-## [REFERENCE] Order System Ver1 (in-store guest order)
-
-- Canonical requirements and communication boundaries: `docs/order-system-ver1.md`
+- **ONE CSS ECOSYSTEM:** Never mix Bootstrap and Tailwind. Use Tailwind v4 syntax exclusively.
+- **COLOR CONTRAST:** Every background MUST have explicit foreground colors for both light and dark modes (e.g., `text-gray-950 dark:text-white` or `bg-slate-900 text-slate-100`).
+- **NO INVISIBLE TEXT:** Mentally verify UI changes in both modes. Watch out for nested cards, inputs, or badges where text might blend into the background.
+- **RESPONSIVENESS:** Validate all UI changes on mobile (390px) and tablet (768px) before confirming.
+- Keep layout responsibilities isolated (e.g., `timecard` layout must not depend on Admin-only nav components).

@@ -3,9 +3,14 @@
 use App\Filament\Pages\TableDashboard;
 use App\Http\Controllers\ClientInventoryController;
 use App\Http\Controllers\CloseCheckController;
+use App\Http\Controllers\Kds\KdsV2Controller;
 use App\Http\Controllers\KdsAuthController;
 use App\Http\Controllers\MyPageController;
 use App\Http\Controllers\NewsNoteController;
+use App\Http\Controllers\Pos2\Pos2AuthController;
+use App\Http\Controllers\Pos2\Pos2Controller;
+use App\Http\Controllers\Pos2\Pos2DevController;
+use App\Http\Controllers\Pos2\Pos2SessionController;
 use App\Http\Middleware\SetGuestLocale;
 use App\Livewire\ClientOrderForm;
 use App\Livewire\FrontendDailyClose;
@@ -233,3 +238,34 @@ Route::get('/history_cloture', function () {
 
     return view('pos.history-cloture-page');
 })->name('pos.history-cloture.page');
+
+// ── KDS V2 (Vue 3 + Pinia SPA) ────────────────────────────────────────────────
+// 既存 KDS (Livewire) とは完全に並行稼働する。POS 不可侵原則は適用しない。
+// .cursorrules § [RULE] KDS V2 SPA Architecture に従う。
+Route::prefix('kds2')->middleware(['web', 'kds.auth'])->group(function () {
+    Route::get('/', [KdsV2Controller::class, 'index'])->name('kds2.index');
+    Route::get('/api/tickets', [KdsV2Controller::class, 'tickets'])->name('kds2.api.tickets');
+    Route::post('/api/tickets/{id}/served', [KdsV2Controller::class, 'markServed'])->name('kds2.api.mark-served');
+    Route::get('/api/master', [KdsV2Controller::class, 'master'])->name('kds2.api.master');
+});
+
+// ── POS2 auth (Filament / Livewire から完全分離) ───────────────────────────────
+Route::prefix('pos2')->name('pos2.')->group(function () {
+    Route::get('/login', [Pos2AuthController::class, 'showLoginForm'])->name('login');
+    Route::post('/login', [Pos2AuthController::class, 'login'])->name('login.submit');
+    Route::post('/logout', [Pos2AuthController::class, 'logout'])->name('logout');
+
+    Route::middleware('pos2.auth')->group(function () {
+        Route::get('/', [Pos2Controller::class, 'index'])->name('index');
+        Route::get('/api/bootstrap', [Pos2Controller::class, 'bootstrap'])->name('api.bootstrap');
+        Route::post('/api/orders', [Pos2Controller::class, 'submitOrderStub'])->name('api.orders.stub');
+        Route::get('/api/table-dashboard', [Pos2SessionController::class, 'tableDashboard'])->name('api.table-dashboard');
+        Route::get('/api/sessions/{session}/orders', [Pos2SessionController::class, 'sessionOrders'])->name('api.sessions.orders');
+        Route::post('/api/sessions/{session}/orders', [Pos2SessionController::class, 'submitDraftOrders'])->name('api.sessions.orders.submit');
+        Route::post('/api/sessions/{session}/recu-staff', [Pos2SessionController::class, 'recuStaff'])->name('api.sessions.recu-staff');
+        // 空卓から注文: table_id を渡すとサーバーが getOrCreate してセッション確定後に 201 を返す
+        Route::post('/api/tables/{table}/orders', [Pos2SessionController::class, 'submitDraftOrdersForTable'])->name('api.tables.orders.submit');
+        /** 開発のみ: 当該ショップの卓セッション・注文を DB から削除（config app.pos2_debug） */
+        Route::post('/api/dev/purge-floor-data', [Pos2DevController::class, 'purgeFloorData'])->name('api.dev.purge-floor-data');
+    });
+});

@@ -29,6 +29,7 @@ use App\Services\Pos\TableSessionLifecycleService;
 use App\Services\StaffDirectoryService;
 use App\Services\StaffPinAuthenticationService;
 use App\Support\MenuItemMoney;
+use App\Support\Pos\SpeedTestProbe;
 use App\Support\Pos\Receipt\PosOrderReceiptLineEnricher;
 use App\Support\Pos\Receipt\ReceiptTaxMath;
 use App\Support\Pos\StaffTableSettlementPricing;
@@ -205,6 +206,12 @@ class TableActionHost extends Component
         if ($tid === null || $tid < 1) {
             return;
         }
+        SpeedTestProbe::log('host_opened', [
+            'shop_id' => $this->shopId,
+            'table_id' => $tid,
+            'incoming_session_id' => $sid,
+            'incoming_table_name' => is_string($tableName) ? $tableName : null,
+        ]);
 
         $this->staffMealAuthModalDismissed = false;
         $this->staffMealAuthStaffId = null;
@@ -532,6 +539,16 @@ class TableActionHost extends Component
             ."window.dispatchEvent(new CustomEvent('pos-action-host-authoritative', { bubbles: true, detail: {$detail} }));"
             ."window.dispatchEvent(new CustomEvent('pos-snapshot-refreshed', { bubbles: true, detail: {$snapshotRefresh} }));"
         );
+        SpeedTestProbe::log('authoritative_payload_dispatched', [
+            'shop_id' => (int) $this->shopId,
+            'table_id' => $tableDetail['restaurantTableId'],
+            'session_id' => $tableDetail['tableSessionId'],
+            'line_count' => count($lines),
+            'line_ids' => array_values(array_map(
+                static fn (array $row): int => (int) ($row['id'] ?? 0),
+                $lines
+            )),
+        ]);
     }
 
     private function dispatchBrowserFloorClear(): void
@@ -548,6 +565,12 @@ class TableActionHost extends Component
 
     public function loadOrderDetails(?int $sessionId): void
     {
+        SpeedTestProbe::log('load_order_details:start', [
+            'shop_id' => $this->shopId,
+            'session_id' => $sessionId,
+            'active_table_id_before' => $this->activeRestaurantTableId,
+            'active_session_id_before' => $this->activeTableSessionId,
+        ]);
         $this->memoSessionPricing = null;
         $this->memoStaffMealPreDiscountTaxSum = null;
         $this->forgetSessionOrderComputed();
@@ -563,6 +586,10 @@ class TableActionHost extends Component
         if ($sessionId === null || $sessionId < 1) {
             $this->isOrdersLoaded = true;
             $this->dispatchAuthoritativeLinePayload();
+            SpeedTestProbe::log('load_order_details:empty_session', [
+                'shop_id' => $this->shopId,
+                'session_id' => $sessionId,
+            ]);
 
             return;
         }
@@ -576,6 +603,10 @@ class TableActionHost extends Component
         if ($existing === null) {
             $this->isOrdersLoaded = true;
             $this->dispatchAuthoritativeLinePayload();
+            SpeedTestProbe::log('load_order_details:session_not_found', [
+                'shop_id' => $this->shopId,
+                'session_id' => $sessionId,
+            ]);
 
             return;
         }
@@ -584,6 +615,14 @@ class TableActionHost extends Component
         $this->sessionRowCache = $existing;
         $this->forgetSessionOrderComputed(preserveSessionRowCache: true);
         $this->dispatchAuthoritativeLinePayload();
+        SpeedTestProbe::log('load_order_details:done', [
+            'shop_id' => $this->shopId,
+            'session_id' => (int) $existing->id,
+            'table_id' => (int) $existing->restaurant_table_id,
+            'session_revision' => (int) $existing->session_revision,
+            'pos_order_count' => (int) $this->posOrders->count(),
+            'line_count' => (int) $this->allLines->count(),
+        ]);
     }
 
     /**
@@ -972,6 +1011,7 @@ class TableActionHost extends Component
                 $this->addToppings,
                 (string) $this->addNote
             );
+            $this->syncActiveSessionToLatestForActiveTable();
             // 明示: 商品追加後も卓コンテキストを維持するため closeHost / pos-tile-interaction-ended を呼ばない。
             $this->loadSessionData((int) $this->activeTableSessionId);
             $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
@@ -1484,6 +1524,16 @@ class TableActionHost extends Component
      */
     public function bulkAddDraftsOnly(array $drafts): void
     {
+        SpeedTestProbe::log('bulk_add_drafts_only:start', [
+            'shop_id' => $this->shopId,
+            'active_table_id' => $this->activeRestaurantTableId,
+            'active_session_id' => $this->activeTableSessionId,
+            'draft_count' => count($drafts),
+            'draft_menu_item_ids' => array_values(array_filter(array_map(
+                static fn ($d): int => is_array($d) && is_numeric($d['menu_item_id'] ?? null) ? (int) $d['menu_item_id'] : 0,
+                $drafts
+            ))),
+        ]);
         if ($this->requiresStaffMealAuth) {
             return;
         }
@@ -1551,13 +1601,35 @@ class TableActionHost extends Component
                 }
             });
 
+            $this->syncActiveSessionToLatestForActiveTable();
             $this->uiState = 'success';
             $this->loadSessionData((int) $this->activeTableSessionId);
             $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->closeAddModal();
             $this->refocusAjouterButtonIfTakeaway();
+            $lineCount = 0;
+            if (SpeedTestProbe::enabled() && $this->activeTableSessionId !== null) {
+                $lineCount = (int) OrderLine::query()
+                    ->whereHas('order', function ($q): void {
+                        $q->where('table_session_id', (int) $this->activeTableSessionId);
+                    })
+                    ->count();
+            }
+            SpeedTestProbe::log('bulk_add_drafts_only:done', [
+                'shop_id' => $this->shopId,
+                'active_table_id' => $this->activeRestaurantTableId,
+                'active_session_id' => $this->activeTableSessionId,
+                'line_count_after' => $lineCount,
+                'computed_line_count_after' => (int) $this->allLines->count(),
+            ]);
         } catch (Throwable $e) {
             $this->uiState = 'failed';
+            SpeedTestProbe::log('bulk_add_drafts_only:failed', [
+                'shop_id' => $this->shopId,
+                'active_table_id' => $this->activeRestaurantTableId,
+                'active_session_id' => $this->activeTableSessionId,
+                'error' => $e->getMessage(),
+            ]);
             Notification::make()
                 ->title(__('pos.action_failed'))
                 ->body($e->getMessage())
@@ -1576,6 +1648,13 @@ class TableActionHost extends Component
      */
     public function bulkAddAndConfirm(array $drafts): void
     {
+        SpeedTestProbe::log('bulk_add_and_confirm:start', [
+            'shop_id' => $this->shopId,
+            'active_table_id' => $this->activeRestaurantTableId,
+            'active_session_id' => $this->activeTableSessionId,
+            'draft_count' => count($drafts),
+            'has_unacked_placed_before' => $this->hasUnackedPlaced,
+        ]);
         if ($this->requiresStaffMealAuth) {
             return;
         }
@@ -1656,12 +1735,26 @@ class TableActionHost extends Component
                 );
             });
 
+            $this->syncActiveSessionToLatestForActiveTable();
             $this->uiState = 'success';
             $this->loadSessionData((int) $this->activeTableSessionId);
             $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
+            SpeedTestProbe::log('bulk_add_and_confirm:done', [
+                'shop_id' => $this->shopId,
+                'active_table_id' => $this->activeRestaurantTableId,
+                'active_session_id' => $this->activeTableSessionId,
+                'has_unacked_placed_after' => $this->hasUnackedPlaced,
+                'line_count_after' => (int) $this->allLines->count(),
+            ]);
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
+            SpeedTestProbe::log('bulk_add_and_confirm:revision_conflict', [
+                'shop_id' => $this->shopId,
+                'active_table_id' => $this->activeRestaurantTableId,
+                'active_session_id' => $this->activeTableSessionId,
+                'error' => $e->getMessage(),
+            ]);
             Notification::make()
                 ->title(__('pos.data_stale_title'))
                 ->body(__('pos.revision_conflict_reload'))
@@ -1672,6 +1765,12 @@ class TableActionHost extends Component
             $this->refocusAjouterButtonIfTakeaway();
         } catch (Throwable $e) {
             $this->uiState = 'failed';
+            SpeedTestProbe::log('bulk_add_and_confirm:failed', [
+                'shop_id' => $this->shopId,
+                'active_table_id' => $this->activeRestaurantTableId,
+                'active_session_id' => $this->activeTableSessionId,
+                'error' => $e->getMessage(),
+            ]);
             Notification::make()
                 ->title(__('pos.action_failed'))
                 ->body($e->getMessage())
@@ -1681,6 +1780,40 @@ class TableActionHost extends Component
             $this->applyPendingEchoReloadIfAny();
             $this->uiState = 'idle';
         }
+    }
+
+    /**
+     * Staff add operations can fork a fresh active session when the currently
+     * selected session is already settled. Align host context to latest active.
+     */
+    private function syncActiveSessionToLatestForActiveTable(): void
+    {
+        if ($this->shopId < 1 || $this->activeRestaurantTableId === null || $this->activeRestaurantTableId < 1) {
+            return;
+        }
+        $latestSessionId = TableSession::query()
+            ->where('shop_id', $this->shopId)
+            ->where('restaurant_table_id', (int) $this->activeRestaurantTableId)
+            ->where('status', TableSessionStatus::Active)
+            ->orderByDesc('id')
+            ->value('id');
+        if (! is_numeric($latestSessionId) || (int) $latestSessionId < 1) {
+            return;
+        }
+        $latest = (int) $latestSessionId;
+        $current = $this->activeTableSessionId !== null ? (int) $this->activeTableSessionId : null;
+        if ($current === $latest) {
+            return;
+        }
+        SpeedTestProbe::log('session_context_resynced_after_add', [
+            'shop_id' => $this->shopId,
+            'table_id' => $this->activeRestaurantTableId,
+            'old_session_id' => $current,
+            'new_session_id' => $latest,
+        ]);
+        $this->activeTableSessionId = $latest;
+        $this->expectedSessionRevision = 0;
+        $this->forgetSessionOrderComputed();
     }
 
     /**

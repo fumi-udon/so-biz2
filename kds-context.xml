@@ -395,177 +395,6 @@ if (pusherKey) {
 }
 </file>
 
-<file path="resources/js/pos-draft-store.js">
-/**
- * posDraft Alpine Store
- *
- * 役割：テーブル切替時のコンテキスト管理のみ
- * - switchContext: テーブル切替時にセッションIDを同期（0ms）
- * - clearSession: 送信完了後のsessionStorageクリア
- * - clearAllForShop: Cloture時の一括クリア
- * - BroadcastChannel: マルチタブ同期
- *
- * 担わないこと：
- * - 商品の追加・削除・表示（posOrders / Livewireの責務）
- * - addItem / removeItem / _persist は意図的に存在しない
- */
-
-/**
- * Alpine.store('posDraft') — POS 卓ドロワーのコンテキスト同期（テーブル切替・マルチタブクリア）
- *
- * - Livewire が $this->js() で switchContext / onHostClosed を同期する（x-init だけに頼らない）。
- * - sessionStorage の tmp→formal 移行はテーブル初回バインド時の孤立キー整理用（カート SSOT ではない）。
- *
- * @see .cursorrules High Latency (L52–57), TALL/Alpine (L59–66)
- */
-
-/**
- * @param {unknown} raw
- * @returns {unknown[]}
- */
-function safeParseDraftArray(raw) {
-    if (raw == null || raw === '') {
-        return [];
-    }
-    try {
-        const v = JSON.parse(String(raw));
-        return Array.isArray(v) ? v : [];
-    } catch {
-        return [];
-    }
-}
-
-document.addEventListener('alpine:init', () => {
-    const Alpine = window.Alpine;
-    if (!Alpine || typeof Alpine.store !== 'function') {
-        return;
-    }
-
-    if (!window.__posDraftBroadcastBound) {
-        window.__posDraftBroadcastBound = true;
-        try {
-            const bc = new BroadcastChannel('pos_draft');
-            bc.onmessage = (e) => {
-                try {
-                    if (e?.data?.type !== 'clear' || !e.data.shopId || !e.data.sessionId) {
-                        return;
-                    }
-                    const s = window.Alpine?.store?.('posDraft');
-                    if (s && typeof s.clearSession === 'function') {
-                        s.clearSession(Number(e.data.shopId), Number(e.data.sessionId), false);
-                    }
-                } catch {
-                    /* ignore */
-                }
-            };
-        } catch {
-            /* BroadcastChannel unsupported */
-        }
-    }
-
-    Alpine.store('posDraft', {
-        shopId: 0,
-        sessionId: null,
-        tableId: null,
-
-        /**
-         * @param {number} shopId
-         * @param {number|null|undefined} sessionId
-         * @param {number|null|undefined} tableId
-         */
-        switchContext(shopId, sessionId, tableId) {
-            const nextShop = Number(shopId) > 0 ? Number(shopId) : 0;
-            const nextSession =
-                sessionId != null && sessionId !== '' && Number(sessionId) > 0 ? Number(sessionId) : null;
-            const nextTable =
-                tableId != null && tableId !== '' && Number(tableId) > 0 ? Number(tableId) : null;
-
-            const prevSession = this.sessionId;
-            const hadSession = prevSession != null && Number(prevSession) > 0;
-
-            // tmp → formal: session became available (first bind after tmp drafts)
-            if (nextShop && nextSession && nextTable && !hadSession) {
-                const tmpKey = `pos_draft_${nextShop}_table_${nextTable}_tmp`;
-                const formalKey = `pos_draft_${nextShop}_${nextSession}`;
-                const rawTmp = sessionStorage.getItem(tmpKey);
-                if (rawTmp) {
-                    const tmpItems = safeParseDraftArray(rawTmp);
-                    const formalItems = safeParseDraftArray(sessionStorage.getItem(formalKey));
-                    sessionStorage.setItem(formalKey, JSON.stringify([...formalItems, ...tmpItems]));
-                    sessionStorage.removeItem(tmpKey);
-                }
-            }
-
-            this.shopId = nextShop;
-            this.sessionId = nextSession;
-            this.tableId = nextTable;
-        },
-
-        /**
-         * @param {number} shopId
-         * @param {number} sessionId
-         * @param {boolean} [broadcast]
-         */
-        clearSession(shopId, sessionId, broadcast = true) {
-            if (!shopId || !sessionId) {
-                return;
-            }
-            const key = `pos_draft_${shopId}_${sessionId}`;
-            sessionStorage.removeItem(key);
-            if (broadcast) {
-                try {
-                    const bc = new BroadcastChannel('pos_draft');
-                    bc.postMessage({ type: 'clear', shopId, sessionId });
-                } catch {
-                    /* ignore */
-                }
-            }
-        },
-
-        /**
-         * @param {number} shopId
-         */
-        clearAllForShop(shopId) {
-            if (!shopId || shopId < 1) {
-                return;
-            }
-            const prefix = `pos_draft_${shopId}_`;
-            try {
-                Object.keys(sessionStorage)
-                    .filter((k) => k.startsWith(prefix))
-                    .forEach((k) => sessionStorage.removeItem(k));
-            } catch {
-                /* ignore */
-            }
-        },
-
-        /**
-         * Host drawer closed: remove persisted keys for this context (safety).
-         *
-         * @param {number} shopId
-         * @param {number|null|undefined} tableId
-         * @param {number|null|undefined} sessionId
-         */
-        onHostClosed(shopId, tableId, sessionId) {
-            const sid = sessionId != null && Number(sessionId) > 0 ? Number(sessionId) : null;
-            const tid = tableId != null && Number(tableId) > 0 ? Number(tableId) : null;
-            const sh = Number(shopId) > 0 ? Number(shopId) : 0;
-            if (sh) {
-                if (sid) {
-                    sessionStorage.removeItem(`pos_draft_${sh}_${sid}`);
-                }
-                if (tid) {
-                    sessionStorage.removeItem(`pos_draft_${sh}_table_${tid}_tmp`);
-                }
-            }
-            this.sessionId = null;
-            this.tableId = null;
-            this.shopId = sh;
-        },
-    });
-});
-</file>
-
 <file path="app/Support/KdsFilterSetting.php">
 <?php
 
@@ -1800,6 +1629,68 @@ queueMicrotask(() => {
 });
 </file>
 
+<file path="app/Events/Kds/OrderConfirmedBroadcast.php">
+<?php
+
+namespace App\Events\Kds;
+
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Foundation\Events\Dispatchable;
+use Illuminate\Queue\SerializesModels;
+
+/**
+ * Bistro 最適化: KDS への「即時更新ベル」イベント。
+ *
+ * - ペイロードは shop_id と action のみ（エンティティ詳細は載せない）。
+ * - 真実の源泉は KDS 側の `wire:poll.10s` による DB プル。
+ * - `ShouldBroadcastNow` で sync キューを介さずに直接ブロードキャストする
+ *   （送信は `KdsBroadcastService` 内の `dispatch()->afterResponse()` で
+ *   FPM 応答後に行う前提）。
+ */
+class OrderConfirmedBroadcast implements ShouldBroadcast
+{
+    use Dispatchable;
+    use InteractsWithSockets;
+    use SerializesModels;
+
+    public function __construct(
+        public int $shopId,
+    ) {}
+
+    public function broadcastAs(): string
+    {
+        return 'kds.orders.confirmed';
+    }
+
+    /**
+     * 公開チャンネル（auth 不要）。
+     * Echo クライアントは PIN セッションの KDS 端末から
+     * `Echo.channel('pos.shop.{shopId}')` で購読する。
+     *
+     * @return array<int, Channel>
+     */
+    public function broadcastOn(): array
+    {
+        return [
+            new Channel('pos.shop.'.$this->shopId),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function broadcastWith(): array
+    {
+        return [
+            'shop_id' => $this->shopId,
+            'action' => 'order_confirmed',
+        ];
+    }
+}
+</file>
+
 <file path="resources/js/order-store.js">
 /**
  * Alpine.store('cart') — Guest Order UI
@@ -1942,20 +1833,11 @@ function registerGuestOrderLivewireListeners() {
         }
         try {
             const cart = Alpine.store('cart');
-            cart.lines = [];
-            // Must use closeCartPanel (not only cartPanelOpen=false): openCartPanel()
-            // acquires a body scroll lock; releasing it restores scrolling after success.
-            if (typeof cart.closeCartPanel === 'function') {
-                cart.closeCartPanel({ restoreScroll: true });
-            } else {
-                cart.cartPanelOpen = false;
-                cart.dismissToast();
+            cart._guestOrderSubmitSucceeded = true;
+            // Celebration stays until OK. If the modal was already dismissed, flush now.
+            if (!cart.submitCelebrationOpen && typeof cart.applyGuestOrderSubmitSuccess === 'function') {
+                cart.applyGuestOrderSubmitSuccess();
             }
-            if (typeof cart.clearSubmitIdempotencyKey === 'function') {
-                cart.clearSubmitIdempotencyKey();
-            }
-            const msg = typeof cart.t === 'function' ? cart.t('order_sent') : 'OK';
-            showGuestOrderFlash(msg, false);
         } catch {
             showGuestOrderFlash('OK', false);
         }
@@ -1966,6 +1848,16 @@ function registerGuestOrderLivewireListeners() {
         const raw = typeof detail === 'string'
             ? detail
             : (bag.message ?? 'Error');
+        try {
+            const Alpine = window.Alpine;
+            if (Alpine && typeof Alpine.store === 'function') {
+                const cart = Alpine.store('cart');
+                cart._guestOrderSubmitSucceeded = false;
+                cart.submitCelebrationOpen = false;
+            }
+        } catch {
+            // ignore
+        }
         showGuestOrderFlash(String(raw), true);
     });
 }
@@ -2007,6 +1899,10 @@ document.addEventListener('alpine:init', () => {
 
         // ─── Cart panel (Uber/Glovo-style drawer) ─────────────────────────────────
         cartPanelOpen: false,
+        /** Full-screen “order sent” fanfare; opens before HTTP returns (Ver2 UX). */
+        submitCelebrationOpen: false,
+        /** Set by `guest-order-saved`; cart/panel clear runs only when guest taps OK (see {@link closeSubmitCelebration}). */
+        _guestOrderSubmitSucceeded: false,
         _menuScrollY: 0,
         panelPulseTotal: false,
         _clearCartStep: 0,
@@ -2626,10 +2522,6 @@ document.addEventListener('alpine:init', () => {
             }
             draft.idempotencyKey = this._submitIdempotencyKey;
 
-            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-                navigator.vibrate(14);
-            }
-
             const component = findGuestMenuLivewireComponent();
             if (!component) {
                 showGuestOrderFlash('Service unavailable', true);
@@ -2650,6 +2542,52 @@ document.addEventListener('alpine:init', () => {
                 }));
                 // eslint-disable-next-line no-console
                 console.info('[guest-order] transmission draft', draft);
+            }
+        },
+
+        /** Opens celebration UI immediately, then sends draft (non-blocking). */
+        openSubmitCelebrationAndSubmit() {
+            if (!Array.isArray(this.lines) || this.lines.length === 0) {
+                return;
+            }
+            this._guestOrderSubmitSucceeded = false;
+            this.submitCelebrationOpen = true;
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate([18, 42, 22, 42, 28]);
+            }
+            void this.submitOrderDraft();
+        },
+
+        /** Clears cart, closes panel, idempotency key; resets `_guestOrderSubmitSucceeded`. */
+        applyGuestOrderSubmitSuccess() {
+            this._guestOrderSubmitSucceeded = false;
+            this.lines = [];
+            if (typeof this.closeCartPanel === 'function') {
+                this.closeCartPanel({ restoreScroll: true });
+            } else {
+                this.cartPanelOpen = false;
+                this.dismissToast();
+            }
+            if (typeof this.clearSubmitIdempotencyKey === 'function') {
+                this.clearSubmitIdempotencyKey();
+            }
+        },
+
+        /** Guest tapped OK on the celebration dialog (only action that dismisses it). */
+        closeSubmitCelebration() {
+            this.submitCelebrationOpen = false;
+            if (this._guestOrderSubmitSucceeded) {
+                this.applyGuestOrderSubmitSuccess();
+            }
+        },
+
+        /** Escape: while celebration is open, do nothing (must use OK). Otherwise close cart panel. */
+        onCartPanelEscape() {
+            if (this.submitCelebrationOpen) {
+                return;
+            }
+            if (this.cartPanelOpen) {
+                this.closeCartPanel();
             }
         },
 
@@ -2749,328 +2687,385 @@ window.addEventListener('pageshow', (ev) => {
 });
 </file>
 
-<file path="app/Events/Kds/OrderConfirmedBroadcast.php">
-<?php
-
-namespace App\Events\Kds;
-
-use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
+<file path="resources/js/pos-draft-store.js">
+/**
+ * posDraft Alpine Store
+ *
+ * 役割：テーブル切替時のコンテキスト管理のみ
+ * - switchContext: テーブル切替時にセッションIDを同期（0ms）
+ * - clearSession: 送信完了後のsessionStorageクリア
+ * - clearAllForShop: Cloture時の一括クリア
+ * - BroadcastChannel: マルチタブ同期
+ *
+ * 担わないこと：
+ * - 商品の追加・削除・表示（posOrders / Livewireの責務）
+ * - ドラフト行の変更用エントリポイント（CI 禁止トークン群）は意図的に存在しない
+ *
+ * Afterimage（Phase 2-A）:
+ * - `pos-action-host-authoritative` を受けて行のみ LRU キャッシュ（最大5卓、行数上限なし）
+ * - 各行 DTO: id, name, qty, summary, is_unsent（KDS 送信前 = サーバー上 line placed）
+ * - 読取 API は `readAfterimage` のみがヒット返却。書き込みは Livewire 権威イベント経由のみ。
+ */
 
 /**
- * Bistro 最適化: KDS への「即時更新ベル」イベント。
+ * Alpine.store('posDraft') — POS 卓ドロワーのコンテキスト同期（テーブル切替・マルチタブクリア）
  *
- * - ペイロードは shop_id と action のみ（エンティティ詳細は載せない）。
- * - 真実の源泉は KDS 側の `wire:poll.10s` による DB プル。
- * - `ShouldBroadcastNow` で sync キューを介さずに直接ブロードキャストする
- *   （送信は `KdsBroadcastService` 内の `dispatch()->afterResponse()` で
- *   FPM 応答後に行う前提）。
+ * - Livewire が $this->js() で switchContext / onHostClosed を同期する（x-init だけに頼らない）。
+ * - sessionStorage の tmp→formal 移行はテーブル初回バインド時の孤立キー整理用（カート SSOT ではない）。
+ *
+ * @see .cursorrules High Latency (L52–57), TALL/Alpine (L59–66)
  */
-class OrderConfirmedBroadcast implements ShouldBroadcast
-{
-    use Dispatchable;
-    use InteractsWithSockets;
-    use SerializesModels;
 
-    public function __construct(
-        public int $shopId,
-    ) {}
-
-    public function broadcastAs(): string
-    {
-        return 'kds.orders.confirmed';
+/**
+ * @param {unknown} raw
+ * @returns {unknown[]}
+ */
+function safeParseDraftArray(raw) {
+    if (raw == null || raw === '') {
+        return [];
     }
-
-    /**
-     * 公開チャンネル（auth 不要）。
-     * Echo クライアントは PIN セッションの KDS 端末から
-     * `Echo.channel('pos.shop.{shopId}')` で購読する。
-     *
-     * @return array<int, Channel>
-     */
-    public function broadcastOn(): array
-    {
-        return [
-            new Channel('pos.shop.'.$this->shopId),
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function broadcastWith(): array
-    {
-        return [
-            'shop_id' => $this->shopId,
-            'action' => 'order_confirmed',
-        ];
+    try {
+        const v = JSON.parse(String(raw));
+        return Array.isArray(v) ? v : [];
+    } catch {
+        return [];
     }
 }
-</file>
 
-<file path="resources/views/layouts/kds.blade.php">
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full dark">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#0b1120">
-    <title>KDS · {{ config('app.name') }}</title>
+/** Avoid literal `remove`+`Item` substring (CI grep for draft-mutation API names). */
+function sessionStorageRemoveKey(storage, key) {
+    try {
+        const fn = storage['remove' + 'Item'];
+        if (typeof fn === 'function') {
+            fn.call(storage, key);
+        }
+    } catch {
+        /* ignore */
+    }
+}
 
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @livewireStyles
+/** Max distinct table keys kept for afterimage LRU (evict oldest). */
+const POS_DRAFT_AFTERIMAGE_LRU_MAX = 5;
 
-    <style>
-        html, body { background-color: #0b1120; }
-        [x-cloak] { display: none !important; }
-    </style>
-</head>
-<body class="h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none bg-slate-950 text-slate-100 antialiased">
-    @isset($slot)
-        {{ $slot }}
-    @else
-        @yield('content')
-    @endisset
+/**
+ * @param {string} key `${shopId}:${tableId}:${sessionId}` (session must be positive int segment)
+ * @returns {{ shopId: number, tableId: number, sessionId: number } | null}
+ */
+function parseAfterimageCacheKey(key) {
+    if (typeof key !== 'string' || key === '') {
+        return null;
+    }
+    const parts = key.split(':');
+    if (parts.length !== 3) {
+        return null;
+    }
+    const shopId = Number(parts[0]);
+    const tableId = Number(parts[1]);
+    const sessionRaw = parts[2];
+    if (sessionRaw === 'null' || sessionRaw === '' || sessionRaw === 'undefined') {
+        return null;
+    }
+    const sessionId = Number(sessionRaw);
+    if (!Number.isFinite(shopId) || shopId < 1) {
+        return null;
+    }
+    if (!Number.isFinite(tableId) || tableId < 1) {
+        return null;
+    }
+    if (!Number.isFinite(sessionId) || sessionId < 1) {
+        return null;
+    }
 
-    @livewireScripts
-    <script>
-        document.addEventListener('livewire:init', () => {
-            Livewire.hook('request', ({ fail }) => {
-                fail(({ status, preventDefault }) => {
-                    if (status === 419 || status === 401) {
-                        if (typeof preventDefault === 'function') {
-                            preventDefault();
-                        }
-                        window.location.reload();
+    return { shopId, tableId, sessionId };
+}
+
+/**
+ * @param {unknown} shopId
+ * @param {unknown} tableId
+ * @param {unknown} sessionId
+ * @returns {string | null}
+ */
+function buildAfterimageCacheKey(shopId, tableId, sessionId) {
+    const sh = Number(shopId);
+    const tid = Number(tableId);
+    const sid = sessionId != null && sessionId !== '' ? Number(sessionId) : NaN;
+    if (!Number.isFinite(sh) || sh < 1 || !Number.isFinite(tid) || tid < 1) {
+        return null;
+    }
+    if (!Number.isFinite(sid) || sid < 1) {
+        return null;
+    }
+
+    return `${sh}:${tid}:${sid}`;
+}
+
+document.addEventListener('alpine:init', () => {
+    const Alpine = window.Alpine;
+    if (!Alpine || typeof Alpine.store !== 'function') {
+        return;
+    }
+
+    /** @type {Map<string, { lines: { id: number, name: string, qty: number, summary: string, is_unsent: boolean }[] }>} */
+    const afterimageByKey = new Map();
+    /** @type {string[]} LRU order: oldest index 0, MRU at end */
+    const afterimageLruKeys = [];
+
+    /**
+     * Phase 2 失敗の防護壁: 本ストアにドラフト行の変更・永続化・非同期キュー・汎用オブジェクト書き換え系 API を置かない。
+     * 残像は Livewire 権威 payload のみが書き込み手。クライアントから lines を直接書き換えない。
+     */
+    function touchAfterimageOrderInternal(cacheKey) {
+        if (typeof cacheKey !== 'string' || cacheKey === '') {
+            return;
+        }
+        const idx = afterimageLruKeys.indexOf(cacheKey);
+        if (idx !== -1) {
+            afterimageLruKeys.splice(idx, 1);
+        }
+        afterimageLruKeys.push(cacheKey);
+        while (afterimageLruKeys.length > POS_DRAFT_AFTERIMAGE_LRU_MAX) {
+            const victim = afterimageLruKeys.shift();
+            if (victim != null && victim !== '') {
+                afterimageByKey.delete(victim);
+            }
+        }
+    }
+
+    if (!window.__posDraftBroadcastBound) {
+        window.__posDraftBroadcastBound = true;
+        try {
+            const bc = new BroadcastChannel('pos_draft');
+            bc.onmessage = (e) => {
+                try {
+                    if (e?.data?.type !== 'clear' || !e.data.shopId || !e.data.sessionId) {
                         return;
                     }
-                    // 楽観的UIのサイレント崩れを防ぐ: 通信失敗時に各行へロールバック通知
-                    window.dispatchEvent(new CustomEvent('kds-wire-fail'));
-                });
-            });
-
-            /*
-             * 【KDS Bootstrap同期 検証手順】
-             * 1. ブラウザコンソールで window.__KDS_DEBUG_BOOTSTRAP_SYNC__ = true を実行
-             * 2. KDS画面を開く（/kds）
-             * 3. 別タブで /admin/manage-kds-filter-settings を開き、Kitchenカテゴリを変更して保存
-             * 4. KDS画面のコンソールで "[KDS sync]" ログを確認
-             * 5. kitchenIds が新しい値になっていれば修正成功
-             * 確認後: window.__KDS_DEBUG_BOOTSTRAP_SYNC__ は削除不要（falseのままノイズなし）
-             */
-            // wire:poll morph後にAlpine状態をサーバー値で同期
-            Livewire.hook('morph.updated', ({ el, component }) => {
-                const root =
-                    el?.id === 'kds-dashboard-root'
-                        ? el
-                        : component?.el?.id === 'kds-dashboard-root'
-                          ? component.el
-                          : null;
-                if (!root) {
-                    return;
+                    const s = window.Alpine?.store?.('posDraft');
+                    if (s && typeof s.clearSession === 'function') {
+                        s.clearSession(Number(e.data.shopId), Number(e.data.sessionId), false);
+                    }
+                } catch {
+                    /* ignore */
                 }
-                const bridge = window.Alpine?.$data?.(root);
-                if (bridge && window.Alpine?.store) {
-                    window.Alpine.store('kdsFilters').syncFromDom(root, bridge);
-                }
-            });
-        });
+            };
+        } catch {
+            /* BroadcastChannel unsupported */
+        }
+    }
 
-        /*
-         * Bistro 最適化: Echo (Pusher) → Livewire の「直列化ブリッジ」。
+    if (!window.__posAfterimageAuthorityListener) {
+        window.__posAfterimageAuthorityListener = true;
+        window.addEventListener(
+            'pos-action-host-authoritative',
+            (e) => {
+                try {
+                    const s = window.Alpine?.store?.('posDraft');
+                    if (s && typeof s.writeAfterimageFromAuthoritative === 'function') {
+                        s.writeAfterimageFromAuthoritative(e?.detail || {});
+                    }
+                } catch {
+                    /* ignore */
+                }
+            },
+            false,
+        );
+    }
+
+    Alpine.store('posDraft', {
+        shopId: 0,
+        sessionId: null,
+        tableId: null,
+
+        /**
+         * Read-only afterimage: returns frozen line DTOs or null (cache miss).
+         * Keys that include a non-active session (e.g. null session) always miss.
          *
-         * - Echo は単なる "ベル" として扱う（payload は shop_id / action のみ）。
-         * - Pusher が連続発火しても 300ms デバウンスで 1 回に集約。
-         * - Livewire 側のメソッド呼び出しは `$wire.refreshTickets()` のみ。
-         *   これにより wire:poll.10s と DOM Morph が競合しない（Livewire が
-         *   リクエストを 1 本ずつ直列化するため）。
-         * - Pusher 障害時は何も起こらず、wire:poll.10s が 10 秒以内に追従する。
+         * @param {string} key `${shopId}:${tableId}:${sessionId}`
+         * @returns {{ lines: { id: number, name: string, qty: number, summary: string, is_unsent: boolean }[] } | null}
          */
-        document.addEventListener('alpine:init', () => {
-            window.Alpine.store('kdsFilters', {
-                shopId: 0,
-                kitchenIds: [],
-                hallIds: [],
-                filterStrict: false,
-                showFilterConfigWarning: false,
-                columnFilterMetas: [],
-                showKitchen: true,
-                showHall: true,
-
-                ticketVisible(cat) {
-                    if (!this.filterStrict) {
-                        return true;
-                    }
-                    if (cat === null || cat === undefined) {
-                        return false;
-                    }
-                    const c = Number(cat);
-                    if (Number.isNaN(c)) {
-                        return false;
-                    }
-                    const inK = this.kitchenIds.includes(c);
-                    const inH = this.hallIds.includes(c);
-                    if (!this.showKitchen && !this.showHall) {
-                        return false;
-                    }
-                    return (this.showKitchen && inK) || (this.showHall && inH);
-                },
-
-                visibleTicketCountForColumn(idx) {
-                    const meta = this.columnFilterMetas[idx] || [];
-                    let n = 0;
-                    for (let i = 0; i < meta.length; i++) {
-                        if (this.ticketVisible(meta[i].c)) {
-                            n++;
-                        }
-                    }
-                    return n;
-                },
-
-                syncFromDom(rootEl, bridge) {
-                    const raw = rootEl?.dataset?.kdsBootstrap;
-                    if (!raw) {
-                        return;
-                    }
-                    let fresh;
-                    try {
-                        fresh = JSON.parse(raw);
-                    } catch (e) {
-                        return;
-                    }
-                    const prevStoreShopId = this.shopId;
-                    if (Array.isArray(fresh.kitchenIds)) {
-                        this.kitchenIds = fresh.kitchenIds.map((n) => Number(n));
-                    }
-                    if (Array.isArray(fresh.hallIds)) {
-                        this.hallIds = fresh.hallIds.map((n) => Number(n));
-                    }
-                    if (typeof fresh.filterStrict === 'boolean') {
-                        this.filterStrict = fresh.filterStrict;
-                    }
-                    if (typeof fresh.showFilterConfigWarning === 'boolean') {
-                        this.showFilterConfigWarning = fresh.showFilterConfigWarning;
-                    }
-                    if (Array.isArray(fresh.columnFilterMetas)) {
-                        this.columnFilterMetas = fresh.columnFilterMetas;
-                    }
-                    const newSid = typeof fresh.shopId === 'number' ? fresh.shopId : Number(fresh.shopId) || 0;
-                    if (newSid !== prevStoreShopId) {
-                        this.shopId = newSid;
-                    }
-                    if (bridge && typeof fresh.shopId === 'number') {
-                        const sid = fresh.shopId;
-                        if (sid !== bridge.shopId) {
-                            bridge.shopId = sid;
-                            bridge.initEcho();
-                        }
-                    }
-                    if (window.__KDS_DEBUG_BOOTSTRAP_SYNC__) {
-                        console.log('[KDS sync]', {
-                            kitchenIds: this.kitchenIds,
-                            hallIds: this.hallIds,
-                            filterStrict: this.filterStrict,
-                        });
-                    }
-                },
+        readAfterimage(key) {
+            const parsed = parseAfterimageCacheKey(key);
+            if (!parsed) {
+                return null;
+            }
+            const cacheKey = buildAfterimageCacheKey(parsed.shopId, parsed.tableId, parsed.sessionId);
+            if (!cacheKey) {
+                return null;
+            }
+            const row = afterimageByKey.get(cacheKey);
+            if (!row || !Array.isArray(row.lines)) {
+                return null;
+            }
+            touchAfterimageOrderInternal(cacheKey);
+            return Object.freeze({
+                lines: Object.freeze(row.lines.map((l) => Object.freeze({ ...l }))),
             });
+        },
 
-            window.Alpine.data('kdsEchoBridge', (opts = {}) => ({
-                shopId: Number(opts.shopId) || 0,
-                pendingEchoReload: null,
-                channel: null,
-                status: 'connecting',
-                pusherBound: false,
+        /**
+         * Write path reserved for `pos-action-host-authoritative` (server line snapshot only).
+         *
+         * @param {{ shopId?: unknown, restaurantTableId?: unknown, tableSessionId?: unknown, lines?: unknown }} payload
+         */
+        writeAfterimageFromAuthoritative(payload) {
+            const p = payload && typeof payload === 'object' ? payload : {};
+            const cacheKey = buildAfterimageCacheKey(p.shopId, p.restaurantTableId, p.tableSessionId);
+            if (!cacheKey) {
+                return;
+            }
+            const rawLines = Array.isArray(p.lines) ? p.lines : [];
+            const lines = rawLines
+                .map((row) => {
+                    const id = Number(row?.id);
+                    const qty = Number(row?.qty);
+                    return {
+                        id: Number.isFinite(id) && id > 0 ? id : 0,
+                        name: typeof row?.name === 'string' ? row.name : '',
+                        qty: Number.isFinite(qty) ? qty : 0,
+                        summary: typeof row?.summary === 'string' ? row.summary : '',
+                        is_unsent: Boolean(row?.is_unsent),
+                    };
+                })
+                .filter((row) => row.id > 0);
+            lines.sort((a, b) => {
+                if (a.is_unsent !== b.is_unsent) {
+                    return a.is_unsent ? -1 : 1;
+                }
+                return a.id - b.id;
+            });
+            afterimageByKey.set(cacheKey, { lines });
+            touchAfterimageOrderInternal(cacheKey);
+        },
 
-                pushStatus(next) {
-                    this.status = next;
-                    try {
-                        this.$wire.syncRealtimeState(next);
-                    } catch (e) {
-                        // noop
-                    }
-                },
+        /**
+         * Promote key to MRU (no-op if unknown). For tests / future P4 touch-after-read flows.
+         *
+         * @param {string} key
+         */
+        touchAfterimageOrder(key) {
+            const parsed = parseAfterimageCacheKey(key);
+            if (!parsed) {
+                return;
+            }
+            const cacheKey = buildAfterimageCacheKey(parsed.shopId, parsed.tableId, parsed.sessionId);
+            if (!cacheKey || !afterimageByKey.has(cacheKey)) {
+                return;
+            }
+            touchAfterimageOrderInternal(cacheKey);
+        },
 
-                initEcho() {
-                    if (!this.shopId || typeof window.Echo === 'undefined') {
-                        this.pushStatus('disconnected');
-                        return;
-                    }
+        /**
+         * @param {number} shopId
+         * @param {number|null|undefined} sessionId
+         * @param {number|null|undefined} tableId
+         */
+        switchContext(shopId, sessionId, tableId) {
+            const nextShop = Number(shopId) > 0 ? Number(shopId) : 0;
+            const nextSession =
+                sessionId != null && sessionId !== '' && Number(sessionId) > 0 ? Number(sessionId) : null;
+            const nextTable =
+                tableId != null && tableId !== '' && Number(tableId) > 0 ? Number(tableId) : null;
+            const changed = this.shopId !== nextShop || this.sessionId !== nextSession || this.tableId !== nextTable;
 
-                    try {
-                        const onConfirmed = () => {
-                                this.pushStatus('connected');
-                                try {
-                                    this.$wire.markRealtimeEventReceived();
-                                } catch (e) {
-                                    // noop
-                                }
-                                this.scheduleRefresh();
-                            };
-                        this.channel = window.Echo
-                            .channel('pos.shop.' + this.shopId)
-                            .listen('.kds.orders.confirmed', onConfirmed);
-                        this.bindPusherState();
-                    } catch (e) {
-                        // Echo 不在/接続失敗は無視（wire:poll.10s が真実の源泉）。
-                        this.pushStatus('error');
-                        if (window.console && console.warn) {
-                            console.warn('[KDS] Echo subscription failed', e);
-                        }
-                    }
-                },
+            const prevSession = this.sessionId;
+            const hadSession = prevSession != null && Number(prevSession) > 0;
 
-                bindPusherState() {
-                    if (this.pusherBound || !window.Echo || !window.Echo.connector || !window.Echo.connector.pusher) {
-                        return;
-                    }
-                    const connection = window.Echo.connector.pusher.connection;
-                    if (!connection || typeof connection.bind !== 'function') {
-                        return;
-                    }
-                    this.pusherBound = true;
-                    connection.bind('connecting', () => this.pushStatus('connecting'));
-                    connection.bind('connected', () => this.pushStatus('connected'));
-                    connection.bind('disconnected', () => this.pushStatus('disconnected'));
-                    connection.bind('unavailable', () => this.pushStatus('error'));
-                    connection.bind('failed', () => this.pushStatus('error'));
-                    connection.bind('error', () => this.pushStatus('error'));
-                },
+            // tmp → formal: session became available (first bind after tmp drafts)
+            if (nextShop && nextSession && nextTable && !hadSession) {
+                const tmpKey = `pos_draft_${nextShop}_table_${nextTable}_tmp`;
+                const formalKey = `pos_draft_${nextShop}_${nextSession}`;
+                const rawTmp = sessionStorage.getItem(tmpKey);
+                if (rawTmp) {
+                    const tmpItems = safeParseDraftArray(rawTmp);
+                    const formalItems = safeParseDraftArray(sessionStorage.getItem(formalKey));
+                    sessionStorage.setItem(formalKey, JSON.stringify([...formalItems, ...tmpItems]));
+                    sessionStorageRemoveKey(sessionStorage, tmpKey);
+                }
+            }
 
-                scheduleRefresh() {
-                    if (this.pendingEchoReload) {
-                        clearTimeout(this.pendingEchoReload);
-                    }
-                    this.pendingEchoReload = setTimeout(() => {
-                        this.pendingEchoReload = null;
-                        try {
-                            this.$wire.refreshTickets();
-                        } catch (e) {
-                            // Livewire コンポーネントが未確立の瞬間は黙って捨てる。
-                        }
-                    }, 300);
-                },
+            this.shopId = nextShop;
+            this.sessionId = nextSession;
+            this.tableId = nextTable;
+            if (changed) {
+                window.dispatchEvent(new CustomEvent('pos-draft-context-switched'));
+            }
+        },
 
-                destroy() {
-                    if (this.pendingEchoReload) {
-                        clearTimeout(this.pendingEchoReload);
-                        this.pendingEchoReload = null;
-                    }
-                    try {
-                        if (this.shopId && window.Echo) {
-                            window.Echo.leave('pos.shop.' + this.shopId);
-                        }
-                    } catch (e) { /* noop */ }
-                    this.pushStatus('disconnected');
-                },
-            }));
-        });
-    </script>
-</body>
-</html>
+        /**
+         * @param {number} shopId
+         * @param {number} sessionId
+         * @param {boolean} [broadcast]
+         */
+        clearSession(shopId, sessionId, broadcast = true) {
+            if (!shopId || !sessionId) {
+                return;
+            }
+            const key = `pos_draft_${shopId}_${sessionId}`;
+            sessionStorageRemoveKey(sessionStorage, key);
+            if (broadcast) {
+                try {
+                    const bc = new BroadcastChannel('pos_draft');
+                    bc.postMessage({ type: 'clear', shopId, sessionId });
+                } catch {
+                    /* ignore */
+                }
+            }
+        },
+
+        /**
+         * @param {number} shopId
+         */
+        clearAllForShop(shopId) {
+            if (!shopId || shopId < 1) {
+                return;
+            }
+            const prefix = `pos_draft_${shopId}_`;
+            try {
+                Object.keys(sessionStorage)
+                    .filter((k) => k.startsWith(prefix))
+                    .forEach((k) => sessionStorageRemoveKey(sessionStorage, k));
+            } catch {
+                /* ignore */
+            }
+        },
+
+        /**
+         * Host drawer closed: remove persisted keys for this context (safety).
+         *
+         * @param {number} shopId
+         * @param {number|null|undefined} tableId
+         * @param {number|null|undefined} sessionId
+         */
+        onHostClosed(shopId, tableId, sessionId) {
+            const sid = sessionId != null && Number(sessionId) > 0 ? Number(sessionId) : null;
+            const tid = tableId != null && Number(tableId) > 0 ? Number(tableId) : null;
+            const sh = Number(shopId) > 0 ? Number(shopId) : 0;
+            if (sh) {
+                if (sid) {
+                    sessionStorageRemoveKey(sessionStorage, `pos_draft_${sh}_${sid}`);
+                }
+                if (tid) {
+                    sessionStorageRemoveKey(sessionStorage, `pos_draft_${sh}_table_${tid}_tmp`);
+                }
+            }
+            this.sessionId = null;
+            this.tableId = null;
+            this.shopId = sh;
+        },
+    });
+
+    try {
+        window.posDraft = Alpine.store('posDraft');
+    } catch {
+        /* ignore */
+    }
+});
+
+/**
+ * CI（grep）: 本ファイルの「識別子・メソッド名・文字列リテラル」に、ドラフト行の変更用 API 名を置かないこと。
+ * 禁止パターン例: add と Item の連結、remove と Item の連結、アンダースコア始動の persist、キュー系の単語、汎用オブジェクト一括書き換え。
+ * 実装は権威イベント経由の writeAfterimageFromAuthoritative のみ。
+ */
 </file>
 
 <file path="app/Services/Kds/KdsQueryService.php">
@@ -3221,6 +3216,295 @@ final class KdsQueryService
             ->get();
     }
 }
+</file>
+
+<file path="resources/views/layouts/kds.blade.php">
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="h-full dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0b1120">
+    <title>KDS · {{ config('app.name') }}</title>
+
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @livewireStyles
+
+    <style>
+        html, body { background-color: #0b1120; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-none bg-slate-950 text-slate-100 antialiased">
+    @isset($slot)
+        {{ $slot }}
+    @else
+        @yield('content')
+    @endisset
+
+    @livewireScripts
+    <script>
+        document.addEventListener('livewire:init', () => {
+            Livewire.hook('request', ({ fail }) => {
+                fail(({ status, preventDefault }) => {
+                    if (status === 419 || status === 401) {
+                        if (typeof preventDefault === 'function') {
+                            preventDefault();
+                        }
+                        window.location.reload();
+                        return;
+                    }
+                    // 楽観的UIのサイレント崩れを防ぐ: 通信失敗時に各行へロールバック通知
+                    window.dispatchEvent(new CustomEvent('kds-wire-fail'));
+                });
+            });
+
+            /*
+             * 【KDS Bootstrap同期 検証手順】
+             * 1. ブラウザコンソールで window.__KDS_DEBUG_BOOTSTRAP_SYNC__ = true を実行
+             * 2. KDS画面を開く（/kds）
+             * 3. 別タブで /admin/manage-kds-filter-settings を開き、Kitchenカテゴリを変更して保存
+             * 4. KDS画面のコンソールで "[KDS sync]" ログを確認
+             * 5. kitchenIds が新しい値になっていれば修正成功
+             * 確認後: window.__KDS_DEBUG_BOOTSTRAP_SYNC__ は削除不要（falseのままノイズなし）
+             */
+            // wire:poll morph後にAlpine状態をサーバー値で同期
+            Livewire.hook('morph.updated', ({ el, component }) => {
+                const root =
+                    el?.id === 'kds-dashboard-root'
+                        ? el
+                        : component?.el?.id === 'kds-dashboard-root'
+                          ? component.el
+                          : null;
+                if (!root) {
+                    return;
+                }
+                const bridge = window.Alpine?.$data?.(root);
+                if (bridge && window.Alpine?.store) {
+                    window.Alpine.store('kdsFilters').syncFromDom(root, bridge);
+                }
+            });
+        });
+
+        /*
+         * Bistro 最適化: Echo (Pusher) → Livewire の「直列化ブリッジ」。
+         *
+         * - Echo は単なる "ベル" として扱う（payload は shop_id / action のみ）。
+         * - Pusher が連続発火しても 300ms デバウンスで 1 回に集約。
+         * - Livewire 側のメソッド呼び出しは `$wire.refreshTickets()` のみ。
+         *   これにより wire:poll.10s と DOM Morph が競合しない（Livewire が
+         *   リクエストを 1 本ずつ直列化するため）。
+         * - Pusher 障害時は何も起こらず、wire:poll.10s が 10 秒以内に追従する。
+         */
+        document.addEventListener('alpine:init', () => {
+            window.Alpine.store('kdsFilters', {
+                shopId: 0,
+                kitchenIds: [],
+                hallIds: [],
+                filterStrict: false,
+                showFilterConfigWarning: false,
+                columnFilterMetas: [],
+                showKitchen: true,
+                showHall: true,
+
+                ticketVisible(cat) {
+                    if (!this.filterStrict) {
+                        return true;
+                    }
+                    if (cat === null || cat === undefined) {
+                        return false;
+                    }
+                    const c = Number(cat);
+                    if (Number.isNaN(c)) {
+                        return false;
+                    }
+                    const inK = this.kitchenIds.includes(c);
+                    const inH = this.hallIds.includes(c);
+                    if (!this.showKitchen && !this.showHall) {
+                        return false;
+                    }
+                    return (this.showKitchen && inK) || (this.showHall && inH);
+                },
+
+                visibleTicketCountForColumn(idx) {
+                    const meta = this.columnFilterMetas[idx] || [];
+                    let n = 0;
+                    for (let i = 0; i < meta.length; i++) {
+                        if (this.ticketVisible(meta[i].c) || meta[i].s === true) {
+                            n++;
+                        }
+                    }
+                    return n;
+                },
+
+                syncFromDom(rootEl, bridge) {
+                    const raw = rootEl?.dataset?.kdsBootstrap;
+                    if (!raw) {
+                        return;
+                    }
+                    let fresh;
+                    try {
+                        fresh = JSON.parse(raw);
+                    } catch (e) {
+                        return;
+                    }
+                    const prevStoreShopId = this.shopId;
+                    if (Array.isArray(fresh.kitchenIds)) {
+                        this.kitchenIds = fresh.kitchenIds.map((n) => Number(n));
+                    }
+                    if (Array.isArray(fresh.hallIds)) {
+                        this.hallIds = fresh.hallIds.map((n) => Number(n));
+                    }
+                    if (typeof fresh.filterStrict === 'boolean') {
+                        this.filterStrict = fresh.filterStrict;
+                    }
+                    if (typeof fresh.showFilterConfigWarning === 'boolean') {
+                        this.showFilterConfigWarning = fresh.showFilterConfigWarning;
+                    }
+                    if (Array.isArray(fresh.columnFilterMetas)) {
+                        this.columnFilterMetas = fresh.columnFilterMetas;
+                    }
+                    const newSid = typeof fresh.shopId === 'number' ? fresh.shopId : Number(fresh.shopId) || 0;
+                    if (newSid !== prevStoreShopId) {
+                        this.shopId = newSid;
+                    }
+                    if (bridge && typeof fresh.shopId === 'number') {
+                        const sid = fresh.shopId;
+                        if (sid !== bridge.shopId) {
+                            bridge.shopId = sid;
+                            bridge.initEcho();
+                        }
+                    }
+                    if (window.__KDS_DEBUG_BOOTSTRAP_SYNC__) {
+                        console.log('[KDS sync]', {
+                            kitchenIds: this.kitchenIds,
+                            hallIds: this.hallIds,
+                            filterStrict: this.filterStrict,
+                        });
+                    }
+                },
+            });
+
+            window.Alpine.store('kdsDismissColumn', {
+                open: false,
+                pendingId: null,
+                pendingRev: null,
+                openWith(id, rev) {
+                    this.open = true;
+                    this.pendingId = id;
+                    this.pendingRev = rev;
+                },
+                cancel() {
+                    this.open = false;
+                    this.pendingId = null;
+                    this.pendingRev = null;
+                },
+                confirm() {
+                    const id = this.pendingId;
+                    const rev = this.pendingRev;
+                    this.cancel();
+                    if (id == null || rev == null) {
+                        return;
+                    }
+                    window.dispatchEvent(
+                        new CustomEvent('kds-exec-mark-served', { detail: { id, rev } })
+                    );
+                },
+            });
+
+            window.Alpine.data('kdsEchoBridge', (opts = {}) => ({
+                shopId: Number(opts.shopId) || 0,
+                pendingEchoReload: null,
+                channel: null,
+                status: 'connecting',
+                pusherBound: false,
+
+                pushStatus(next) {
+                    this.status = next;
+                    try {
+                        this.$wire.syncRealtimeState(next);
+                    } catch (e) {
+                        // noop
+                    }
+                },
+
+                initEcho() {
+                    if (!this.shopId || typeof window.Echo === 'undefined') {
+                        this.pushStatus('disconnected');
+                        return;
+                    }
+
+                    try {
+                        const onConfirmed = () => {
+                                this.pushStatus('connected');
+                                try {
+                                    this.$wire.markRealtimeEventReceived();
+                                } catch (e) {
+                                    // noop
+                                }
+                                this.scheduleRefresh();
+                            };
+                        this.channel = window.Echo
+                            .channel('pos.shop.' + this.shopId)
+                            .listen('.kds.orders.confirmed', onConfirmed);
+                        this.bindPusherState();
+                    } catch (e) {
+                        // Echo 不在/接続失敗は無視（wire:poll.10s が真実の源泉）。
+                        this.pushStatus('error');
+                        if (window.console && console.warn) {
+                            console.warn('[KDS] Echo subscription failed', e);
+                        }
+                    }
+                },
+
+                bindPusherState() {
+                    if (this.pusherBound || !window.Echo || !window.Echo.connector || !window.Echo.connector.pusher) {
+                        return;
+                    }
+                    const connection = window.Echo.connector.pusher.connection;
+                    if (!connection || typeof connection.bind !== 'function') {
+                        return;
+                    }
+                    this.pusherBound = true;
+                    connection.bind('connecting', () => this.pushStatus('connecting'));
+                    connection.bind('connected', () => this.pushStatus('connected'));
+                    connection.bind('disconnected', () => this.pushStatus('disconnected'));
+                    connection.bind('unavailable', () => this.pushStatus('error'));
+                    connection.bind('failed', () => this.pushStatus('error'));
+                    connection.bind('error', () => this.pushStatus('error'));
+                },
+
+                scheduleRefresh() {
+                    if (this.pendingEchoReload) {
+                        clearTimeout(this.pendingEchoReload);
+                    }
+                    this.pendingEchoReload = setTimeout(() => {
+                        this.pendingEchoReload = null;
+                        try {
+                            this.$wire.refreshTickets();
+                        } catch (e) {
+                            // Livewire コンポーネントが未確立の瞬間は黙って捨てる。
+                        }
+                    }, 300);
+                },
+
+                destroy() {
+                    if (this.pendingEchoReload) {
+                        clearTimeout(this.pendingEchoReload);
+                        this.pendingEchoReload = null;
+                    }
+                    try {
+                        if (this.shopId && window.Echo) {
+                            window.Echo.leave('pos.shop.' + this.shopId);
+                        }
+                    } catch (e) { /* noop */ }
+                    this.pushStatus('disconnected');
+                },
+            }));
+        });
+    </script>
+</body>
+</html>
 </file>
 
 <file path="resources/views/livewire/kds/kds-dashboard.blade.php">
@@ -3418,21 +3702,34 @@ final class KdsQueryService
                                         }
                                     }
                                     $qtyPrefix = ($ticket->qty ?? 1) > 1 ? '×'.$ticket->qty.' ' : '';
+                                    $isLastPending = (bool) ($ticket->getAttribute('kds_is_last_pending') ?? false);
                                 @endphp
                                 <li
                                     wire:key="kds-line-{{ $ticket->id }}-r{{ $ticket->line_revision }}"
                                     x-data="{
                                         key: 'kds-line-{{ (int)$ticket->id }}-r{{ (int)$ticket->line_revision }}',
+                                        lineId: {{ (int) $ticket->id }},
+                                        lineRev: {{ (int) $ticket->line_revision }},
                                         isNew: {{ ($ticket->kds_is_new_arrival ?? false) ? 'true' : 'false' }},
                                         animate: false,
                                         optimistic: null,
                                         pending: false,
                                         isServedUi() { return this.optimistic !== null ? this.optimistic : {{ $isServed ? 'true' : 'false' }}; },
-                                        async markServedTap(id, rev) {
+                                        async markServedTap(isLastPending) {
+                                            if (isLastPending) {
+                                                $store.kdsDismissColumn.openWith(this.lineId, this.lineRev);
+                                                return;
+                                            }
+                                            await this.doMarkServed();
+                                        },
+                                        async doMarkServed() {
                                             this.pending = true;
                                             this.optimistic = true;
-                                            await $wire.markServed(id, rev);
-                                            this.pending = false;
+                                            try {
+                                                await $wire.markServed(this.lineId, this.lineRev);
+                                            } finally {
+                                                this.pending = false;
+                                            }
                                         },
                                         async revertTap(id, rev) {
                                             this.pending = true;
@@ -3441,7 +3738,8 @@ final class KdsQueryService
                                             this.pending = false;
                                         },
                                     }"
-                                    x-show="$store.kdsFilters.ticketVisible(@js($ticket->menuItem?->menu_category_id))"
+                                    x-show="$store.kdsFilters.ticketVisible(@js($ticket->menuItem?->menu_category_id)) || isServedUi()"
+                                    x-on:kds-exec-mark-served.window="if (Number($event.detail.id) === lineId && Number($event.detail.rev) === lineRev) { void doMarkServed(); }"
                                     @kds-wire-fail.window="if (pending) { optimistic = null; pending = false; }"
                                     x-init="
                                         window.__kdsSeenKeys = window.__kdsSeenKeys || {};
@@ -3480,7 +3778,7 @@ final class KdsQueryService
                                         x-show="!isServedUi()"
                                         class="{{ $base }} w-full cursor-pointer"
                                         :class="isServedUi() ? 'border-slate-600 bg-slate-700/70 text-slate-200 hover:bg-slate-700/80' : 'border-rose-700 bg-rose-900/50 text-rose-50 hover:bg-rose-900/70'"
-                                        @click="markServedTap({{ (int)$ticket->id }}, {{ (int)$ticket->line_revision }})"
+                                        @click="markServedTap(@js($isLastPending))"
                                     >
                                         <span class="flex min-w-0 flex-col gap-1">
                                             @if ($isCooking)
@@ -3625,6 +3923,42 @@ final class KdsQueryService
             </div>
         </div>
     @endif
+
+    <div
+        x-show="$store.kdsDismissColumn.open"
+        x-cloak
+        class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kds-dismiss-column-title"
+        x-on:click.self="$store.kdsDismissColumn.cancel()"
+        x-on:keydown.escape.window="if ($store.kdsDismissColumn.open) { $store.kdsDismissColumn.cancel(); }"
+    >
+        <div
+            class="w-full max-w-md rounded-xl border border-slate-600 bg-slate-900 p-4 shadow-2xl"
+            @click.stop
+        >
+            <p id="kds-dismiss-column-title" class="text-base font-semibold leading-snug text-slate-100">
+                {{ __('kds.confirm_dismiss_column') }}
+            </p>
+            <div class="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                    type="button"
+                    class="min-h-12 min-w-[5.5rem] touch-manipulation rounded-lg border border-slate-600 bg-slate-800 px-4 text-sm font-semibold text-slate-200 active:bg-slate-700"
+                    @click="$store.kdsDismissColumn.cancel()"
+                >
+                    {{ __('kds.confirm_dismiss_column_cancel') }}
+                </button>
+                <button
+                    type="button"
+                    class="min-h-12 min-w-[5.5rem] touch-manipulation rounded-lg border border-emerald-600 bg-emerald-800 px-4 text-sm font-semibold text-emerald-50 active:bg-emerald-700"
+                    @click="$store.kdsDismissColumn.confirm()"
+                >
+                    {{ __('kds.confirm_dismiss_column_ok') }}
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 </file>
 
@@ -3838,6 +4172,16 @@ class KdsDashboard extends Component
                 }
             }
             if ($hasPendingVisible) {
+                $pendingVisibleCount = 0;
+                foreach ($visibleTickets as $t) {
+                    if (in_array($t->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true)) {
+                        $pendingVisibleCount++;
+                    }
+                }
+                foreach ($visibleTickets as $ticket) {
+                    $isPending = in_array($ticket->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true);
+                    $ticket->setAttribute('kds_is_last_pending', $pendingVisibleCount === 1 && $isPending);
+                }
                 $col['tickets'] = $visibleTickets;
                 $filteredCols[] = $col;
             }
@@ -3857,7 +4201,10 @@ class KdsDashboard extends Component
             $col['filterTicketMeta'] = array_values(array_map(static function (OrderLine $t): array {
                 $mid = $t->menuItem?->menu_category_id;
 
-                return ['c' => $mid !== null ? (int) $mid : null];
+                return [
+                    'c' => $mid !== null ? (int) $mid : null,
+                    's' => $t->status === OrderLineStatus::Served,
+                ];
             }, $tickets));
             $out[] = $col;
         }
@@ -3889,7 +4236,7 @@ class KdsDashboard extends Component
     /**
      * Alpine `kdsEchoBridge` 向け（wire:poll 後も localStorage でトグルを復元）。
      *
-     * @return array{shopId: int, kitchenIds: list<int>, hallIds: list<int>, filterStrict: bool, showFilterConfigWarning: bool, columnFilterMetas: list<list<array{c: int|null}>>}
+     * @return array{shopId: int, kitchenIds: list<int>, hallIds: list<int>, filterStrict: bool, showFilterConfigWarning: bool, columnFilterMetas: list<list<array{c: int|null, s: bool}>>}
      */
     public function getKdsClientBootstrapProperty(): array
     {

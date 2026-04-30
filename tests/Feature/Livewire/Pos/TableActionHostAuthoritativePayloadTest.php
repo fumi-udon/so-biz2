@@ -17,6 +17,11 @@ namespace Tests\Feature\Livewire\Pos;
 
 use App\Enums\OrderStatus;
 use App\Livewire\Pos\TableActionHost;
+use App\Models\MenuCategory;
+use App\Models\MenuItem;
+use App\Models\OrderLine;
+use App\Models\PosOrder;
+use App\Models\TableSessionSettlement;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Livewire\Livewire;
@@ -136,5 +141,207 @@ final class TableActionHostAuthoritativePayloadTest extends TestCase
         $this->assertStringContainsString('shopId', $blob);
         $this->assertStringContainsString('tableSessionId', $blob);
         $this->assertStringContainsString('is_unsent', $blob);
+    }
+
+    public function test_bulk_add_drafts_only_keeps_existing_lines_and_adds_all_drafts(): void
+    {
+        $shop = $this->makeShop('auth-bulk-add');
+        $table = $this->makeCustomerTable($shop, 14);
+        $session = $this->openActiveSession($shop, $table);
+
+        $category = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'Bulk Add Category',
+            'slug' => 'bulk-add-category',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+        $itemA = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $category->id,
+            'name' => 'Item A',
+            'slug' => 'bulk-item-a',
+            'kitchen_name' => 'Item A',
+            'from_price_minor' => 1200,
+            'sort_order' => 1,
+            'is_active' => true,
+            'options_payload' => [
+                'rules' => [
+                    'style_required' => false,
+                ],
+                'styles' => [
+                    ['id' => 's1', 'name' => 'Style 1', 'price_minor' => 1200],
+                ],
+                'toppings' => [
+                    ['id' => 't1', 'name' => 'Top 1', 'price_delta_minor' => 100],
+                ],
+            ],
+        ]);
+        $itemB = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $category->id,
+            'name' => 'Item B',
+            'slug' => 'bulk-item-b',
+            'kitchen_name' => 'Item B',
+            'from_price_minor' => 900,
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+        $itemC = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $category->id,
+            'name' => 'Item C',
+            'slug' => 'bulk-item-c',
+            'kitchen_name' => 'Item C',
+            'from_price_minor' => 800,
+            'sort_order' => 3,
+            'is_active' => true,
+        ]);
+
+        $existingOrder = PosOrder::query()->create([
+            'shop_id' => $shop->id,
+            'table_session_id' => $session->id,
+            'status' => OrderStatus::Placed,
+            'total_price_minor' => 1200,
+            'rounding_adjustment_minor' => 0,
+            'placed_at' => now(),
+        ]);
+        $existingLine = OrderLine::query()->create([
+            'shop_id' => $shop->id,
+            'order_id' => $existingOrder->id,
+            'menu_item_id' => $itemA->id,
+            'qty' => 1,
+            'unit_price_minor' => 1200,
+            'line_total_minor' => 1200,
+            'snapshot_name' => 'Item A',
+            'snapshot_kitchen_name' => 'Item A',
+            'snapshot_options_payload' => ['style' => null, 'toppings' => [], 'note' => ''],
+            'status' => \App\Enums\OrderLineStatus::Placed,
+        ]);
+
+        $operator = $this->makeOperator('auth-bulk-add');
+        $this->actingAs($operator);
+
+        $component = Livewire::test(TableActionHost::class, ['shopId' => $shop->id])
+            ->set('activeRestaurantTableId', (int) $table->id)
+            ->call('loadSessionData', (int) $session->id)
+            ->call('bulkAddDraftsOnly', [
+                [
+                    'menu_item_id' => (int) $itemA->id,
+                    'qty' => 1,
+                    'styleId' => 's1',
+                    'toppings' => ['t1'],
+                    'note' => 'note-a',
+                ],
+                [
+                    'menu_item_id' => (int) $itemB->id,
+                    'qty' => 1,
+                    'styleId' => null,
+                    'toppings' => [],
+                    'note' => '',
+                ],
+                [
+                    'menu_item_id' => (int) $itemC->id,
+                    'qty' => 1,
+                    'styleId' => null,
+                    'toppings' => [],
+                    'note' => '',
+                ],
+            ]);
+
+        $lineNames = OrderLine::query()
+            ->whereHas('order', function ($q) use ($session): void {
+                $q->where('table_session_id', (int) $session->id);
+            })
+            ->orderBy('id')
+            ->pluck('snapshot_name')
+            ->all();
+
+        $this->assertSame(4, count($lineNames));
+        $this->assertSame('Item A', $lineNames[0]);
+        $this->assertContains('Item B', $lineNames);
+        $this->assertContains('Item C', $lineNames);
+
+        $blob = self::scriptsBlob($component->effects);
+        $this->assertStringContainsString((string) $existingLine->id, $blob);
+        $this->assertStringContainsString('Item A', $blob);
+        $this->assertStringContainsString('Item B', $blob);
+        $this->assertStringContainsString('Item C', $blob);
+    }
+
+    public function test_bulk_add_drafts_resyncs_to_latest_active_session_when_selected_session_is_settled(): void
+    {
+        $shop = $this->makeShop('auth-resync-session');
+        $table = $this->makeCustomerTable($shop, 15);
+        $oldSession = $this->openActiveSession($shop, $table);
+
+        TableSessionSettlement::query()->create([
+            'shop_id' => $shop->id,
+            'table_session_id' => $oldSession->id,
+            'order_subtotal_minor' => 1000,
+            'order_discount_applied_minor' => 0,
+            'total_before_rounding_minor' => 1000,
+            'rounding_adjustment_minor' => 0,
+            'final_total_minor' => 1000,
+            'tendered_minor' => 1000,
+            'change_minor' => 0,
+            'payment_method' => 'cash',
+            'session_revision_at_settle' => 0,
+            'settled_by_user_id' => null,
+            'settled_at' => now(),
+            'print_bypassed' => false,
+            'bypass_reason' => null,
+            'bypassed_by_user_id' => null,
+        ]);
+
+        $category = MenuCategory::query()->create([
+            'shop_id' => $shop->id,
+            'name' => 'Resync Category',
+            'slug' => 'resync-category',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+        $item = MenuItem::query()->create([
+            'shop_id' => $shop->id,
+            'menu_category_id' => $category->id,
+            'name' => 'Resync Item',
+            'slug' => 'resync-item',
+            'kitchen_name' => 'Resync Item',
+            'from_price_minor' => 1000,
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $operator = $this->makeOperator('auth-resync-session');
+        $this->actingAs($operator);
+
+        $component = Livewire::test(TableActionHost::class, ['shopId' => $shop->id])
+            ->set('activeRestaurantTableId', (int) $table->id)
+            ->set('activeTableSessionId', (int) $oldSession->id)
+            ->set('isOrdersLoaded', true)
+            ->call('bulkAddDraftsOnly', [[
+                'menu_item_id' => (int) $item->id,
+                'qty' => 1,
+                'styleId' => null,
+                'toppings' => [],
+                'note' => '',
+            ]]);
+
+        $latestActiveSessionId = (int) \App\Models\TableSession::query()
+            ->where('shop_id', $shop->id)
+            ->where('restaurant_table_id', (int) $table->id)
+            ->where('status', \App\Enums\TableSessionStatus::Active)
+            ->orderByDesc('id')
+            ->value('id');
+
+        $this->assertNotSame((int) $oldSession->id, $latestActiveSessionId);
+        $component->assertSet('activeTableSessionId', $latestActiveSessionId);
+
+        $lineCount = OrderLine::query()
+            ->whereHas('order', function ($q) use ($latestActiveSessionId): void {
+                $q->where('table_session_id', $latestActiveSessionId);
+            })
+            ->count();
+        $this->assertSame(1, $lineCount);
     }
 }

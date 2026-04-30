@@ -9,6 +9,7 @@
         "php": "^8.4",
         "bezhansalleh/filament-shield": "^3.9",
         "filament/filament": "^3.2",
+        "inertiajs/inertia-laravel": "^3.0",
         "laravel/framework": "^11.0",
         "laravel/tinker": "^2.9",
         "pusher/pusher-php-server": "^7.0",

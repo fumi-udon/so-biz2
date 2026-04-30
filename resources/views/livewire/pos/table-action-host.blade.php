@@ -12,6 +12,7 @@
     $zAddModalPanel = 'z-[270]';
     $legacyOrderPlacedChannel = 'pos.shop.'.$echoShopId;
     $rtOrderChannel = 'rt.shop.'.$echoShopId.'.orders';
+    $speedTestEnabled = config('app.speed_test', env('SPEED_TEST', false));
 @endphp
 
 <div
@@ -33,9 +34,25 @@
         changeTableModalOpen: false,
         /** Next authoritative may reveal Livewire lines (user/Sync/first skeleton load). */
         selfActionPending: false,
+        speedProbeEnabled: @js($speedTestEnabled),
         seenUnsentLineKeys: {},
         bulkSyncing: false,
         lastSyncedAt: '--:--',
+        emitSpeedProbe(tag, detail = {}) {
+            if (!this.speedProbeEnabled) {
+                return;
+            }
+            try {
+                window.dispatchEvent(new CustomEvent('pos-speed-probe', {
+                    bubbles: true,
+                    detail: {
+                        tag: String(tag || 'unknown'),
+                        ts: Date.now(),
+                        detail: detail && typeof detail === 'object' ? detail : {},
+                    },
+                }));
+            } catch (e) {}
+        },
         closeDrawer() {
             this.seenUnsentLineKeys = {};
             if (window.Livewire && typeof window.Livewire.dispatch === 'function') {
@@ -220,6 +237,14 @@
                 selfActionPending = true
             }
         }
+        emitSpeedProbe('show_local_skeleton', {
+            shopId: shopId,
+            tableId: tid,
+            previewSessionId: previewSessionId,
+            lineSurfaceMode: lineSurfaceMode,
+            selfActionPending: selfActionPending,
+            afterimageLinesLen: Array.isArray(afterimageLines) ? afterimageLines.length : 0,
+        })
     "
     x-on:pos-tile-interaction-started.window="
         if (lineSurfaceMode === 'afterimage') {
@@ -251,6 +276,11 @@
                 ? detail.tableSessionId
                 : null
         if (selfActionPending) {
+            emitSpeedProbe('authoritative_self_action_handoff', {
+                incomingSid: incomingSid,
+                curSid: $wire.activeTableSessionId,
+                lineSurfaceMode: lineSurfaceMode,
+            })
             lineSurfaceMode = 'live'
             afterimageLines = []
             selfActionPending = false
@@ -265,6 +295,12 @@
                     ? Number(curRaw)
                     : null)
         if (incomingSid !== null && curSid !== null && incomingSid !== curSid) {
+            emitSpeedProbe('authoritative_sid_mismatch_skip', {
+                incomingSid: incomingSid,
+                curSid: curSid,
+                lineSurfaceMode: lineSurfaceMode,
+                selfActionPending: selfActionPending,
+            })
             return
         }
         const rawAuthoritative = Array.isArray(detail.lines) ? detail.lines : []
@@ -289,11 +325,16 @@
             }
             return a.id - b.id
         })
-        afterimageLines = mappedAuthoritative
+        emitSpeedProbe('authoritative_received', {
+            incomingSid: incomingSid,
+            curSid: curSid,
+            lineSurfaceMode: lineSurfaceMode,
+            mappedCount: mappedAuthoritative.length,
+            firstIds: mappedAuthoritative.slice(0, 5).map((r) => r.id),
+        })
         isLocalSkeletonVisible = false
-        if (lineSurfaceMode === 'afterimage') {
-            return
-        }
+        // Always hand off to Livewire-rendered list once authoritative payload arrives.
+        // Keeping `afterimage` here causes stale placeholder rows to stick.
         lineSurfaceMode = 'live'
         afterimageLines = []
     "

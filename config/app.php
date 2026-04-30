@@ -149,6 +149,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | POS2 debug panel
+    |--------------------------------------------------------------------------
+    |
+    | When true, POS2 (Vue/Inertia) exposes a developer debug panel for
+    | API timing and localStorage diagnostics.
+    |
+    */
+
+    'pos2_debug' => (bool) env('POS2_DEBUG', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Server-Timing header (HTTP profiling)
     |--------------------------------------------------------------------------
     |

@@ -127,6 +127,13 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'pos2' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/posv2.log'),
+            'level' => 'debug',
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

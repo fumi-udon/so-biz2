@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Middleware\AppendServerTiming;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\KdsAuthenticate;
+use App\Http\Middleware\Pos2Authenticate;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,10 +21,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             AppendServerTiming::class,
+            HandleInertiaRequests::class,
         ]);
 
         $middleware->alias([
             'kds.auth' => KdsAuthenticate::class,
+            'pos2.auth' => Pos2Authenticate::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
