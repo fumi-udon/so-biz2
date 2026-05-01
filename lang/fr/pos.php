@@ -77,6 +77,7 @@ return [
     'checkout_done' => 'Service de table clôturé',
     'checkout_no_orders_to_settle' => 'Aucune commande à encaisser.',
     'action_failed' => 'Action impossible',
+    'session_managed_by_pos2' => 'Cette session (#:id) a été ouverte dans POS V2. Les commandes, l’encaissement et le changement de table depuis l’ancien POS ne sont pas autorisés. Utilisez POS V2.',
     'line_removed' => 'Ligne supprimée',
     'delete_complete' => 'Suppression terminée',
     'line_not_found' => 'Ligne introuvable.',

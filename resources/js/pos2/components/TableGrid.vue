@@ -75,6 +75,7 @@ function sessionTotalLabel(tile) {
 
         <!-- タブレット現場向け: 常に 3 列（視認性・親指操作） -->
         <div
+            v-if="tables.length > 0"
             class="grid min-h-0 auto-rows-fr grid-cols-3 gap-2.5 sm:gap-3"
             role="list"
         >
@@ -120,6 +121,14 @@ function sessionTotalLabel(tile) {
                     draft
                 </span>
             </button>
+        </div>
+        <div
+            v-else
+            class="flex min-h-[12rem] flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-rose-500/50 bg-rose-900/20 px-4 py-10 text-center"
+        >
+            <p class="text-sm font-bold text-rose-400">
+                restaurant_tableにレコードが見つかりません
+            </p>
         </div>
     </section>
 </template>

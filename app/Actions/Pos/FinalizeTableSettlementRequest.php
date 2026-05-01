@@ -3,6 +3,7 @@
 namespace App\Actions\Pos;
 
 use App\Enums\PaymentMethod;
+use App\Enums\TableSessionManagementSource;
 use InvalidArgumentException;
 
 /**
@@ -26,6 +27,7 @@ final readonly class FinalizeTableSettlementRequest
         public ?int $bypassedByUserId = null,
         // TEMP: POS_SETTLE_DEBUG correlation key (safe no-op in production flow)
         public ?string $debugTraceId = null,
+        public TableSessionManagementSource $settlementInitiatedBy = TableSessionManagementSource::Legacy,
     ) {
         if ($this->shopId < 1) {
             throw new InvalidArgumentException('shopId must be positive');

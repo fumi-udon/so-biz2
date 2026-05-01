@@ -2,8 +2,10 @@
 
 namespace App\Services\Pos;
 
+use App\Enums\TableSessionManagementSource;
 use App\Enums\TableSessionStatus;
 use App\Exceptions\GuestOrderValidationException;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Models\RestaurantTable;
 use App\Models\TableSession;
 use App\Models\TableSessionSettlement;
@@ -14,8 +16,10 @@ use Illuminate\Support\Str;
  */
 final class TableSessionLifecycleService
 {
-    public function getOrCreateActiveSession(RestaurantTable $table): TableSession
-    {
+    public function getOrCreateActiveSession(
+        RestaurantTable $table,
+        TableSessionManagementSource $caller = TableSessionManagementSource::Legacy,
+    ): TableSession {
         $existing = TableSession::query()
             ->where('restaurant_table_id', $table->id)
             ->where('status', TableSessionStatus::Active)
@@ -37,11 +41,15 @@ final class TableSessionLifecycleService
                     'session_revision' => (int) $existing->session_revision + 1,
                 ])->save();
             } else {
+                if ($caller === TableSessionManagementSource::Legacy && $existing->isManagedByPos2()) {
+                    throw SessionManagedByPos2Exception::forSession((int) $existing->id);
+                }
+
                 return $existing;
             }
         }
 
-        return $this->createNewActiveSession($table);
+        return $this->createNewActiveSession($table, $caller);
     }
 
     /**
@@ -73,10 +81,14 @@ final class TableSessionLifecycleService
             throw new GuestOrderValidationException(__('guest.no_active_table_session'));
         }
 
+        if ($existing->isManagedByPos2()) {
+            throw new GuestOrderValidationException(__('pos.session_managed_by_pos2', ['id' => (int) $existing->id]));
+        }
+
         return $existing;
     }
 
-    private function createNewActiveSession(RestaurantTable $table): TableSession
+    private function createNewActiveSession(RestaurantTable $table, TableSessionManagementSource $source): TableSession
     {
         for ($i = 0; $i < 5; $i += 1) {
             $token = Str::lower(Str::random(48));
@@ -93,6 +105,7 @@ final class TableSessionLifecycleService
                 'status' => TableSessionStatus::Active,
                 'opened_at' => now(),
                 'closed_at' => null,
+                'management_source' => $source,
             ]);
         }
 

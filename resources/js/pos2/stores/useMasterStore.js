@@ -6,6 +6,15 @@ function storageKey(shopId) {
     return `pos2_master_${shopId}_v${SCHEMA_VERSION}`;
 }
 
+/** API / localStorage 由来の値を正の整数に正規化（無効時は 100） */
+function normalizeTableDisplayLimit(value) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0 && Number.isInteger(n)) {
+        return n;
+    }
+    return 100;
+}
+
 function emptyState() {
     return {
         shopId: 0,
@@ -13,6 +22,9 @@ function emptyState() {
         categories: [],
         menuItems: [],
         tables: [],
+        clientTableLimit: 100,
+        staffTableLimit: 100,
+        takeoutTableLimit: 100,
         generatedAt: null,
         loadedAt: null,
     };
@@ -70,6 +82,15 @@ export const useMasterStore = defineStore('pos2Master', {
                 this.categories = Array.isArray(data.categories) ? data.categories : [];
                 this.menuItems = Array.isArray(data.menuItems) ? data.menuItems : [];
                 this.tables = Array.isArray(data.tables) ? data.tables : [];
+                this.clientTableLimit = normalizeTableDisplayLimit(
+                    data.client_table_limit ?? data.clientTableLimit,
+                );
+                this.staffTableLimit = normalizeTableDisplayLimit(
+                    data.staff_table_limit ?? data.staffTableLimit,
+                );
+                this.takeoutTableLimit = normalizeTableDisplayLimit(
+                    data.takeout_table_limit ?? data.takeoutTableLimit,
+                );
                 this.generatedAt = data.generated_at ?? null;
                 this.loadedAt = data.savedAt ?? new Date().toISOString();
                 return true;
@@ -88,6 +109,9 @@ export const useMasterStore = defineStore('pos2Master', {
             this.categories = Array.isArray(payload.categories) ? payload.categories : [];
             this.menuItems = Array.isArray(payload.menuItems) ? payload.menuItems : [];
             this.tables = Array.isArray(payload.tables) ? payload.tables : [];
+            this.clientTableLimit = normalizeTableDisplayLimit(payload.client_table_limit);
+            this.staffTableLimit = normalizeTableDisplayLimit(payload.staff_table_limit);
+            this.takeoutTableLimit = normalizeTableDisplayLimit(payload.takeout_table_limit);
             this.generatedAt = payload.generated_at ?? null;
             this.loadedAt = new Date().toISOString();
 
@@ -96,6 +120,9 @@ export const useMasterStore = defineStore('pos2Master', {
                 categories: this.categories,
                 menuItems: this.menuItems,
                 tables: this.tables,
+                client_table_limit: this.clientTableLimit,
+                staff_table_limit: this.staffTableLimit,
+                takeout_table_limit: this.takeoutTableLimit,
                 generated_at: this.generatedAt,
                 savedAt: this.loadedAt,
             }));

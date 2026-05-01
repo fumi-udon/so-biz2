@@ -6,10 +6,12 @@ use App\Domains\Pos\Pricing\PricingEngine;
 use App\Domains\Pos\Pricing\PricingResult;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Enums\TableSessionManagementSource;
 use App\Enums\TableSessionStatus;
 use App\Exceptions\Pos\InsufficientTenderException;
 use App\Exceptions\Pos\PendingOrdersRemainException;
 use App\Exceptions\Pos\SessionAlreadySettledException;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\RevisionConflictException;
 use App\Models\PosOrder;
 use App\Models\RestaurantTable;
@@ -91,6 +93,10 @@ final class FinalizeTableSettlementAction
 
             if ($preSession === null) {
                 throw new RuntimeException(__('rad_table.active_session_not_found'));
+            }
+
+            if ($preSession->isManagedByPos2() && $req->settlementInitiatedBy === TableSessionManagementSource::Legacy) {
+                throw SessionManagedByPos2Exception::forSession((int) $preSession->id);
             }
 
             RestaurantTable::query()
@@ -227,6 +233,10 @@ final class FinalizeTableSettlementAction
             throw new SessionAlreadySettledException($req->tableSessionId);
         }
 
+        if ($session->isManagedByPos2() && $req->settlementInitiatedBy === TableSessionManagementSource::Legacy) {
+            throw SessionManagedByPos2Exception::forSession((int) $session->id);
+        }
+
         $needsSessionCloseRepair = $session->status !== TableSessionStatus::Closed || $session->closed_at === null;
         if ($needsSessionCloseRepair) {
             $session->forceFill([
@@ -265,7 +275,10 @@ final class FinalizeTableSettlementAction
                 ])->save();
             }
 
-            $freshSession = $this->tableSessionLifecycleService->getOrCreateActiveSession($table);
+            $freshSession = $this->tableSessionLifecycleService->getOrCreateActiveSession(
+                $table,
+                $session->management_source,
+            );
             if ((int) $freshSession->id === (int) $session->id) {
                 throw new RuntimeException('Settlement integrity error: failed to fork a fresh table session for unpaid orders.');
             }
@@ -296,6 +309,7 @@ final class FinalizeTableSettlementAction
                 bypassReason: $req->bypassReason,
                 bypassedByUserId: $req->bypassedByUserId,
                 debugTraceId: $traceId,
+                settlementInitiatedBy: $req->settlementInitiatedBy,
             ));
         }
 

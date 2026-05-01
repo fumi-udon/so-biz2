@@ -29,6 +29,7 @@ class Pos2BridgeClotureHost extends Component
             shop_id: $this->shopId,
             table_session_id: $this->tableSessionId,
             expected_revision: $this->expectedSessionRevision,
+            settlement_initiator: 'pos2_bridge',
         );
     }
 

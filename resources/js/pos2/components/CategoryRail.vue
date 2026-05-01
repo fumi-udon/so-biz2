@@ -15,6 +15,36 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['select']);
+
+/**
+ * スタッフ向け短縮: 先頭の絵文字（ZWJ・FE0F の簡易対応）＋以降テキストの先頭3グラフェム。
+ * 例: 「🥟 Entrées / Tapas」→「🥟Ent」、「Ramen」→「Ram」
+ * @param {string|null|undefined} name
+ * @returns {string}
+ */
+function formatCatName(name) {
+    if (name == null || typeof name !== 'string') {
+        return '';
+    }
+    const s = name.normalize('NFC').trim();
+    if (!s) {
+        return '';
+    }
+
+    const emojiPrefix =
+        /^((?:\p{Extended_Pictographic}\uFE0F?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*))(?:[\s\u200B]+|[/\-_]+)*/u;
+    let emoji = '';
+    let rest = s;
+    const m = s.match(emojiPrefix);
+    if (m?.[1]) {
+        emoji = m[1];
+        rest = s.slice(m[0].length);
+    }
+
+    const trimmed = rest.replace(/^[\s\u200B/\-_]+/, '');
+    const abbr = Array.from(trimmed).slice(0, 3).join('');
+    return emoji + abbr;
+}
 </script>
 
 <template>
@@ -26,13 +56,13 @@ const emit = defineEmits(['select']);
             >
                 <button
                     type="button"
-                    class="whitespace-nowrap rounded-xl border px-4 py-2 text-sm font-semibold transition"
+                    class="whitespace-nowrap rounded-xl border px-3 py-2 text-sm font-semibold transition"
                     :class="String(activeCategoryId) === String(cat.id)
                         ? 'border-cyan-400 bg-cyan-500/25 text-cyan-100'
                         : 'border-slate-600 bg-slate-800/60 text-slate-300 hover:bg-slate-700/70 hover:text-white'"
                     @click="emit('select', cat.id)"
                 >
-                    {{ cat.name }}
+                    {{ formatCatName(cat.name) }}
                 </button>
             </li>
             <li v-if="categories.length === 0" class="text-xs text-slate-500">

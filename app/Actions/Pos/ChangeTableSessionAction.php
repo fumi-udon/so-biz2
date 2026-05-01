@@ -4,6 +4,7 @@ namespace App\Actions\Pos;
 
 use App\Domains\Pos\Tables\TableCategory;
 use App\Enums\TableSessionStatus;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\Pos\SessionRevisionMismatchException;
 use App\Exceptions\Pos\TableAlreadyOccupiedException;
 use App\Models\RestaurantTable;
@@ -29,6 +30,10 @@ final class ChangeTableSessionAction
 
             if ($sourceSession === null) {
                 throw new RuntimeException(__('rad_table.active_session_not_found'));
+            }
+
+            if ($sourceSession->isManagedByPos2()) {
+                throw SessionManagedByPos2Exception::forSession((int) $sourceSession->id);
             }
 
             if ((int) $sourceSession->session_revision !== $expectedSessionRevision) {

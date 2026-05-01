@@ -77,6 +77,7 @@ return [
     'checkout_done' => '卓のセッションを終了しました',
     'checkout_no_orders_to_settle' => '決済する注文がありません',
     'action_failed' => '失敗',
+    'session_managed_by_pos2' => 'この卓のセッション（#:id）は POS V2 で開局されています。従来の POS 画面からの注文・会計・卓移動はできません。POS V2 で操作してください。',
     'line_removed' => '行を削除しました',
     'delete_complete' => '削除が完了しました',
     'line_not_found' => '注文明細が見つかりません。',

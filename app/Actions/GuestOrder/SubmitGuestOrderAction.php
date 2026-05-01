@@ -7,6 +7,7 @@ use App\Enums\OrderStatus;
 use App\Events\Pos\PosOrderPlaced;
 use App\Exceptions\GuestOrderForbiddenException;
 use App\Exceptions\GuestOrderValidationException;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Models\GuestOrderIdempotency;
 use App\Models\MenuItem;
 use App\Models\OrderLine;
@@ -56,7 +57,11 @@ final class SubmitGuestOrderAction
             // `getOrCreateActiveSession` already takes a `lockForUpdate` on existing
             // active rows; we are inside DB::transaction with the table row locked
             // above, so concurrent QR scans on the same table cannot create duplicates.
-            $session = app(TableSessionLifecycleService::class)->getOrCreateActiveSession($table);
+            try {
+                $session = app(TableSessionLifecycleService::class)->getOrCreateActiveSession($table);
+            } catch (SessionManagedByPos2Exception $e) {
+                throw new GuestOrderValidationException($e->getMessage());
+            }
             $session = TableSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
 
             $idempotencyKey = trim((string) ($payload['idempotencyKey'] ?? ''));

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\RestaurantTable;
+use App\Models\Setting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -104,24 +105,31 @@ final class Pos2Controller extends Controller
 
         $generatedAt = now()->toIso8601String();
 
+        $clientTableLimit = $this->resolvePositiveTableDisplayLimit('pos_client_table_display');
+        $staffTableLimit = $this->resolvePositiveTableDisplayLimit('pos_staff_table_display');
+        $takeoutTableLimit = $this->resolvePositiveTableDisplayLimit('pos_takeout_table_display');
+
         Log::channel('pos2')->info('bootstrap.served', [
-            'shop_id'        => $shopId,
+            'shop_id' => $shopId,
             'schema_version' => self::MASTER_SCHEMA_VERSION,
-            'categories'     => count($categories),
-            'menu_items'     => count($menuItems),
-            'tables'         => count($tables),
-            'generated_at'   => $generatedAt,
-            'ip'             => $request->ip(),
-            'user_agent'     => $request->userAgent(),
+            'categories' => count($categories),
+            'menu_items' => count($menuItems),
+            'tables' => count($tables),
+            'generated_at' => $generatedAt,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
         ]);
 
         return response()->json([
-            'shop_id'        => $shopId,
+            'shop_id' => $shopId,
             'schema_version' => self::MASTER_SCHEMA_VERSION,
-            'categories'     => $categories,
-            'menuItems'      => $menuItems,
-            'tables'         => $tables,
-            'generated_at'   => $generatedAt,
+            'categories' => $categories,
+            'menuItems' => $menuItems,
+            'tables' => $tables,
+            'generated_at' => $generatedAt,
+            'client_table_limit' => $clientTableLimit,
+            'staff_table_limit' => $staffTableLimit,
+            'takeout_table_limit' => $takeoutTableLimit,
         ]);
     }
 
@@ -133,18 +141,18 @@ final class Pos2Controller extends Controller
     {
         if (config('app.pos2_debug')) {
             try {
-                $payload            = $request->all();
-                $lines              = \is_array($payload['lines'] ?? null) ? $payload['lines'] : [];
-                $clientSubmitId     = $payload['client_submit_id'] ?? null;
-                $shopId             = $payload['shop_id'] ?? null;
-                $tableSessionId     = $payload['table_session_id'] ?? null;
+                $payload = $request->all();
+                $lines = \is_array($payload['lines'] ?? null) ? $payload['lines'] : [];
+                $clientSubmitId = $payload['client_submit_id'] ?? null;
+                $shopId = $payload['shop_id'] ?? null;
+                $tableSessionId = $payload['table_session_id'] ?? null;
 
                 Log::channel('pos2')->info('order.submit.received', [
                     'client_submit_id' => $clientSubmitId,
-                    'line_count'       => \count($lines),
-                    'shop_id'          => $shopId,
+                    'line_count' => \count($lines),
+                    'shop_id' => $shopId,
                     'table_session_id' => $tableSessionId,
-                    'ip'               => $request->ip(),
+                    'ip' => $request->ip(),
                 ]);
             } catch (\Throwable) {
                 // 調査ログは本処理を止めない
@@ -152,7 +160,7 @@ final class Pos2Controller extends Controller
         }
 
         return response()->json([
-            'message'  => 'Stub OK',
+            'message' => 'Stub OK',
             'order_id' => 999,
         ], 201);
     }
@@ -164,5 +172,57 @@ final class Pos2Controller extends Controller
             ?? env('POS_DEFAULT_SHOP_ID', 0));
 
         return max(0, $candidate);
+    }
+
+    /**
+     * Filament 設定値を正の整数に正規化。型不正・0 以下は 100。
+     */
+    private function resolvePositiveTableDisplayLimit(string $key): int
+    {
+        $raw = Setting::getValue($key, null);
+
+        if ($raw === null) {
+            return 100;
+        }
+
+        if (\is_array($raw) || \is_object($raw)) {
+            return 100;
+        }
+
+        if (\is_bool($raw)) {
+            return 100;
+        }
+
+        if (\is_int($raw)) {
+            return $raw > 0 ? $raw : 100;
+        }
+
+        if (\is_float($raw)) {
+            if ($raw <= 0.0 || $raw > (float) \PHP_INT_MAX) {
+                return 100;
+            }
+
+            $asInt = (int) $raw;
+
+            return ((float) $asInt) === $raw && $asInt > 0 ? $asInt : 100;
+        }
+
+        if (\is_string($raw)) {
+            $trimmed = trim($raw);
+            if ($trimmed === '' || ! \is_numeric($trimmed)) {
+                return 100;
+            }
+
+            $asFloat = (float) $trimmed;
+            $asInt = (int) $asFloat;
+
+            if ($asInt <= 0 || $asFloat !== (float) $asInt) {
+                return 100;
+            }
+
+            return $asInt;
+        }
+
+        return 100;
     }
 }

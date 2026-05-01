@@ -6,6 +6,7 @@ use App\Domains\Pos\Pricing\PricingEngine;
 use App\Domains\Pos\Pricing\PricingInput;
 use App\Enums\OrderLineStatus;
 use App\Enums\OrderStatus;
+use App\Enums\TableSessionManagementSource;
 use App\Events\Pos\PosOrderPlaced;
 use App\Exceptions\GuestOrderValidationException;
 use App\Models\MenuItem;
@@ -35,6 +36,7 @@ final class AddPosOrderFromStaffAction
         ?string $styleId,
         array $toppingIds,
         string $note = '',
+        TableSessionManagementSource $sessionCaller = TableSessionManagementSource::Legacy,
     ): int {
         if ($shopId < 1 || $restaurantTableId < 1 || $menuItemId < 1) {
             throw new RuntimeException(__('pos.add_invalid_input'));
@@ -58,7 +60,8 @@ final class AddPosOrderFromStaffAction
                 $qty,
                 $styleId,
                 $toppingSnapshots,
-                $note
+                $note,
+                $sessionCaller,
             ): int {
                 $table = RestaurantTable::query()
                     ->where('shop_id', $shopId)
@@ -70,7 +73,7 @@ final class AddPosOrderFromStaffAction
                     throw new RuntimeException(__('pos.table_not_found'));
                 }
 
-                $session = app(TableSessionLifecycleService::class)->getOrCreateActiveSession($table);
+                $session = app(TableSessionLifecycleService::class)->getOrCreateActiveSession($table, $sessionCaller);
                 $session = TableSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
 
                 $item = MenuItem::query()

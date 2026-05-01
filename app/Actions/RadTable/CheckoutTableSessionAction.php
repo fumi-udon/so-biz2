@@ -4,6 +4,7 @@ namespace App\Actions\RadTable;
 
 use App\Enums\OrderStatus;
 use App\Enums\TableSessionStatus;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\RevisionConflictException;
 use App\Models\RestaurantTable;
 use App\Models\TableSession;
@@ -46,6 +47,10 @@ final class CheckoutTableSessionAction
 
             if ($session === null) {
                 throw new RuntimeException(__('rad_table.active_session_not_found'));
+            }
+
+            if ($session->isManagedByPos2()) {
+                throw SessionManagedByPos2Exception::forSession((int) $session->id);
             }
 
             if ((int) $session->session_revision !== $expectedSessionRevision) {

@@ -12,6 +12,7 @@
                 v-for="ticket in sortedTickets"
                 :key="ticket.id"
                 :ticket="ticket"
+                :shop-id="shopId"
                 @serve="forwardServe"
             />
         </div>
@@ -63,15 +64,23 @@ const sortedTickets = computed(() => {
         return (filter.showKitchen && inK) || (filter.showHall && inH);
     });
 
-    return filtered.sort((a, b) => {
-        if (a.status === 'served' && b.status !== 'served') {
-            return 1;
-        }
-        if (a.status !== 'served' && b.status === 'served') {
-            return -1;
-        }
+    const MISSING = 999_999_999;
 
-        return 0;
+    return filtered.sort((a, b) => {
+        const ca = Number(a.category_sort ?? MISSING);
+        const cb = Number(b.category_sort ?? MISSING);
+        if (ca !== cb) return ca - cb;
+
+        const ia = Number(a.item_sort ?? MISSING);
+        const ib = Number(b.item_sort ?? MISSING);
+        if (ia !== ib) return ia - ib;
+
+        const na = String(a.sort_name ?? '');
+        const nb = String(b.sort_name ?? '');
+        const nameCmp = na.localeCompare(nb, 'ja');
+        if (nameCmp !== 0) return nameCmp;
+
+        return Number(a.id) - Number(b.id);
     });
 });
 

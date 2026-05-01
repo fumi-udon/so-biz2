@@ -40,6 +40,25 @@ const tilesByTableId = computed(() => {
     return m;
 });
 
+const RE_TABLE_CLIENT = /^T\d+/;
+const RE_TABLE_STAFF = /^ST\d+/;
+const RE_TABLE_TAKEOUT = /^TK\d+/;
+
+const displayedTables = computed(() => {
+    const rows = Array.isArray(masterStore.tables) ? masterStore.tables : [];
+    const nameOf = (t) => (t?.name != null ? String(t.name) : '');
+
+    const pick = (re, limit) => rows
+        .filter((t) => re.test(nameOf(t)))
+        .slice(0, limit);
+
+    return [
+        ...pick(RE_TABLE_CLIENT, masterStore.clientTableLimit),
+        ...pick(RE_TABLE_STAFF, masterStore.staffTableLimit),
+        ...pick(RE_TABLE_TAKEOUT, masterStore.takeoutTableLimit),
+    ];
+});
+
 const selectedTableName = computed(() => {
     const tid = tableStore.selectedTableId;
     if (tid == null) return '';
@@ -631,7 +650,7 @@ onUnmounted(() => {
             >
                 <TableGrid
                     layout-variant="split"
-                    :tables="masterStore.tables"
+                    :tables="displayedTables"
                     :selected-table-id="tableStore.selectedTableId"
                     :debug-enabled="debugEnabled"
                     :has-draft-for-table="hasDraftBadgeForTable"
@@ -658,7 +677,7 @@ onUnmounted(() => {
                         左の卓をタップ
                     </p>
                     <p class="mt-2 max-w-sm text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                        注文一覧・AJOUTER・REÇU STAFF はここに表示されます。
+                        注文一覧・Add・REÇU STAFF はここに表示されます。
                     </p>
                 </div>
 
@@ -702,11 +721,27 @@ onUnmounted(() => {
                             </button>
                             <button
                                 type="button"
-                                class="min-h-11 min-w-[7.5rem] shrink-0 rounded-xl border-2 border-sky-500 bg-sky-400 px-4 py-2 text-sm font-black uppercase tracking-wide text-sky-950 shadow-md transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-40 dark:border-sky-400 dark:bg-sky-500 dark:text-sky-950 dark:hover:bg-sky-400"
+                                class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-sky-500 bg-sky-400 text-sky-950 shadow-md transition hover:bg-sky-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-sky-400 dark:bg-sky-500 dark:text-sky-950 dark:hover:bg-sky-400 dark:focus-visible:ring-offset-slate-950"
                                 :disabled="!canAddOrSubmit || draftStore.isOrderSubmitting"
+                                title="Add"
+                                aria-label="Add"
                                 @click="onTapAdd"
                             >
-                                AJOUTER
+                                <svg
+                                    class="h-6 w-6 shrink-0"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke-width="2.25"
+                                    stroke="currentColor"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M12 4.5v15m7.5-7.5h-15"
+                                    />
+                                </svg>
                             </button>
                             <button
                                 type="button"
@@ -714,7 +749,7 @@ onUnmounted(() => {
                                 :disabled="sendKdsBusy || !sessionUi.hasUnackedPlacedOrders || draftStore.isOrderSubmitting"
                                 @click="onSendKds"
                             >
-                                REÇU STAFF
+                                KDS >>
                             </button>
                         </div>
 
@@ -726,7 +761,7 @@ onUnmounted(() => {
                                 @click="openAdditionBridge"
                             >
                                 <span aria-hidden="true">🖨️</span>
-                                <span class="hidden sm:inline">L'ADDITION</span>
+                                <span class="hidden sm:inline">ADDITION</span>
                             </button>
                             <button
                                 type="button"
@@ -737,7 +772,7 @@ onUnmounted(() => {
                                 <span class="hidden sm:inline">CLÔTURE</span>
                             </button>
 
-                            <template v-if="debugEnabled && shopId > 0">
+                            <template v-if="shopId > 0">
                                 <div
                                     class="mx-1 h-8 w-px shrink-0 bg-slate-600 dark:bg-slate-500"
                                     aria-hidden="true"

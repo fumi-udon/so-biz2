@@ -6,16 +6,19 @@ namespace App\Filament\Pages;
 
 use App\Models\MenuCategory;
 use App\Models\Shop;
+use App\Support\KdsDictionarySetting;
 use App\Support\KdsFilterSetting;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Cache;
 
 final class ManageKdsFilterSettings extends Page
 {
@@ -23,9 +26,9 @@ final class ManageKdsFilterSettings extends Page
 
     protected static string $view = 'filament.pages.manage-kds-filter-settings';
 
-    protected static ?string $navigationLabel = 'KDS フィルター';
+    protected static ?string $navigationLabel = 'KDS設定';
 
-    protected static ?string $title = 'KDS フィルター設定';
+    protected static ?string $title = 'KDS設定';
 
     protected static ?string $navigationGroup = 'システム設定';
 
@@ -44,6 +47,7 @@ final class ManageKdsFilterSettings extends Page
                 'shop_id' => null,
                 'kitchen_category_ids' => [],
                 'hall_category_ids' => [],
+                'kds_dictionary_text' => '',
             ]);
 
             return;
@@ -53,6 +57,7 @@ final class ManageKdsFilterSettings extends Page
             'shop_id' => $sid,
             'kitchen_category_ids' => KdsFilterSetting::kitchenCategoryIds($sid),
             'hall_category_ids' => KdsFilterSetting::hallCategoryIds($sid),
+            'kds_dictionary_text' => KdsDictionarySetting::getText($sid),
         ]);
     }
 
@@ -75,6 +80,7 @@ final class ManageKdsFilterSettings extends Page
                                 }
                                 $set('kitchen_category_ids', KdsFilterSetting::kitchenCategoryIds($sid));
                                 $set('hall_category_ids', KdsFilterSetting::hallCategoryIds($sid));
+                                $set('kds_dictionary_text', KdsDictionarySetting::getText($sid));
                             }),
                         CheckboxList::make('kitchen_category_ids')
                             ->label(__('filament.kds_filter.kitchen_categories'))
@@ -86,6 +92,13 @@ final class ManageKdsFilterSettings extends Page
                             ->options(fn (Get $get): array => $this->categoryOptionsForShop((int) $get('shop_id')))
                             ->bulkToggleable()
                             ->columns(2),
+                    ]),
+                Section::make('KDS表示変換辞書')
+                    ->schema([
+                        Textarea::make('kds_dictionary_text')
+                            ->label('変換ルール (1行に「元の名前:変換後の名前」)')
+                            ->helperText('例: Extra Spicy:激辛 / Wakame:wkm')
+                            ->rows(10),
                     ]),
             ])
             ->statePath('data');
@@ -132,6 +145,10 @@ final class ManageKdsFilterSettings extends Page
         }
         KdsFilterSetting::saveKitchenCategoryIds($sid, $kitchen);
         KdsFilterSetting::saveHallCategoryIds($sid, $hall);
+        $dictRaw = $state['kds_dictionary_text'] ?? '';
+        $dictText = is_string($dictRaw) ? $dictRaw : '';
+        KdsDictionarySetting::saveText($sid, $dictText);
+        Cache::forget(KdsDictionarySetting::jsonCacheKey($sid));
         Notification::make()
             ->title(__('filament.kds_filter.saved'))
             ->success()

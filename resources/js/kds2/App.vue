@@ -21,6 +21,7 @@ import KdsConfirmModal from './components/KdsConfirmModal.vue'
 import { useTicketStore } from './stores/useTicketStore'
 import { useMasterStore } from './stores/useMasterStore'
 import { useFilterStore } from './stores/useFilterStore'
+import { useKdsDictStore } from './stores/useKdsDictStore'
 
 const shopId = Number(
     document.querySelector('meta[name="kds-shop-id"]')?.content ?? 0,
@@ -30,6 +31,7 @@ const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? ''
 const ticketStore = useTicketStore()
 const master = useMasterStore()
 const filter = useFilterStore()
+const kdsDict = useKdsDictStore()
 
 const confirmModal = ref({ show: false, id: null, rev: null, name: '' })
 
@@ -87,12 +89,31 @@ function onModalCancel() {
     confirmModal.value = { show: false, id: null, rev: null, name: '' }
 }
 
+async function syncDictionaryFromApi() {
+    if (shopId < 1) return
+    try {
+        const res = await fetch('/kds2/api/dictionary')
+        if (res.ok) {
+            const data = await res.json()
+            localStorage.setItem(`kds2_dict_${shopId}`, JSON.stringify(data))
+            kdsDict.bump()
+        }
+    } catch (e) {
+        console.error('[KDS] fetch dictionary failed', e)
+    }
+}
+
 async function handleSyncMaster() {
     await master.syncFromApi(shopId)
+    await syncDictionaryFromApi()
 }
 
 onMounted(async () => {
     filter.load(shopId)
+    const dictKey = `kds2_dict_${shopId}`
+    if (shopId >= 1 && !localStorage.getItem(dictKey)) {
+        await syncDictionaryFromApi()
+    }
     const cached = master.loadFromStorage(shopId)
     if (!cached) await master.syncFromApi(shopId)
     await fetchTickets()

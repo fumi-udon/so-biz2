@@ -9,9 +9,11 @@ use App\Domains\Pos\Settlement\SettlementSuggestionService;
 use App\Domains\Pos\Tables\TableCategory;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Enums\TableSessionManagementSource;
 use App\Exceptions\Pos\InsufficientTenderException;
 use App\Exceptions\Pos\PendingOrdersRemainException;
 use App\Exceptions\Pos\SessionAlreadySettledException;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\RevisionConflictException;
 use App\Models\PosOrder;
 use App\Models\TableSession;
@@ -51,6 +53,9 @@ class ClotureModal extends Component
 
     public string $shopName = '';
 
+    /** POS V2 ブリッジタブから開かれた会計か（Finalize の initiator に渡す） */
+    public bool $clotureOpenedViaPos2Bridge = false;
+
     /** @var 'idle'|'in_flight'|'success'|'failed' */
     public string $uiState = 'idle';
 
@@ -80,8 +85,12 @@ class ClotureModal extends Component
     }
 
     #[On('pos-cloture-open')]
-    public function onOpen(mixed $shop_id = null, mixed $table_session_id = null, mixed $expected_revision = null): void
-    {
+    public function onOpen(
+        mixed $shop_id = null,
+        mixed $table_session_id = null,
+        mixed $expected_revision = null,
+        mixed $settlement_initiator = null,
+    ): void {
         if ((int) $shop_id !== $this->shopId) {
             return;
         }
@@ -89,6 +98,7 @@ class ClotureModal extends Component
         if ($sid < 1) {
             return;
         }
+        $this->clotureOpenedViaPos2Bridge = ($settlement_initiator === 'pos2_bridge');
         $this->reset([
             'tenderedMinor',
             'tenderedDtInput',
@@ -110,6 +120,7 @@ class ClotureModal extends Component
         $this->open = false;
         $this->tableSessionId = null;
         $this->uiState = 'idle';
+        $this->clotureOpenedViaPos2Bridge = false;
     }
 
     /**
@@ -172,6 +183,10 @@ class ClotureModal extends Component
                 return;
             }
 
+            $settlementInitiatedBy = $this->clotureOpenedViaPos2Bridge
+                ? TableSessionManagementSource::Pos2
+                : TableSessionManagementSource::Legacy;
+
             $settlement = app(FinalizeTableSettlementAction::class)->execute(
                 new FinalizeTableSettlementRequest(
                     shopId: $this->shopId,
@@ -181,6 +196,7 @@ class ClotureModal extends Component
                     paymentMethod: PaymentMethod::Cash,
                     actorUserId: $actorUserId,
                     debugTraceId: $traceId,
+                    settlementInitiatedBy: $settlementInitiatedBy,
                 )
             );
             $this->debugSettleLog('confirm_action_success', [
@@ -252,6 +268,19 @@ class ClotureModal extends Component
             }
             $this->dispatch('pos-refresh-tiles');
             $this->loadPricing();
+        } catch (SessionManagedByPos2Exception $e) {
+            $this->debugSettleLog('confirm_pos2_managed_session', [
+                'trace_id' => $traceId,
+                'table_session_id' => (int) ($this->tableSessionId ?? 0),
+                'message' => $e->getMessage(),
+            ]);
+            $this->uiState = 'failed';
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+            $this->closeModal();
         } catch (Throwable $e) {
             $this->debugSettleLog('confirm_throwable', [
                 'trace_id' => $traceId,
@@ -284,6 +313,17 @@ class ClotureModal extends Component
 
         if ($session === null) {
             Notification::make()->title(__('rad_table.active_session_not_found'))->danger()->send();
+            $this->closeModal();
+
+            return false;
+        }
+
+        if ($session->isManagedByPos2() && ! $this->clotureOpenedViaPos2Bridge) {
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body(__('pos.session_managed_by_pos2', ['id' => (int) $session->id]))
+                ->danger()
+                ->send();
             $this->closeModal();
 
             return false;

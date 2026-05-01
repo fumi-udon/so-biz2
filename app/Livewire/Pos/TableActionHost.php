@@ -15,9 +15,10 @@ use App\Enums\OrderLineStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PrintIntent;
 use App\Enums\TableSessionStatus;
-use App\Exceptions\RevisionConflictException;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\Pos\SessionRevisionMismatchException;
 use App\Exceptions\Pos\TableAlreadyOccupiedException;
+use App\Exceptions\RevisionConflictException;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\OrderLine;
@@ -29,9 +30,9 @@ use App\Services\Pos\TableSessionLifecycleService;
 use App\Services\StaffDirectoryService;
 use App\Services\StaffPinAuthenticationService;
 use App\Support\MenuItemMoney;
-use App\Support\Pos\SpeedTestProbe;
 use App\Support\Pos\Receipt\PosOrderReceiptLineEnricher;
 use App\Support\Pos\Receipt\ReceiptTaxMath;
+use App\Support\Pos\SpeedTestProbe;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
@@ -1125,19 +1126,30 @@ class TableActionHost extends Component
         if ($this->activeRestaurantTableId === null || $this->shopId === 0) {
             return;
         }
-        $sessionId = (int) DB::transaction(function (): int {
-            $table = RestaurantTable::query()
-                ->where('shop_id', $this->shopId)
-                ->whereKey((int) $this->activeRestaurantTableId)
-                ->lockForUpdate()
-                ->first();
-            if ($table === null) {
-                return 0;
-            }
-            $s = app(TableSessionLifecycleService::class)->getOrCreateActiveSession($table);
+        $sessionId = 0;
+        try {
+            $sessionId = (int) DB::transaction(function (): int {
+                $table = RestaurantTable::query()
+                    ->where('shop_id', $this->shopId)
+                    ->whereKey((int) $this->activeRestaurantTableId)
+                    ->lockForUpdate()
+                    ->first();
+                if ($table === null) {
+                    return 0;
+                }
+                $s = app(TableSessionLifecycleService::class)->getOrCreateActiveSession($table);
 
-            return (int) $s->id;
-        });
+                return (int) $s->id;
+            });
+        } catch (SessionManagedByPos2Exception $e) {
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+
+            return;
+        }
         if ($sessionId > 0) {
             $this->loadSessionData($sessionId);
         }
@@ -1448,6 +1460,12 @@ class TableActionHost extends Component
                 ->send();
             $this->loadSessionData((int) $this->activeTableSessionId);
             $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
+        } catch (SessionManagedByPos2Exception $e) {
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
         } catch (Throwable $e) {
             Notification::make()
                 ->title(__('pos.action_failed'))
@@ -1494,6 +1512,13 @@ class TableActionHost extends Component
             $this->loadSessionData((int) $this->activeTableSessionId);
             $this->dispatchPosRefreshTilesWithShopDashboardCacheForget();
             $this->refocusAjouterButtonIfTakeaway();
+        } catch (SessionManagedByPos2Exception $e) {
+            $this->uiState = 'failed';
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
             Notification::make()
@@ -1747,6 +1772,19 @@ class TableActionHost extends Component
                 'has_unacked_placed_after' => $this->hasUnackedPlaced,
                 'line_count_after' => (int) $this->allLines->count(),
             ]);
+        } catch (SessionManagedByPos2Exception $e) {
+            $this->uiState = 'failed';
+            SpeedTestProbe::log('bulk_add_and_confirm:pos2_managed_session', [
+                'shop_id' => $this->shopId,
+                'active_table_id' => $this->activeRestaurantTableId,
+                'active_session_id' => $this->activeTableSessionId,
+                'error' => $e->getMessage(),
+            ]);
+            Notification::make()
+                ->title(__('pos.action_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
         } catch (RevisionConflictException $e) {
             $this->uiState = 'failed';
             SpeedTestProbe::log('bulk_add_and_confirm:revision_conflict', [
@@ -1862,8 +1900,7 @@ class TableActionHost extends Component
         mixed $table_session_id = null,
         mixed $open_receipt_preview = null,
         mixed $settlement_trace_id = null
-    ): void
-    {
+    ): void {
         $sid = is_numeric($table_session_id) ? (int) $table_session_id : 0;
         $openPreview = $open_receipt_preview === true;
         if (config('app.debug')) {

@@ -4,7 +4,9 @@ namespace App\Actions\RadTable;
 
 use App\Enums\OrderLineStatus;
 use App\Enums\OrderStatus;
+use App\Enums\TableSessionManagementSource;
 use App\Enums\TableSessionStatus;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\RevisionConflictException;
 use App\Models\OrderLine;
 use App\Models\PosOrder;
@@ -16,9 +18,13 @@ use RuntimeException;
 
 final class RecuPlacedOrdersForSessionAction
 {
-    public function execute(int $shopId, int $tableSessionId, int $expectedSessionRevision): int
-    {
-        return (int) DB::transaction(function () use ($shopId, $tableSessionId, $expectedSessionRevision): int {
+    public function execute(
+        int $shopId,
+        int $tableSessionId,
+        int $expectedSessionRevision,
+        TableSessionManagementSource $caller = TableSessionManagementSource::Legacy,
+    ): int {
+        return (int) DB::transaction(function () use ($shopId, $tableSessionId, $expectedSessionRevision, $caller): int {
             $session = TableSession::query()
                 ->whereKey($tableSessionId)
                 ->where('shop_id', $shopId)
@@ -28,6 +34,10 @@ final class RecuPlacedOrdersForSessionAction
 
             if ($session === null) {
                 throw new RuntimeException(__('rad_table.active_session_not_found'));
+            }
+
+            if ($caller === TableSessionManagementSource::Legacy && $session->isManagedByPos2()) {
+                throw SessionManagedByPos2Exception::forSession((int) $session->id);
             }
 
             if ((int) $session->session_revision !== $expectedSessionRevision) {

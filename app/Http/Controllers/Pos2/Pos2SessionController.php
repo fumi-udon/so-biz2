@@ -7,6 +7,8 @@ use App\Actions\RadTable\RecuPlacedOrdersForSessionAction;
 use App\Data\Pos\TableTileAggregate;
 use App\Enums\OrderLineStatus;
 use App\Enums\OrderStatus;
+use App\Enums\TableSessionManagementSource;
+use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\RevisionConflictException;
 use App\Http\Controllers\Controller;
 use App\Models\GuestOrderIdempotency;
@@ -33,9 +35,9 @@ final class Pos2SessionController extends Controller
         $shopId = $this->resolveShopId($request);
         if ($shopId < 1) {
             return response()->json([
-                'shop_id'        => $shopId,
-                'tiles'          => [],
-                'generated_at'   => now()->toIso8601String(),
+                'shop_id' => $shopId,
+                'tiles' => [],
+                'generated_at' => now()->toIso8601String(),
                 'schema_version' => 1,
             ]);
         }
@@ -47,9 +49,9 @@ final class Pos2SessionController extends Controller
         );
 
         return response()->json([
-            'shop_id'        => $shopId,
-            'tiles'          => $tiles,
-            'generated_at'   => now()->toIso8601String(),
+            'shop_id' => $shopId,
+            'tiles' => $tiles,
+            'generated_at' => now()->toIso8601String(),
             'schema_version' => 1,
         ]);
     }
@@ -124,40 +126,40 @@ final class Pos2SessionController extends Controller
                 }
 
                 $linesOut[] = [
-                    'id'                => (int) $line->id,
-                    'order_id'          => (int) $order->id,
-                    'line_status'       => $line->status->value,
-                    'is_unsent'         => $line->status === OrderLineStatus::Placed,
-                    'qty'               => (int) $line->qty,
+                    'id' => (int) $line->id,
+                    'order_id' => (int) $order->id,
+                    'line_status' => $line->status->value,
+                    'is_unsent' => $line->status === OrderLineStatus::Placed,
+                    'qty' => (int) $line->qty,
                     /** 商品名のみ（右ペイン 1 行目のベース） */
-                    'display_name'      => (string) $line->snapshot_name,
-                    'product_name'      => (string) $line->snapshot_name,
-                    'style_name'        => $styleName,
-                    'topping_names'     => $toppingNames,
-                    'line_total_minor'  => (int) $line->line_total_minor,
-                    'unit_price_minor'  => (int) $line->unit_price_minor,
-                    'ordered_by'        => $orderedBy,
+                    'display_name' => (string) $line->snapshot_name,
+                    'product_name' => (string) $line->snapshot_name,
+                    'style_name' => $styleName,
+                    'topping_names' => $toppingNames,
+                    'line_total_minor' => (int) $line->line_total_minor,
+                    'unit_price_minor' => (int) $line->unit_price_minor,
+                    'ordered_by' => $orderedBy,
                 ];
             }
 
             $mappedOrders[] = [
-                'id'          => (int) $order->id,
-                'status'      => $order->status->value,
-                'placed_at'   => $order->placed_at?->toIso8601String(),
-                'ordered_by'  => $orderedBy,
+                'id' => (int) $order->id,
+                'status' => $order->status->value,
+                'placed_at' => $order->placed_at?->toIso8601String(),
+                'ordered_by' => $orderedBy,
                 'total_minor' => (int) $order->total_price_minor,
-                'lines'       => $linesOut,
+                'lines' => $linesOut,
             ];
         }
 
         return response()->json([
-            'table_session_id'     => (int) $session->id,
-            'restaurant_table_id'  => (int) $session->restaurant_table_id,
-            'session_revision'     => (int) $session->session_revision,
-            'has_unacked_placed'   => $hasUnackedPlaced,
-            'orders'               => $mappedOrders,
-            'generated_at'         => now()->toIso8601String(),
-            'schema_version'       => 1,
+            'table_session_id' => (int) $session->id,
+            'restaurant_table_id' => (int) $session->restaurant_table_id,
+            'session_revision' => (int) $session->session_revision,
+            'has_unacked_placed' => $hasUnackedPlaced,
+            'orders' => $mappedOrders,
+            'generated_at' => now()->toIso8601String(),
+            'schema_version' => 1,
         ]);
     }
 
@@ -184,9 +186,9 @@ final class Pos2SessionController extends Controller
         // lines.*.selected_option_snapshot 等をルールに含めないと JSON から欠落し、スタイル必須で常に 422 になる。
         $request->validate([
             'client_submit_id' => ['nullable', 'string', 'max:64'],
-            'lines'            => ['required', 'array', 'min:1'],
+            'lines' => ['required', 'array', 'min:1'],
             'lines.*.product_id' => ['required'],
-            'lines.*.qty'        => ['required', 'integer', 'min:1', 'max:200'],
+            'lines.*.qty' => ['required', 'integer', 'min:1', 'max:200'],
         ]);
 
         // JSON ボディから直接 lines を取る（`input('lines')` が検証後にネストを欠くケースへの耐性）。
@@ -228,9 +230,15 @@ final class Pos2SessionController extends Controller
                         $styleId,
                         $toppingIds,
                         $note,
+                        TableSessionManagementSource::Pos2,
                     );
                 }
             });
+        } catch (SessionManagedByPos2Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => 'POS2_SESSION_EXCLUSIVE',
+            ], 403);
         } catch (RuntimeException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -239,7 +247,7 @@ final class Pos2SessionController extends Controller
             if (config('app.pos2_debug')) {
                 Log::channel('pos2')->warning('pos2.submit_draft.failed', [
                     'session_id' => $sessionId,
-                    'error'      => $e->getMessage(),
+                    'error' => $e->getMessage(),
                 ]);
             }
 
@@ -251,10 +259,10 @@ final class Pos2SessionController extends Controller
         $session->refresh();
 
         return response()->json([
-            'message'            => 'OK',
-            'order_ids'          => $orderIds,
-            'session_revision'   => (int) $session->session_revision,
-            'table_session_id'   => (int) $session->id,
+            'message' => 'OK',
+            'order_ids' => $orderIds,
+            'session_revision' => (int) $session->session_revision,
+            'table_session_id' => (int) $session->id,
         ], 201);
     }
 
@@ -282,9 +290,9 @@ final class Pos2SessionController extends Controller
 
         $request->validate([
             'client_submit_id' => ['nullable', 'string', 'max:64'],
-            'lines'            => ['required', 'array', 'min:1'],
+            'lines' => ['required', 'array', 'min:1'],
             'lines.*.product_id' => ['required'],
-            'lines.*.qty'        => ['required', 'integer', 'min:1', 'max:200'],
+            'lines.*.qty' => ['required', 'integer', 'min:1', 'max:200'],
         ]);
 
         /** @var list<array<string, mixed>>|mixed $linesRaw */
@@ -300,7 +308,10 @@ final class Pos2SessionController extends Controller
 
         try {
             DB::transaction(function () use ($shopId, $table, $lines, &$orderIds, &$sessionId): void {
-                $session = app(TableSessionLifecycleService::class)->getOrCreateActiveSession($table);
+                $session = app(TableSessionLifecycleService::class)->getOrCreateActiveSession(
+                    $table,
+                    TableSessionManagementSource::Pos2,
+                );
                 $sessionId = (int) $session->id;
                 $resolvedTableId = (int) $session->restaurant_table_id;
 
@@ -329,9 +340,15 @@ final class Pos2SessionController extends Controller
                         $styleId,
                         $toppingIds,
                         $note,
+                        TableSessionManagementSource::Pos2,
                     );
                 }
             });
+        } catch (SessionManagedByPos2Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => 'POS2_SESSION_EXCLUSIVE',
+            ], 403);
         } catch (RuntimeException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -340,7 +357,7 @@ final class Pos2SessionController extends Controller
             if (config('app.pos2_debug')) {
                 Log::channel('pos2')->warning('pos2.submit_draft_for_table.failed', [
                     'table_id' => $tableId,
-                    'error'    => $e->getMessage(),
+                    'error' => $e->getMessage(),
                 ]);
             }
 
@@ -352,8 +369,8 @@ final class Pos2SessionController extends Controller
         $session = TableSession::find($sessionId);
 
         return response()->json([
-            'message'          => 'OK',
-            'order_ids'        => $orderIds,
+            'message' => 'OK',
+            'order_ids' => $orderIds,
             'session_revision' => $session ? (int) $session->session_revision : 0,
             'table_session_id' => $sessionId,
         ], 201);
@@ -385,15 +402,20 @@ final class Pos2SessionController extends Controller
         $expected = (int) $validated['expected_session_revision'];
 
         try {
-            $n = app(RecuPlacedOrdersForSessionAction::class)->execute($shopId, $sessionId, $expected);
+            $n = app(RecuPlacedOrdersForSessionAction::class)->execute(
+                $shopId,
+                $sessionId,
+                $expected,
+                TableSessionManagementSource::Pos2,
+            );
         } catch (RevisionConflictException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
-                'code'    => 'REVISION_CONFLICT',
+                'code' => 'REVISION_CONFLICT',
                 'context' => [
-                    'resource'           => $e->resource,
-                    'id'                 => $e->id,
-                    'current_revision'   => $e->currentRevision,
+                    'resource' => $e->resource,
+                    'id' => $e->id,
+                    'current_revision' => $e->currentRevision,
                     'client_sent_revision' => $e->clientSentRevision,
                 ],
             ], 409);
@@ -401,7 +423,7 @@ final class Pos2SessionController extends Controller
             if (config('app.pos2_debug')) {
                 Log::channel('pos2')->warning('pos2.recu_staff.failed', [
                     'session_id' => $sessionId,
-                    'error'      => $e->getMessage(),
+                    'error' => $e->getMessage(),
                 ]);
             }
 
@@ -412,10 +434,10 @@ final class Pos2SessionController extends Controller
         $session->refresh();
 
         return response()->json([
-            'message'            => 'OK',
-            'confirmed_batches'  => $n,
-            'session_revision'   => (int) $session->session_revision,
-            'table_session_id'   => (int) $session->id,
+            'message' => 'OK',
+            'confirmed_batches' => $n,
+            'session_revision' => (int) $session->session_revision,
+            'table_session_id' => (int) $session->id,
         ]);
     }
 

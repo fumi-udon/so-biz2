@@ -23,13 +23,59 @@
 
 <script setup>
 import { computed } from 'vue';
+import { useKdsDictStore } from '../stores/useKdsDictStore';
 
 const props = defineProps({
     ticket: {
         type: Object,
         required: true,
     },
+    shopId: {
+        type: Number,
+        default: 0,
+    },
 });
+
+const kdsDictStore = useKdsDictStore();
+
+/** {@see App\Support\KdsDictionarySetting::normalizeMatchKey} と同等（大文字小文字無視・空白除去） */
+function normalizeKdsDictMatchKey(label) {
+    return String(label)
+        .trim()
+        .replace(/\s+/gu, '')
+        .toLowerCase()
+}
+
+function dictMap() {
+    void kdsDictStore.revision;
+    try {
+        const parsed = JSON.parse(
+            localStorage.getItem(`kds2_dict_${props.shopId}`) || '{}',
+        );
+        if (
+            parsed !== null &&
+            typeof parsed === 'object' &&
+            !Array.isArray(parsed)
+        ) {
+            return parsed;
+        }
+    } catch {
+        /* ignore */
+    }
+    return {};
+}
+
+function translateOptionsCsv(raw) {
+    const dict = dictMap();
+    return raw
+        .split(',')
+        .map((item) => {
+            const trimmed = item.trim();
+            const key = normalizeKdsDictMatchKey(trimmed);
+            return dict[key] !== undefined ? dict[key] : trimmed;
+        })
+        .join(', ');
+}
 
 defineEmits(['serve']);
 
@@ -54,7 +100,7 @@ const subFromNameNewlines = computed(() => {
 const subLine = computed(() => {
     const opt = String(props.ticket?.options ?? '').trim();
     if (opt !== '') {
-        return opt;
+        return translateOptionsCsv(opt);
     }
     return subFromNameNewlines.value;
 });

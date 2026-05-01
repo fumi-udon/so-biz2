@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domains\Pos\Tables\TableCategory;
+use App\Enums\TableSessionManagementSource;
 use App\Enums\TableSessionStatus;
 use App\Support\Pos\StaffTableSettlementPricing;
 use Illuminate\Database\Eloquent\Model;
@@ -40,6 +41,7 @@ class TableSession extends Model
         'customer_phone',
         'last_addition_printed_at',
         'session_revision',
+        'management_source',
     ];
 
     /**
@@ -53,7 +55,13 @@ class TableSession extends Model
             'closed_at' => 'datetime',
             'last_addition_printed_at' => 'datetime',
             'session_revision' => 'integer',
+            'management_source' => TableSessionManagementSource::class,
         ];
+    }
+
+    public function isManagedByPos2(): bool
+    {
+        return $this->management_source === TableSessionManagementSource::Pos2;
     }
 
     /**

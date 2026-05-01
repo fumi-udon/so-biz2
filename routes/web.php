@@ -248,6 +248,7 @@ Route::prefix('kds2')->middleware(['web', 'kds.auth'])->group(function () {
     Route::get('/api/tickets', [KdsV2Controller::class, 'tickets'])->name('kds2.api.tickets');
     Route::post('/api/tickets/{id}/served', [KdsV2Controller::class, 'markServed'])->name('kds2.api.mark-served');
     Route::get('/api/master', [KdsV2Controller::class, 'master'])->name('kds2.api.master');
+    Route::get('/api/dictionary', [KdsV2Controller::class, 'dictionary'])->name('kds2.api.dictionary');
 });
 
 // ── POS2 auth (Filament / Livewire から完全分離) ───────────────────────────────

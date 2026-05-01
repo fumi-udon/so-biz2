@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MenuCategory;
 use App\Models\OrderLine;
 use App\Services\Kds\KdsQueryService;
+use App\Support\KdsDictionarySetting;
 use App\Support\KdsFilterSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,8 @@ use Throwable;
 
 final class KdsV2Controller extends Controller
 {
+    private const KDS2_TICKET_MISSING_SORT = 999_999_999;
+
     public function index(Request $request): View
     {
         return view('kds2.app');
@@ -27,6 +30,7 @@ final class KdsV2Controller extends Controller
     {
         $shopId = (int) $request->session()->get('kds.active_shop_id', 0);
         $lines = app(KdsQueryService::class)->pullActiveSessionTicketsForDashboard($shopId);
+        $dict = $this->getDictionaryMap($shopId);
 
         // バッチキー: COALESCE(NULLIF(TRIM(kds_ticket_batch_id), ''), 'o:' + order_id)
         $byBatch = [];
@@ -47,7 +51,8 @@ final class KdsV2Controller extends Controller
             $tickets = [];
             foreach ($batchLines as $line) {
                 $isPending = in_array($line->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true);
-                $parts = $this->buildKds2TicketDisplayParts($line);
+                $parts = $this->buildKds2TicketDisplayParts($line, $dict);
+                $sortMeta = $this->kds2TicketSortMeta($line);
 
                 $tickets[] = [
                     'id' => $line->id,
@@ -58,6 +63,9 @@ final class KdsV2Controller extends Controller
                     'status' => $line->status->value,
                     'cat_id' => $line->menuItem?->menu_category_id,
                     'is_last' => $isPending && $pendingCount === 1,
+                    'category_sort' => $sortMeta['category_sort'],
+                    'item_sort' => $sortMeta['item_sort'],
+                    'sort_name' => $sortMeta['sort_name'],
                 ];
             }
 
@@ -142,12 +150,49 @@ final class KdsV2Controller extends Controller
         return response()->json($data);
     }
 
+    public function dictionary(Request $request): JsonResponse
+    {
+        $shopId = (int) $request->session()->get('kds.active_shop_id', 0);
+
+        return response()->json($this->getDictionaryMap($shopId));
+    }
+
     /**
-     * KDS2 表示用: 1行目 = snapshot_kitchen_name + 半角スペース + スタイル名、2行目 = トッピング名（カンマ区切り）。
+     * @return array<string, string>
+     */
+    private function getDictionaryMap(int $shopId): array
+    {
+        if ($shopId < 1) {
+            return [];
+        }
+
+        $cacheKey = KdsDictionarySetting::jsonCacheKey($shopId);
+
+        /** @var array<string, string> */
+        return Cache::rememberForever($cacheKey, function () use ($shopId): array {
+            $text = KdsDictionarySetting::getText($shopId);
+            $parsed = [];
+            foreach (explode("\n", $text) as $line) {
+                if (str_contains($line, ':')) {
+                    [$k, $v] = explode(':', $line, 2);
+                    $matchKey = KdsDictionarySetting::normalizeMatchKey($k);
+                    if ($matchKey !== '') {
+                        $parsed[$matchKey] = trim($v);
+                    }
+                }
+            }
+
+            return $parsed;
+        });
+    }
+
+    /**
+     * KDS2 表示用: 1行目 = snapshot_kitchen_name + 半角スペース + スタイル名（辞書変換済み）、2行目 = トッピング名（カンマ区切り）。
      *
+     * @param  array<string, string>  $dict
      * @return array{name: string, options: string}
      */
-    private function buildKds2TicketDisplayParts(OrderLine $line): array
+    private function buildKds2TicketDisplayParts(OrderLine $line, array $dict = []): array
     {
         $snap = is_array($line->snapshot_options_payload) ? $line->snapshot_options_payload : [];
 
@@ -163,7 +208,8 @@ final class KdsV2Controller extends Controller
         if (isset($snap['style']) && is_array($snap['style'])) {
             $sn = trim((string) ($snap['style']['name'] ?? ''));
             if ($sn !== '') {
-                $styleName = $sn;
+                $matchKey = KdsDictionarySetting::normalizeMatchKey($sn);
+                $styleName = $dict[$matchKey] ?? $sn;
             }
         }
 
@@ -190,6 +236,22 @@ final class KdsV2Controller extends Controller
         return [
             'name' => $name,
             'options' => $options,
+        ];
+    }
+
+    /**
+     * @return array{category_sort: int, item_sort: int, sort_name: string}
+     */
+    private function kds2TicketSortMeta(OrderLine $line): array
+    {
+        $missing = self::KDS2_TICKET_MISSING_SORT;
+        $rawName = (string) ($line->snapshot_kitchen_name ?: $line->snapshot_name ?: $line->menuItem?->name ?: '');
+        $sortName = mb_strtolower(trim($rawName));
+
+        return [
+            'category_sort' => (int) ($line->menuItem?->menuCategory?->sort_order ?? $missing),
+            'item_sort' => (int) ($line->menuItem?->sort_order ?? $missing),
+            'sort_name' => $sortName,
         ];
     }
 }

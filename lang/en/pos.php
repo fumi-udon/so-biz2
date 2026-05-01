@@ -81,6 +81,7 @@ return [
     'checkout_done' => 'Table session closed',
     'checkout_no_orders_to_settle' => 'There are no orders to settle.',
     'action_failed' => 'Action failed',
+    'session_managed_by_pos2' => 'This table session (#:id) was opened in POS V2. Orders, checkout, and table moves from the legacy POS screen are not allowed. Please use POS V2.',
     'line_removed' => 'Line removed',
     'delete_complete' => 'Delete complete',
     'line_not_found' => 'Order line not found.',

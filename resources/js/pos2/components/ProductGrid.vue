@@ -46,22 +46,22 @@ function onTapItem(item) {
 </script>
 
 <template>
-    <div class="grid grid-cols-3 gap-3 sm:grid-cols-4">
+    <div class="grid grid-cols-3 gap-2">
         <button
             v-for="item in items"
             :key="item.id"
             type="button"
-            class="relative flex min-h-24 flex-col justify-between rounded-2xl border border-slate-700 bg-slate-900/70 p-3 text-left transition hover:border-slate-500 hover:bg-slate-800/80 active:scale-95"
+            class="relative flex min-h-20 flex-col justify-between rounded-2xl border border-slate-700 bg-slate-900/70 p-2 text-left transition hover:border-slate-500 hover:bg-slate-800/80 active:scale-95"
             @click="onTapItem(item)"
         >
             <!-- 商品名 -->
-            <p class="line-clamp-2 text-sm font-semibold leading-snug text-white">
+            <p class="line-clamp-2 text-[13px] font-semibold leading-snug text-white">
                 {{ item.name }}
             </p>
 
             <!-- 価格 + オプションバッジ -->
-            <div class="mt-2 flex items-end justify-between">
-                <span class="text-sm font-bold text-cyan-300">
+            <div class="mt-1.5 flex items-end justify-between">
+                <span class="text-[13px] font-bold text-cyan-300">
                     {{ formatDT(item.from_price_minor ?? item.price_minor ?? item.base_price_minor ?? 0) }}
                 </span>
                 <span
@@ -75,7 +75,7 @@ function onTapItem(item) {
 
         <div
             v-if="items.length === 0"
-            class="col-span-3 rounded-xl border border-dashed border-slate-700 py-8 text-center text-sm text-slate-500 sm:col-span-4"
+            class="col-span-3 rounded-xl border border-dashed border-slate-700 py-8 text-center text-sm text-slate-500"
         >
             商品がありません
         </div>
