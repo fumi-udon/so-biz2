@@ -129,14 +129,7 @@ function lineToppingsCsv(ln) {
 
         <!-- セッション注文一覧（ゲスト・Add to Table 同一リスト。行ごとに KDS 前/送信済） -->
         <div class="min-h-0 flex-1 overflow-y-auto">
-            <div class="border-b border-slate-700 bg-slate-950/95 px-3 py-2">
-                <p class="text-xs font-semibold tracking-widest text-slate-300 dark:text-slate-200">
-                    TABLE · 注文一覧
-                </p>
-                <p class="mt-0.5 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
-                    ゲスト受信とスタッフ送信はここに合算表示。Recu 後は各行「KDS送信済」。
-                </p>
-            </div>
+
             <div v-if="loadingConfirmed" class="px-3 py-6 text-sm text-slate-500">
                 読み込み中…
             </div>

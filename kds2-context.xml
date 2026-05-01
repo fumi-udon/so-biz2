@@ -1,0 +1,1219 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: resources/js/kds2/**/*, resources/views/kds2/**/*, app/Http/Controllers/Kds/KdsV2Controller.php, docs/kds_v2_spec.md, vite.config.js, app/Http/Middleware/KdsAuthenticate.php
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+app/
+  Http/
+    Controllers/
+      Kds/
+        KdsV2Controller.php
+    Middleware/
+      KdsAuthenticate.php
+docs/
+  kds_v2_spec.md
+resources/
+  js/
+    kds2/
+      api/
+        README.md
+      components/
+        KdsBatchColumn.vue
+        KdsBoard.vue
+        KdsConfirmModal.vue
+        KdsFilterBar.vue
+        KdsTicketRow.vue
+      lib/
+        README.md
+      stores/
+        README.md
+        useFilterStore.js
+        useMasterStore.js
+        useTicketStore.js
+      types/
+        README.md
+      App.vue
+      main.js
+  views/
+    kds2/
+      app.blade.php
+vite.config.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="app/Http/Controllers/Kds/KdsV2Controller.php">
+<?php
+
+namespace App\Http\Controllers\Kds;
+
+use App\Actions\Kds\UpdateOrderLineStatusAction;
+use App\Enums\OrderLineStatus;
+use App\Exceptions\RevisionConflictException;
+use App\Http\Controllers\Controller;
+use App\Models\MenuCategory;
+use App\Models\OrderLine;
+use App\Services\Kds\KdsQueryService;
+use App\Support\KdsFilterSetting;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\View\View;
+use Throwable;
+
+final class KdsV2Controller extends Controller
+{
+    public function index(Request $request): View
+    {
+        return view('kds2.app');
+    }
+
+    public function tickets(Request $request): JsonResponse
+    {
+        $shopId = (int) $request->session()->get('kds.active_shop_id', 0);
+        $lines = app(KdsQueryService::class)->pullActiveSessionTicketsForDashboard($shopId);
+
+        // バッチキー: COALESCE(NULLIF(TRIM(kds_ticket_batch_id), ''), 'o:' + order_id)
+        $byBatch = [];
+        foreach ($lines as $line) {
+            $rawBatch = trim((string) ($line->kds_ticket_batch_id ?? ''));
+            $batchKey = $rawBatch !== '' ? 'b:'.$rawBatch : 'o:'.$line->order_id;
+            $byBatch[$batchKey][] = $line;
+        }
+
+        $batches = [];
+        foreach ($byBatch as $batchKey => $batchLines) {
+            $pendingCount = collect($batchLines)
+                ->filter(fn (OrderLine $l) => in_array($l->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true))
+                ->count();
+
+            $tableName = $batchLines[0]->order?->tableSession?->restaurantTable?->name ?? '?';
+
+            $tickets = [];
+            foreach ($batchLines as $line) {
+                $isPending = in_array($line->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true);
+                $name = $this->formatKds2LineDisplayName($line);
+
+                $tickets[] = [
+                    'id' => $line->id,
+                    'rev' => $line->line_revision,
+                    'name' => $name,
+                    'qty' => $line->qty,
+                    'status' => $line->status->value,
+                    'cat_id' => $line->menuItem?->menu_category_id,
+                    'is_last' => $isPending && $pendingCount === 1,
+                ];
+            }
+
+            $batches[] = [
+                'key' => $batchKey,
+                'table' => $tableName,
+                'tickets' => $tickets,
+            ];
+        }
+
+        return response()->json([
+            'shop_id' => $shopId,
+            'batches' => $batches,
+            'queued' => 0, // pending_actions カウントはクライアント側 Pinia で管理
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function markServed(Request $request, int $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'rev' => ['required', 'integer', 'min:0'],
+        ]);
+
+        /** @var OrderLine|null $line */
+        $line = OrderLine::query()->find($id);
+
+        if ($line === null) {
+            return response()->json(['error' => 'not_found'], 404);
+        }
+
+        // 冪等: 既に Served なら 200 を返す
+        if ($line->status === OrderLineStatus::Served) {
+            return response()->json([
+                'id' => $line->id,
+                'rev' => $line->line_revision,
+                'status' => 'served',
+            ]);
+        }
+
+        try {
+            $updated = app(UpdateOrderLineStatusAction::class)
+                ->execute($id, OrderLineStatus::Served->value, (int) $validated['rev']);
+
+            return response()->json([
+                'id' => $updated->id,
+                'rev' => $updated->line_revision,
+                'status' => 'served',
+            ]);
+        } catch (RevisionConflictException $e) {
+            return response()->json([
+                'error' => 'conflict',
+                'current_rev' => $e->currentRevision,
+            ], 409);
+        }
+    }
+
+    public function master(Request $request): JsonResponse
+    {
+        $shopId = (int) $request->session()->get('kds.active_shop_id', 0);
+
+        /** @var array<string, mixed> $data */
+        $data = Cache::remember('kds2_master_'.$shopId, 300, function () use ($shopId): array {
+            $categories = MenuCategory::query()
+                ->where('shop_id', $shopId)
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->get(['id', 'name', 'slug', 'sort_order'])
+                ->toArray();
+
+            return [
+                'categories' => $categories,
+                'kitchen_category_ids' => KdsFilterSetting::kitchenCategoryIds($shopId),
+                'hall_category_ids' => KdsFilterSetting::hallCategoryIds($shopId),
+                'filter_strict' => KdsFilterSetting::isCategoryFilterConfigured($shopId),
+            ];
+        });
+
+        return response()->json($data);
+    }
+
+    /**
+     * POS V2（Pos2SessionController）と同じ snapshot_options_payload の解釈で
+     * 「商品名 (スタイル名) + トッピング1, トッピング2」を1行にまとめる。
+     */
+    private function formatKds2LineDisplayName(OrderLine $line): string
+    {
+        $product = trim((string) $line->snapshot_name);
+        if ($product === '') {
+            $product = trim((string) ($line->menuItem?->name ?? $line->menuItem?->kitchen_name ?? ''));
+        }
+
+        $snap = is_array($line->snapshot_options_payload) ? $line->snapshot_options_payload : [];
+
+        $styleName = '';
+        if (isset($snap['style']) && is_array($snap['style'])) {
+            $sn = trim((string) ($snap['style']['name'] ?? ''));
+            if ($sn !== '') {
+                $styleName = $sn;
+            }
+        }
+
+        $toppingNames = [];
+        if (isset($snap['toppings']) && is_array($snap['toppings'])) {
+            foreach ($snap['toppings'] as $t) {
+                if (! is_array($t)) {
+                    continue;
+                }
+                $tn = trim((string) ($t['name'] ?? ''));
+                if ($tn !== '') {
+                    $toppingNames[] = $tn;
+                }
+            }
+        }
+
+        $out = $product;
+        if ($styleName !== '') {
+            $out .= ' ('.$styleName.')';
+        }
+        if ($toppingNames !== []) {
+            $out .= ' + '.implode(', ', $toppingNames);
+        }
+
+        return $out;
+    }
+}
+</file>
+
+<file path="app/Http/Middleware/KdsAuthenticate.php">
+<?php
+
+namespace App\Http\Middleware;
+
+use App\Models\Shop;
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+final class KdsAuthenticate
+{
+    /**
+     * KDS: セッションに有効な店舗スコープがあることのみを要求する（端末 PIN で事前ログイン）。
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        $shopId = $request->session()->get('kds.active_shop_id');
+
+        if ($shopId === null || (int) $shopId < 1) {
+            return redirect()->guest(route('kds.login'));
+        }
+
+        $ok = Shop::query()
+            ->whereKey((int) $shopId)
+            ->where('is_active', true)
+            ->exists();
+
+        if (! $ok) {
+            $request->session()->forget('kds.active_shop_id');
+
+            return redirect()->guest(route('kds.login'));
+        }
+
+        return $next($request);
+    }
+}
+</file>
+
+<file path="docs/kds_v2_spec.md">
+# KDS V2 実装仕様書
+最終更新: 2026-04-30
+
+---
+
+## 1. 開発方針
+
+| 項目 | 内容 |
+|---|---|
+| ディレクトリ | `resources/js/kds2/` で完全独立管理 |
+| スタック | Laravel 11 + Vue 3 (Composition API) + Pinia + TailwindCSS |
+| Inertia.js | **使用しない**（KDSは単一画面、OVH共有ホスティングでSSR不要） |
+| 構成 | `/kds2` → Bladeシェル1枚 → Vue が APIを叩く |
+| 動作環境 | OVH共有ホスティング（Node.js不要、ビルド済みJS配信） |
+| 既存への影響 | 既存KDS(Livewire版)・POS・会計ロジックに一切触れない |
+| 並行稼働 | `/kds2` で稼働確認後、安定したら `/kds` と切り替え |
+
+---
+
+## 2. オフラインファースト設計（4つの柱）
+
+### ① マスタの完全LocalStorage化
+- **対象**: カテゴリ・Kitchen/Hall設定
+- **同期**: 手動「マスタ同期ボタン」（1日2回の運用ルール）
+- **効果**: 通信量99%削減・フィルタ切り替え0ms
+
+### ② 完全楽観的UI & バックグラウンドキュー
+```
+タップ
+ └→ Pinia即時更新（0ms）→ 画面グレーアウト
+ └→ pending_actions キューに追加
+     └→ バックグラウンドでAPIへ送信
+         ├→ 成功: キューから削除
+         └→ 失敗: リトライ（最大5回）→ 全失敗時はロールバック
+```
+
+### ③ Pusherはシグナルのみ
+- payload極小: `{"action":"served","ticket_id":892}`
+- 3台のタブレット間でAPIを叩かずにPinia状態を直接同期
+- Pusher障害時はスマートポーリングが自動補完
+
+### ④ スマートポーリング
+- WebSocket接続中: ポーリング停止
+- WebSocket切断時: Vue側で2〜5秒間隔の差分取得を自動起動
+
+---
+
+## 3. 現場運用ロジック
+
+| ロジック | 仕様 |
+|---|---|
+| 最後の1品 | `is_last: true` のチケットをServedにする際のみ確認モーダル → OK で列消去 |
+| フィルタ | Kitchen/HallチェックBOX → useFilterStore経由でPiniaが0msフィルタリング |
+| 冪等性 | 複数端末の同時タップ → 「Served収束」として扱い、エラーを出さない |
+| カテゴリ未設定 | filterStrict=false の場合は全チケット表示（警告バナーなし） |
+
+---
+
+## 4. APIエンドポイント
+
+### GET /kds2/api/tickets
+```json
+{
+  "shop_id": 3,
+  "batches": [
+    {
+      "key": "b:uuid-xxx",
+      "table": "T3",
+      "tickets": [
+        {
+          "id": 123,
+          "rev": 2,
+          "name": "ラーメン",
+          "qty": 1,
+          "status": "confirmed",
+          "cat_id": 2,
+          "is_last": false
+        },
+        {
+          "id": 124,
+          "rev": 1,
+          "name": "餃子",
+          "qty": 2,
+          "status": "confirmed",
+          "cat_id": 3,
+          "is_last": true
+        }
+      ]
+    }
+  ],
+  "queued": 0,
+  "generated_at": "2026-04-30T10:00:00+01:00"
+}
+```
+- `is_last: true` = バッチ内の残りConfirmed/Cookingが自分1件 → 確認モーダルのトリガー
+- `queued` = 画面外の待機列数（3列を超えたバッチ数）
+- サーバー側フィルタなし（Kitchen/Hallフィルタはクライアント側で処理）
+
+### POST /kds2/api/tickets/{id}/served
+- body: `{"rev": 5}`
+- 冪等: 既にServedなら200を返す（エラーにしない）
+- 楽観的UI済みのため、レスポンスでの画面更新は不要
+
+### GET /kds2/api/master
+```json
+{
+  "categories": [
+    {"id": 1, "name": "麺類", "sort_order": 1},
+    {"id": 2, "name": "ご飯", "sort_order": 2}
+  ],
+  "kitchen_category_ids": [1, 2, 3, 4, 5, 8],
+  "hall_category_ids": [6, 7, 8],
+  "filter_strict": true
+}
+```
+- Cache::remember 5分
+- 認証: 既存 `KdsAuthenticate` middleware流用
+
+---
+
+## 5. ファイル構成
+
+```
+app/Http/Controllers/Kds/
+└── KdsV2Controller.php
+
+resources/views/kds2/
+└── app.blade.php                    # Bladeシェル（Vite + mountポイントのみ）
+
+resources/js/kds2/
+├── main.js                          # Vue + Pinia 初期化・mount
+├── App.vue                          # ルート: APIポーリング・handleServe
+├── stores/
+│   ├── useMasterStore.js            # カテゴリ・Kitchen/Hall設定（LocalStorage）
+│   ├── useFilterStore.js            # showKitchen/showHall（LocalStorage永続）
+│   └── useTicketStore.js            # バッチ・チケット状態・楽観的UI・キュー
+└── components/
+    ├── KdsBoard.vue                 # 3列グリッド + 待機バッジ
+    ├── KdsBatchColumn.vue           # 1列: テーブル名 + チケット一覧
+    ├── KdsTicketRow.vue             # 1チケット: タップでServed
+    └── KdsFilterBar.vue             # Kitchen/Hallトグル
+```
+
+### LocalStorageキー
+
+| キー | 内容 | 更新タイミング |
+|---|---|---|
+| `kds2_master_{shopId}` | カテゴリ + Kitchen/Hall設定 | 手動同期ボタン |
+| `kds2_filter_{shopId}` | showKitchen / showHall | トグル操作毎 |
+| `kds2_pending` | 未送信Served操作キュー | 送信完了で削除 |
+
+---
+
+## 6. コンポーネント責務
+
+| コンポーネント | 責務 |
+|---|---|
+| `App.vue` | APIポーリング(2秒)・handleServe・全体組み立て |
+| `KdsBoard.vue` | 3列グリッド表示・待機バッジ・KdsFilterBar配置 |
+| `KdsBatchColumn.vue` | 1バッチ列・チケットのservedソート |
+| `KdsTicketRow.vue` | 1チケット表示・タップイベント送出 |
+| `KdsFilterBar.vue` | Kitchen/Hallトグル・useFilterStore操作 |
+
+---
+
+## 7. 実装フェーズと進捗
+
+### ✅ Phase 1: 環境準備 & 骨組み（完了）
+- KdsV2Controller / ルート / Bladeシェル / main.js / App.vue / vite設定
+
+### ✅ Phase 2: オフラインファースト基盤（完了）
+- useMasterStore / useFilterStore / useTicketStore
+- 動作確認: shopId=3, kitchenIds=[5,1,2,3,4,8], hallIds=[6,7,8]
+
+### 🔄 Phase 3: UI構築 & 楽観的更新（進行中）
+- [x] KdsTicketRow.vue
+- [x] KdsBatchColumn.vue
+- [x] KdsFilterBar.vue
+- [x] KdsBoard.vue
+- [ ] App.vue更新（APIポーリング + handleServe統合）
+- [ ] 実機動作確認
+
+### 🔲 Phase 4: 裏側同期 & Pusher連携
+- [ ] バックグラウンドAPIキュー（リトライ5回・失敗時ロールバック）
+- [ ] Pusherシグナル受信 → Pinia即時反映
+- [ ] WebSocket切断時のスマートポーリング自動切り替え
+- [ ] 既存KDS(/kds)との切り替えテスト・本番投入
+
+---
+
+## 8. 既知の問題・注意事項
+
+| 項目 | 内容 |
+|---|---|
+| ARM64ビルド問題 | `npm run dev` 失敗時: `rm -rf node_modules package-lock.json && npm install` |
+| viteプラグイン順序 | `vue()` を `tailwindcss()` より前に配置（確定済み） |
+| TailwindとVue | `resources/css/app.css` に `@source '../**/*.vue'` 追加済み |
+| KDS認証 | `/kds2` は `kds.auth` middleware。先に `/kds` でPINログインが必要 |
+| markServed冪等性 | `UpdateOrderLineStatusAction` 内の `lockForUpdate` + `line_revision` が安全弁 |
+| queued値 | Phase 3完了時点ではクライアント管理不要。サーバーが返す値をそのまま表示 |
+</file>
+
+<file path="resources/js/kds2/api/README.md">
+# api/
+
+HTTP 通信の単一窓口。`axios` を使うのはこのディレクトリのみ。
+
+## ルール
+- `Pages/` や `stores/` から直接 `axios`/`fetch` しない
+- エンドポイント関数は Promise を返し、エラーを呼び元に throw する
+- CSRF トークンは axios インスタンスに集約（`meta[name=csrf-token]` から取得）
+
+## ファイル例
+- `client.js`    — axios インスタンス共通設定
+- `tickets.js`   — `/kds2/api/tickets` 関連
+- `master.js`    — `/kds2/api/master` 関連
+</file>
+
+<file path="resources/js/kds2/components/KdsBatchColumn.vue">
+<template>
+    <section
+        class="flex flex-col gap-3 rounded-xl border border-slate-700 bg-slate-900/90 p-3 shadow-lg"
+        :data-batch-key="batch.key"
+        :data-shop-id="shopId"
+    >
+        <h2 class="border-b border-slate-600 pb-2 text-lg font-semibold text-white">
+            {{ batch.table }}
+        </h2>
+        <div class="flex flex-col gap-2">
+            <KdsTicketRow
+                v-for="ticket in sortedTickets"
+                :key="ticket.id"
+                :ticket="ticket"
+                @serve="forwardServe"
+            />
+        </div>
+    </section>
+</template>
+
+<script setup>
+import { computed } from 'vue';
+import KdsTicketRow from './KdsTicketRow.vue';
+import { useMasterStore } from '../stores/useMasterStore';
+import { useFilterStore } from '../stores/useFilterStore';
+
+const props = defineProps({
+    batch: {
+        type: Object,
+        required: true,
+    },
+    shopId: {
+        type: Number,
+        required: true,
+    },
+});
+
+const emit = defineEmits(['serve']);
+
+const master = useMasterStore();
+const filter = useFilterStore();
+
+const sortedTickets = computed(() => {
+    const tickets = [...(props.batch?.tickets ?? [])];
+
+    const filtered = tickets.filter((ticket) => {
+        if (!master.filterStrict) {
+            return true;
+        }
+
+        const catId = ticket.cat_id;
+        if (catId === null || catId === undefined) {
+            return false;
+        }
+
+        const inK = master.kitchenIds.includes(Number(catId));
+        const inH = master.hallIds.includes(Number(catId));
+
+        if (!filter.showKitchen && !filter.showHall) {
+            return false;
+        }
+
+        return (filter.showKitchen && inK) || (filter.showHall && inH);
+    });
+
+    return filtered.sort((a, b) => {
+        if (a.status === 'served' && b.status !== 'served') {
+            return 1;
+        }
+        if (a.status !== 'served' && b.status === 'served') {
+            return -1;
+        }
+
+        return 0;
+    });
+});
+
+function forwardServe(id, rev, isLast, name) {
+    emit('serve', id, rev, isLast, name);
+}
+</script>
+</file>
+
+<file path="resources/js/kds2/components/KdsBoard.vue">
+<template>
+    <div class="flex min-h-0 flex-1 flex-col bg-gray-950">
+        <KdsFilterBar :shop-id="shopId" :on-sync-master="onSyncMaster" />
+        <div
+            v-if="queued > 0"
+            class="flex items-center gap-2 border-b border-slate-700 bg-slate-900 px-4 py-2"
+        >
+            <span
+                class="inline-flex items-center rounded-full border border-amber-600 bg-amber-900/90 px-3 py-1 text-sm font-medium text-amber-100"
+            >
+                待機中: {{ queued }}件
+            </span>
+        </div>
+        <div class="grid min-h-0 flex-1 grid-cols-3 gap-4 overflow-auto p-4">
+            <KdsBatchColumn
+                v-for="batch in visibleBatches"
+                :key="batch.key ?? batch.table"
+                :batch="batch"
+                :shop-id="shopId"
+                @serve="forwardServe"
+            />
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { computed } from 'vue';
+import KdsBatchColumn from './KdsBatchColumn.vue';
+import KdsFilterBar from './KdsFilterBar.vue';
+
+const props = defineProps({
+    batches: {
+        type: Array,
+        default: () => [],
+    },
+    queued: {
+        type: Number,
+        default: 0,
+    },
+    shopId: {
+        type: Number,
+        required: true,
+    },
+    onSyncMaster: {
+        type: Function,
+        default: undefined,
+    },
+});
+
+const emit = defineEmits(['serve']);
+
+const visibleBatches = computed(() => {
+    const list = Array.isArray(props.batches) ? props.batches : [];
+
+    return list.slice(0, 3);
+});
+
+function forwardServe(id, rev, isLast, name) {
+    emit('serve', id, rev, isLast, name);
+}
+</script>
+</file>
+
+<file path="resources/js/kds2/components/KdsConfirmModal.vue">
+<template>
+    <div
+        v-if="show"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kds-confirm-modal-title"
+    >
+        <div
+            class="w-full max-w-md rounded-xl border border-slate-600 bg-slate-900 p-6 shadow-xl"
+            @click.stop
+        >
+            <h2 id="kds-confirm-modal-title" class="text-lg font-semibold text-white">
+                最後の1品です
+            </h2>
+            <p class="mt-3 text-base text-slate-100">
+                {{ ticketName }}
+            </p>
+            <div class="mt-6 flex flex-wrap justify-end gap-3">
+                <button
+                    type="button"
+                    class="rounded-lg border border-slate-500 bg-slate-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+                    @click="$emit('cancel')"
+                >
+                    キャンセル
+                </button>
+                <button
+                    type="button"
+                    class="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+                    @click="$emit('confirm')"
+                >
+                    提供済みにする
+                </button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script setup>
+defineProps({
+    show: {
+        type: Boolean,
+        required: true,
+    },
+    ticketName: {
+        type: String,
+        default: '',
+    },
+});
+
+defineEmits(['confirm', 'cancel']);
+</script>
+</file>
+
+<file path="resources/js/kds2/components/KdsFilterBar.vue">
+<template>
+    <div
+        class="flex w-full flex-wrap items-center gap-6 border-b border-slate-700 bg-slate-900 px-4 py-3"
+        role="group"
+        aria-label="Kitchen / Hall filter"
+    >
+        <div class="flex flex-wrap items-center gap-6">
+            <label class="flex cursor-pointer items-center gap-2 select-none">
+                <input
+                    type="checkbox"
+                    class="size-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 text-rose-600 accent-rose-500 focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                    :checked="showKitchen"
+                    @change="filter.toggle('showKitchen', props.shopId)"
+                />
+                <span class="text-base font-medium text-white">Kitchen</span>
+            </label>
+            <label class="flex cursor-pointer items-center gap-2 select-none">
+                <input
+                    type="checkbox"
+                    class="size-5 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 text-rose-600 accent-rose-500 focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                    :checked="showHall"
+                    @change="filter.toggle('showHall', props.shopId)"
+                />
+                <span class="text-base font-medium text-white">Hall</span>
+            </label>
+        </div>
+        <button
+            type="button"
+            class="ml-auto shrink-0 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="syncing"
+            @click="handleSync"
+        >
+            {{ syncing ? '同期中...' : 'マスタ同期' }}
+        </button>
+    </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useFilterStore } from '../stores/useFilterStore';
+
+const props = defineProps({
+    shopId: {
+        type: Number,
+        required: true,
+    },
+    onSyncMaster: {
+        type: Function,
+        default: undefined,
+    },
+});
+
+const filter = useFilterStore();
+const { showKitchen, showHall } = storeToRefs(filter);
+
+const syncing = ref(false);
+
+async function handleSync() {
+    if (!props.onSyncMaster || syncing.value) {
+        return;
+    }
+    syncing.value = true;
+    try {
+        await props.onSyncMaster();
+    } finally {
+        syncing.value = false;
+    }
+}
+</script>
+</file>
+
+<file path="resources/js/kds2/components/KdsTicketRow.vue">
+<template>
+    <button
+        type="button"
+        class="flex w-full items-start rounded-lg px-4 py-3 text-left font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950"
+        :class="rowClass"
+        @click="$emit('serve', ticket.id, ticket.rev, ticket.is_last, ticket.name)"
+    >
+        <div class="flex min-w-0 flex-1 flex-col items-start gap-1 text-left">
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span class="text-base font-semibold leading-tight">{{ nameParts.main }}</span>
+                <span v-if="qtyGt1" class="shrink-0 text-base font-semibold">×{{ ticket.qty }}</span>
+            </div>
+            <span
+                v-if="nameParts.options"
+                class="w-full break-words text-sm font-normal leading-snug text-rose-200"
+            >
+                {{ nameParts.options }}
+            </span>
+        </div>
+    </button>
+</template>
+
+<script setup>
+import { computed } from 'vue';
+
+/**
+ * KdsV2Controller の name 形式「商品 (スタイル) + トッピング…」をメイン／オプションに分割する。
+ * @param {string} full
+ * @returns {{ main: string, options: string }}
+ */
+function splitKdsTicketDisplayName(full) {
+    const s = String(full ?? '').trim();
+    if (s === '') {
+        return { main: '', options: '' };
+    }
+    const idxParen = s.indexOf(' (');
+    const idxPlus = s.indexOf(' + ');
+    if (idxParen === -1 && idxPlus === -1) {
+        return { main: s, options: '' };
+    }
+    const splitAt =
+        idxParen === -1 ? idxPlus : idxPlus === -1 ? idxParen : Math.min(idxParen, idxPlus);
+    const main = s.slice(0, splitAt).trimEnd();
+    const options = s.slice(splitAt).trimStart();
+    if (main === '') {
+        return { main: s, options: '' };
+    }
+    return { main, options };
+}
+
+const props = defineProps({
+    ticket: {
+        type: Object,
+        required: true,
+    },
+});
+
+defineEmits(['serve']);
+
+const nameParts = computed(() => splitKdsTicketDisplayName(props.ticket?.name));
+
+const qtyGt1 = computed(() => Number(props.ticket?.qty) > 1);
+
+const rowClass = computed(() => {
+    const s = props.ticket?.status;
+    if (s === 'served') {
+        return 'bg-slate-700 text-slate-300';
+    }
+    if (s === 'confirmed' || s === 'cooking') {
+        return 'bg-rose-900 text-white';
+    }
+    return 'bg-slate-800 text-slate-200';
+});
+</script>
+</file>
+
+<file path="resources/js/kds2/lib/README.md">
+# lib/
+
+純ロジック置き場（Vue / Pinia / DOM 依存なし）。
+
+## 用途例
+- `queue.js`          — pending_actions のリトライロジック
+- `idempotency.js`    — 二重タップ防止（同一 idempotency キーのマージ）
+- `batchKey.js`       — バッチキー計算（`b:uuid` / `o:orderId`）
+- `clock.js`          — サーバー時刻オフセット補正
+</file>
+
+<file path="resources/js/kds2/stores/README.md">
+# stores/
+
+Pinia ストア置き場。KDS V2 の Single Source of Truth。
+
+## ルール（.cursorrules [RULE] KDS V2 SPA Architecture）
+- ユーザー操作 → **必ずここを通す**（Page コンポーネントから直接 axios 禁止）
+- 楽観的更新: store を即時更新 → `pending_actions` キューへ積む → バックグラウンド送信
+- Pusher イベントハンドラも store への patch のみ（fetch 再取得禁止）
+
+## 命名規則
+- `use{Domain}Store.js` 形式 (例: `useTicketStore.js`, `useMasterStore.js`)
+</file>
+
+<file path="resources/js/kds2/stores/useFilterStore.js">
+import { defineStore } from 'pinia'
+
+export const useFilterStore = defineStore('kds2Filter', {
+    state: () => ({
+        showKitchen: true,
+        showHall: true,
+    }),
+
+    actions: {
+        load(shopId) {
+            const raw = localStorage.getItem(`kds2_filter_${shopId}`)
+            if (!raw) return
+            try {
+                const data = JSON.parse(raw)
+                this.showKitchen = data.showKitchen ?? true
+                this.showHall = data.showHall ?? true
+            } catch {}
+        },
+
+        persist(shopId) {
+            localStorage.setItem(`kds2_filter_${shopId}`, JSON.stringify({
+                showKitchen: this.showKitchen,
+                showHall: this.showHall,
+            }))
+        },
+
+        toggle(key, shopId) {
+            this[key] = !this[key]
+            this.persist(shopId)
+        },
+    },
+})
+</file>
+
+<file path="resources/js/kds2/stores/useMasterStore.js">
+import { defineStore } from 'pinia'
+
+export const useMasterStore = defineStore('kds2Master', {
+    state: () => ({
+        shopId: 0,
+        kitchenIds: [],
+        hallIds: [],
+        filterStrict: false,
+        categories: [],
+        loadedAt: null,
+    }),
+
+    getters: {
+        isLoaded: (state) => state.loadedAt !== null,
+    },
+
+    actions: {
+        loadFromStorage(shopId) {
+            const raw = localStorage.getItem(`kds2_master_${shopId}`)
+            if (!raw) return false
+            try {
+                const data = JSON.parse(raw)
+                this.shopId = shopId
+                this.kitchenIds = data.kitchenIds ?? []
+                this.hallIds = data.hallIds ?? []
+                this.filterStrict = data.filter_strict ?? false
+                this.categories = data.categories ?? []
+                this.loadedAt = data.savedAt ?? null
+                return true
+            } catch {
+                return false
+            }
+        },
+
+        async syncFromApi(shopId) {
+            const res = await fetch(`/kds2/api/master`)
+            const data = await res.json()
+            this.shopId = shopId
+            // API は snake_case で返す (kitchen_category_ids / hall_category_ids)
+            this.kitchenIds = data.kitchen_category_ids ?? []
+            this.hallIds = data.hall_category_ids ?? []
+            this.filterStrict = data.filter_strict ?? false
+            this.categories = data.categories ?? []
+            this.loadedAt = new Date().toISOString()
+            localStorage.setItem(`kds2_master_${shopId}`, JSON.stringify({
+                kitchenIds: this.kitchenIds,
+                hallIds: this.hallIds,
+                filter_strict: this.filterStrict,
+                categories: this.categories,
+                savedAt: this.loadedAt,
+            }))
+        },
+    },
+})
+</file>
+
+<file path="resources/js/kds2/stores/useTicketStore.js">
+import { defineStore } from 'pinia'
+
+export const useTicketStore = defineStore('kds2Tickets', {
+    state: () => ({
+        batches: [], // APIレスポンスのbatches配列
+        queued: 0,
+        generatedAt: null,
+        pendingActions: [], // { id, rev, retriesLeft }
+    }),
+
+    actions: {
+        hydrate(data) {
+            this.batches = data.batches ?? []
+            this.queued = data.queued ?? 0
+            this.generatedAt = data.generated_at ?? null
+        },
+
+        markServedOptimistic(ticketId) {
+            for (const batch of this.batches) {
+                const ticket = batch.tickets.find((t) => t.id === ticketId)
+                if (ticket) {
+                    ticket.status = 'served'
+                    break
+                }
+            }
+        },
+
+        enqueue(id, rev) {
+            this.pendingActions.push({ id, rev, retriesLeft: 5 })
+        },
+    },
+})
+</file>
+
+<file path="resources/js/kds2/types/README.md">
+# types/
+
+JSDoc / TypeScript 型定義置き場。
+
+## 主な型（Phase 2 以降で定義予定）
+- `Ticket`       — spec.md §4 GET /kds2/api/tickets の ticket オブジェクト
+- `Batch`        — バッチ + テーブルのまとまり
+- `PendingAction` — キュー内アクション要素
+- `MasterData`   — GET /kds2/api/master レスポンス
+</file>
+
+<file path="resources/js/kds2/App.vue">
+<template>
+    <KdsBoard
+        :batches="ticketStore.batches"
+        :queued="ticketStore.queued"
+        :shop-id="shopId"
+        :on-sync-master="handleSyncMaster"
+        @serve="handleServe"
+    />
+    <KdsConfirmModal
+        :show="confirmModal.show"
+        :ticket-name="confirmModal.name"
+        @confirm="onModalConfirm"
+        @cancel="onModalCancel"
+    />
+</template>
+
+<script setup>
+import { ref, onMounted, onUnmounted } from 'vue'
+import KdsBoard from './components/KdsBoard.vue'
+import KdsConfirmModal from './components/KdsConfirmModal.vue'
+import { useTicketStore } from './stores/useTicketStore'
+import { useMasterStore } from './stores/useMasterStore'
+import { useFilterStore } from './stores/useFilterStore'
+
+const shopId = Number(
+    document.querySelector('meta[name="kds-shop-id"]')?.content ?? 0,
+)
+const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+
+const ticketStore = useTicketStore()
+const master = useMasterStore()
+const filter = useFilterStore()
+
+const confirmModal = ref({ show: false, id: null, rev: null, name: '' })
+
+let pollTimer = null
+
+async function fetchTickets() {
+    try {
+        const res = await fetch('/kds2/api/tickets')
+        const data = await res.json()
+        ticketStore.hydrate(data)
+    } catch (e) {
+        console.error('[KDS] fetchTickets failed', e)
+    }
+}
+
+async function handleServe(id, rev, isLast, name) {
+    if (isLast) {
+        confirmModal.value = { show: true, id, rev, name }
+        return
+    }
+    ticketStore.markServedOptimistic(id)
+    try {
+        await fetch(`/kds2/api/tickets/${id}/served`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: JSON.stringify({ rev }),
+        })
+    } catch (e) {
+        console.error('[KDS] markServed failed', e)
+    }
+}
+
+async function onModalConfirm() {
+    const { id, rev } = confirmModal.value
+    confirmModal.value = { show: false, id: null, rev: null, name: '' }
+    ticketStore.markServedOptimistic(id)
+    try {
+        await fetch(`/kds2/api/tickets/${id}/served`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrf,
+            },
+            body: JSON.stringify({ rev }),
+        })
+    } catch (e) {
+        console.error('[KDS] markServed failed', e)
+    }
+}
+
+function onModalCancel() {
+    confirmModal.value = { show: false, id: null, rev: null, name: '' }
+}
+
+async function handleSyncMaster() {
+    await master.syncFromApi(shopId)
+}
+
+onMounted(async () => {
+    filter.load(shopId)
+    const cached = master.loadFromStorage(shopId)
+    if (!cached) await master.syncFromApi(shopId)
+    await fetchTickets()
+    pollTimer = setInterval(fetchTickets, 2000)
+})
+
+onUnmounted(() => {
+    clearInterval(pollTimer)
+})
+</script>
+</file>
+
+<file path="resources/js/kds2/main.js">
+import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import App from './App.vue';
+
+const app = createApp(App);
+
+app.use(createPinia());
+app.mount('#kds2-app');
+</file>
+
+<file path="resources/views/kds2/app.blade.php">
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="kds-shop-id" content="{{ session('kds.active_shop_id', 0) }}">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>KDS V2</title>
+    @vite(['resources/css/app.css', 'resources/js/kds2/main.js'])
+</head>
+<body class="min-h-full bg-gray-950 text-gray-100 antialiased">
+    <div id="kds2-app"></div>
+</body>
+</html>
+</file>
+
+<file path="vite.config.js">
+import { defineConfig } from 'vite';
+import laravel from 'laravel-vite-plugin';
+import tailwindcss from '@tailwindcss/vite';
+import vue from '@vitejs/plugin-vue';
+
+export default defineConfig({
+    plugins: [
+        // Filament 管理画面テーマは Tailwind v3（Filament 公式プリセット）で別ビルド: npm run build:filament
+        laravel({
+            input: [
+                'resources/css/app.css',
+                'resources/js/app.js',
+                // KDS V2: POS (Livewire/Alpine) と完全分離した Vue 3 + Pinia エントリ
+                'resources/js/kds2/main.js',
+                // POS2 V2 shell: Livewire/Alpine と完全分離した Inertia + Vue 3 + Pinia
+                'resources/js/pos2/main.js',
+            ],
+            refresh: true,
+        }),
+        vue(),
+        tailwindcss(),
+        
+    ],
+    server: {
+        watch: {
+            ignored: ['**/storage/framework/views/**'],
+        },
+    },
+});
+</file>
+
+</files>

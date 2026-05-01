@@ -152,4 +152,24 @@ final class ClotureModalTest extends TestCase
 
         $this->assertSame(TableSessionStatus::Closed, $session->fresh()->status);
     }
+
+    public function test_confirm_uses_pos2_settlement_actor_config_when_no_web_auth(): void
+    {
+        $shop = $this->makeShop('cloture-pos2-actor');
+        $operator = $this->makeOperator();
+        $session = $this->openActiveSession($shop, $this->makeCustomerTable($shop));
+        $this->placeLinedOrder($shop, $session, 5_000);
+
+        config(['app.pos2_settlement_actor_user_id' => (int) $operator->id]);
+
+        Livewire::test(ClotureModal::class, ['shopId' => (int) $shop->id])
+            ->dispatch('pos-cloture-open', shop_id: (int) $shop->id, table_session_id: (int) $session->id, expected_revision: (int) $session->session_revision)
+            ->call('setTendered', 5_000)
+            ->call('confirm')
+            ->assertDispatched('pos-settlement-completed');
+
+        $this->assertDatabaseHas('table_session_settlements', [
+            'table_session_id' => $session->id,
+        ]);
+    }
 }

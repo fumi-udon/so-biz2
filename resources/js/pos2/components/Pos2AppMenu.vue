@@ -88,22 +88,20 @@ async function onDevCleanUp() {
 </script>
 
 <template>
-    <div class="pointer-events-none fixed right-3 top-3 z-[45] md:right-4 md:top-4">
-        <div class="pointer-events-auto flex flex-col items-end gap-2">
-            <button
-                type="button"
-                class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-600 bg-slate-900/95 text-slate-200 shadow-lg backdrop-blur-sm transition hover:border-slate-500 hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100"
-                :aria-expanded="open"
-                aria-controls="pos2-dev-menu-panel"
-                aria-label="開発メニュー"
-                @click="open = !open"
-            >
-                <span class="sr-only">メニュー</span>
-                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-            </button>
-        </div>
+    <div class="relative inline-block">
+        <button
+            type="button"
+            class="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-600 bg-slate-900/95 text-slate-200 shadow-lg backdrop-blur-sm transition hover:border-slate-500 hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100"
+            :aria-expanded="open"
+            aria-controls="pos2-dev-menu-panel"
+            aria-label="開発メニュー"
+            @click="open = !open"
+        >
+            <span class="sr-only">メニュー</span>
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+        </button>
 
         <Teleport to="body">
             <div

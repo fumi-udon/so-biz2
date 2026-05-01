@@ -47,35 +47,31 @@ final class KdsV2Controller extends Controller
             $tickets = [];
             foreach ($batchLines as $line) {
                 $isPending = in_array($line->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true);
-                // 表示名: スナップショットのKDS名 → スナップショット名 → Liveモデル名 の優先順
-                $name = $line->snapshot_kitchen_name
-                    ?? $line->snapshot_name
-                    ?? $line->menuItem?->kitchen_name
-                    ?? $line->menuItem?->name
-                    ?? '';
+                $parts = $this->buildKds2TicketDisplayParts($line);
 
                 $tickets[] = [
-                    'id'      => $line->id,
-                    'rev'     => $line->line_revision,
-                    'name'    => $name,
-                    'qty'     => $line->qty,
-                    'status'  => $line->status->value,
-                    'cat_id'  => $line->menuItem?->menu_category_id,
+                    'id' => $line->id,
+                    'rev' => $line->line_revision,
+                    'name' => $parts['name'],
+                    'options' => $parts['options'],
+                    'qty' => $line->qty,
+                    'status' => $line->status->value,
+                    'cat_id' => $line->menuItem?->menu_category_id,
                     'is_last' => $isPending && $pendingCount === 1,
                 ];
             }
 
             $batches[] = [
-                'key'     => $batchKey,
-                'table'   => $tableName,
+                'key' => $batchKey,
+                'table' => $tableName,
                 'tickets' => $tickets,
             ];
         }
 
         return response()->json([
-            'shop_id'      => $shopId,
-            'batches'      => $batches,
-            'queued'       => 0, // pending_actions カウントはクライアント側 Pinia で管理
+            'shop_id' => $shopId,
+            'batches' => $batches,
+            'queued' => 0, // pending_actions カウントはクライアント側 Pinia で管理
             'generated_at' => now()->toIso8601String(),
         ]);
     }
@@ -99,8 +95,8 @@ final class KdsV2Controller extends Controller
         // 冪等: 既に Served なら 200 を返す
         if ($line->status === OrderLineStatus::Served) {
             return response()->json([
-                'id'     => $line->id,
-                'rev'    => $line->line_revision,
+                'id' => $line->id,
+                'rev' => $line->line_revision,
                 'status' => 'served',
             ]);
         }
@@ -110,13 +106,13 @@ final class KdsV2Controller extends Controller
                 ->execute($id, OrderLineStatus::Served->value, (int) $validated['rev']);
 
             return response()->json([
-                'id'     => $updated->id,
-                'rev'    => $updated->line_revision,
+                'id' => $updated->id,
+                'rev' => $updated->line_revision,
                 'status' => 'served',
             ]);
         } catch (RevisionConflictException $e) {
             return response()->json([
-                'error'       => 'conflict',
+                'error' => 'conflict',
                 'current_rev' => $e->currentRevision,
             ], 409);
         }
@@ -136,13 +132,64 @@ final class KdsV2Controller extends Controller
                 ->toArray();
 
             return [
-                'categories'           => $categories,
+                'categories' => $categories,
                 'kitchen_category_ids' => KdsFilterSetting::kitchenCategoryIds($shopId),
-                'hall_category_ids'    => KdsFilterSetting::hallCategoryIds($shopId),
-                'filter_strict'        => KdsFilterSetting::isCategoryFilterConfigured($shopId),
+                'hall_category_ids' => KdsFilterSetting::hallCategoryIds($shopId),
+                'filter_strict' => KdsFilterSetting::isCategoryFilterConfigured($shopId),
             ];
         });
 
         return response()->json($data);
+    }
+
+    /**
+     * KDS2 表示用: 1行目 = snapshot_kitchen_name + 半角スペース + スタイル名、2行目 = トッピング名（カンマ区切り）。
+     *
+     * @return array{name: string, options: string}
+     */
+    private function buildKds2TicketDisplayParts(OrderLine $line): array
+    {
+        $snap = is_array($line->snapshot_options_payload) ? $line->snapshot_options_payload : [];
+
+        $kitchen = trim((string) ($line->snapshot_kitchen_name ?? ''));
+        if ($kitchen === '') {
+            $kitchen = trim((string) ($line->snapshot_name ?? ''));
+        }
+        if ($kitchen === '') {
+            $kitchen = trim((string) ($line->menuItem?->kitchen_name ?? $line->menuItem?->name ?? ''));
+        }
+
+        $styleName = '';
+        if (isset($snap['style']) && is_array($snap['style'])) {
+            $sn = trim((string) ($snap['style']['name'] ?? ''));
+            if ($sn !== '') {
+                $styleName = $sn;
+            }
+        }
+
+        $toppingNames = [];
+        if (isset($snap['toppings']) && is_array($snap['toppings'])) {
+            foreach ($snap['toppings'] as $t) {
+                if (! is_array($t)) {
+                    continue;
+                }
+                $tn = trim((string) ($t['name'] ?? ''));
+                if ($tn !== '') {
+                    $toppingNames[] = $tn;
+                }
+            }
+        }
+
+        $name = $kitchen;
+        if ($styleName !== '') {
+            $name = $kitchen !== '' ? $kitchen.' '.$styleName : $styleName;
+        }
+
+        $options = $toppingNames === [] ? '' : implode(', ', $toppingNames);
+
+        return [
+            'name' => $name,
+            'options' => $options,
+        ];
     }
 }

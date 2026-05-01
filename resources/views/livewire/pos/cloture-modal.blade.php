@@ -205,24 +205,22 @@
                     </div>
 
                     <x-slot name="footer">
-                        <div class="fi-modal-footer-actions flex flex-wrap items-center justify-center gap-2 text-[12px]">
-                            <x-filament::button
+                        <div class="fi-modal-footer-actions flex flex-wrap items-center justify-center gap-3 pb-2 text-[12px]">
+                            {{-- キャンセル（Filament 非依存・Tailwind のみ） --}}
+                            <button
                                 type="button"
-                                color="gray"
-                                size="sm"
-                                outlined
                                 wire:click="closeModal"
-                                :disabled="$locked"
+                                @disabled($locked)
                                 wire:loading.attr="disabled"
                                 wire:target="closeModal,confirm"
-                                class="!min-h-9 !px-4 !text-[12px] !font-semibold"
+                                class="inline-flex min-h-11 items-center justify-center rounded-xl border-2 border-slate-300 bg-white px-6 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
                                 {{ __('rad_table.cloture_cancel') }}
-                            </x-filament::button>
-                            <x-filament::button
+                            </button>
+
+                            {{-- 確定（Filament 非依存） --}}
+                            <button
                                 type="button"
-                                color="danger"
-                                size="sm"
                                 x-on:click="
                                     if (submitting) { return }
                                     if (changeMinor() < 0) { return }
@@ -232,15 +230,14 @@
                                         submitting = false
                                     })
                                 "
-                                x-bind:disabled="submitting || @js($locked) || changeMinor() < 0"
+                                x-bind:disabled="submitting || {{ json_encode($locked) }} || changeMinor() < 0"
                                 wire:loading.attr="disabled"
                                 wire:target="confirm"
-                                :loading-indicator="false"
-                                class="!min-h-9 !px-4 !text-[12px] !font-semibold"
+                                class="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-600 px-8 text-sm font-bold text-white shadow-md transition hover:bg-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600 dark:bg-emerald-500 dark:hover:bg-emerald-400"
                             >
                                 <span wire:loading.remove wire:target="confirm">{{ __('rad_table.cloture_confirm') }}</span>
                                 <span wire:loading wire:target="confirm">{{ __('pos.ui_working') }}</span>
-                            </x-filament::button>
+                            </button>
                         </div>
                     </x-slot>
                 </x-filament::modal>

@@ -29,13 +29,6 @@ const shopId = computed(() => Number(page.props.shop_id ?? 0));
 const debugEnabled = computed(() => page.props?.auth?.debug === true);
 const isTableSelected = computed(() => tableStore.hasSelection);
 
-const selectedTile = computed(() => {
-    const tid = tableStore.selectedTableId;
-    if (tid == null) return null;
-    const tiles = sessionUi.dashboardTiles ?? [];
-    return tiles.find((t) => Number(t.restaurantTableId) === Number(tid)) ?? null;
-});
-
 const tilesByTableId = computed(() => {
     const m = {};
     for (const t of sessionUi.dashboardTiles ?? []) {
@@ -53,6 +46,72 @@ const selectedTableName = computed(() => {
     const row = (masterStore.tables ?? []).find((t) => Number(t.id) === Number(tid));
     return row?.name != null && String(row.name).trim() !== '' ? String(row.name) : `T${tid}`;
 });
+
+const pos2BridgeOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+function onPos2BridgeMessage(event) {
+    if (typeof window === 'undefined' || event.origin !== pos2BridgeOrigin) {
+        return;
+    }
+    const data = event.data;
+    if (!data || data.type !== 'pos2-bridge' || typeof data.action !== 'string') {
+        return;
+    }
+    if (
+        data.action === 'receipt-preview-printed'
+        || data.action === 'close-receipt'
+        || data.action === 'pos-settlement-completed'
+    ) {
+        void refreshAfterPos2Bridge();
+    }
+}
+
+async function refreshAfterPos2Bridge() {
+    await sessionUi.fetchTableDashboard({ silent: true });
+    const sid = sessionUi.activeTableSessionId;
+    if (sid != null && sid > 0) {
+        await sessionUi.fetchSessionOrders(sid, { skipLoadingUi: true, silent: true });
+    }
+    if (debugEnabled.value) {
+        debugStore.setUiSnapshot(tableStore.selectedTableId, draftStore.totalItemsCount);
+    }
+}
+
+/** ブリッジを開く直前の超楽観ガード（通信なし） */
+function tryOpenSettlementBridge() {
+    if (Number(sessionUi.sessionTotalMinor) === 0) {
+        window.alert('オーダーデータがありません。');
+        return false;
+    }
+    if (sessionUi.hasUnackedPlacedOrders) {
+        window.alert('未送信（未Recu）の注文があります。先にキッチンへ送信してください。');
+        return false;
+    }
+    const sid = sessionUi.activeTableSessionId;
+    if (sid == null || Number(sid) < 1) {
+        window.alert('オーダーデータがありません。');
+        return false;
+    }
+    return true;
+}
+
+function openAdditionBridge() {
+    if (!tryOpenSettlementBridge()) {
+        return;
+    }
+    const sid = sessionUi.activeTableSessionId;
+    const url = `${window.location.origin}/pos2/bridge/sessions/${Number(sid)}/addition`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function openClotureBridge() {
+    if (!tryOpenSettlementBridge()) {
+        return;
+    }
+    const sid = sessionUi.activeTableSessionId;
+    const url = `${window.location.origin}/pos2/bridge/sessions/${Number(sid)}/cloture`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
 
 function hasDraftBadgeForTable(tableId) {
     const tile = tilesByTableId.value[Number(tableId)];
@@ -83,8 +142,35 @@ function safeTrace(event, payload) {
 /**
  * 0ms でタイルキャッシュ（Pinia）を即反映し、API 更新はバックグラウンドで行う。
  * Stale-While-Revalidate: キャッシュ値で即画面遷移 → 裏で差分更新。
+ *
+ * **再タップ:** 既に選択中の卓タイルを再度タップした場合は、卓切り替えフローを走らせず
+ * `adding` → `monitoring` のみ戻し、**`[↻]` と同様**に `fetchTableDashboard({ silent: true })` → 当該タイルのセッションで
+ * `fetchSessionOrders`（`skipLoadingUi`）を裏実行し、左タイルと右リストの認知ズレを防ぐ。
  */
 function onSelectTable(tableId) {
+    const numericId = Number(tableId);
+    if (!Number.isFinite(numericId)) {
+        return;
+    }
+
+    if (tableStore.selectedTableId === numericId) {
+        if (sessionUi.uiMode === 'adding') {
+            sessionUi.exitToMonitoring();
+        }
+        void (async () => {
+            await sessionUi.fetchTableDashboard({ silent: true });
+            await applyDashboardDeltaToSelectedTable(numericId, { skipLoadingUi: true });
+            if (debugEnabled.value) {
+                safeTrace('table.select.retap', {
+                    tableId: numericId,
+                    sessionId: sessionUi.activeTableSessionId,
+                });
+                debugStore.setUiSnapshot(tableStore.selectedTableId, draftStore.totalItemsCount);
+            }
+        })();
+        return;
+    }
+
     const traceId = debugEnabled.value ? debugStore.nextTraceId('table-select') : null;
 
     // ① 0ms: 選択状態だけ即 Pinia に反映（DOM が切り替わる）
@@ -341,10 +427,14 @@ function tileSyncSnapshotsEqual(a, b) {
 }
 
 /**
- * ポーリングでダッシュボード差分を検知したとき、選択卓のセッション／右ペイン注文を裏同期。
+ * ダッシュボード取得済みの `dashboardTiles` を前提に、当該卓のセッション ID と右ペイン注文を同期。
+ * ポーリング差分時・同卓再タップ（`fetchTableDashboard` 直後）の双方で利用。
+ *
  * @param {number} tableId
+ * @param {{ skipLoadingUi?: boolean }} [options]
  */
-async function applyDashboardDeltaToSelectedTable(tableId) {
+async function applyDashboardDeltaToSelectedTable(tableId, options = {}) {
+    const skipLoadingUi = options.skipLoadingUi === true;
     const freshTile = sessionUi.dashboardTiles?.find((t) => Number(t.restaurantTableId) === Number(tableId)) ?? null;
     const freshSessionId = freshTile?.activeTableSessionId != null
         && Number(freshTile.activeTableSessionId) > 0
@@ -362,7 +452,10 @@ async function applyDashboardDeltaToSelectedTable(tableId) {
                 debugEnabled: false,
             });
         }
-        await sessionUi.fetchSessionOrders(freshSessionId, { silent: true });
+        await sessionUi.fetchSessionOrders(freshSessionId, {
+            silent: true,
+            ...(skipLoadingUi ? { skipLoadingUi: true } : {}),
+        });
     } else if (sessionUi.activeTableSessionId != null) {
         sessionUi.activeTableSessionId = null;
         draftStore.tableSessionId = null;
@@ -488,6 +581,8 @@ async function onPos2StoragePurged() {
 }
 
 onMounted(async () => {
+    window.addEventListener('message', onPos2BridgeMessage);
+
     const restoredFromStorage = masterStore.loadFromStorage(shopId.value);
 
     if (restoredFromStorage) {
@@ -515,6 +610,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    window.removeEventListener('message', onPos2BridgeMessage);
     if (dashboardPollTimerId != null) {
         clearInterval(dashboardPollTimerId);
         dashboardPollTimerId = null;
@@ -524,12 +620,6 @@ onUnmounted(() => {
 
 <template>
     <Head title="POS V2" />
-
-    <Pos2AppMenu
-        v-if="debugEnabled && shopId > 0"
-        :shop-id="shopId"
-        @purged="onPos2StoragePurged"
-    />
 
     <main
         class="mx-auto flex min-h-[100dvh] w-full max-w-[1680px] flex-col bg-slate-950 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-slate-100 md:px-4 md:py-4"
@@ -573,39 +663,46 @@ onUnmounted(() => {
                 </div>
 
                 <template v-else>
-                    <!-- ツールバー（現場モック準拠: 卓バッジ・更新・AJOUTER・REÇU STAFF） -->
+                    <!-- ツールバー（左=注文系 / 右=決済・システム系） -->
                     <div
-                        class="mb-2 flex flex-wrap items-center gap-2 border-b border-slate-700/90 pb-3 md:mb-3 md:flex-nowrap md:justify-between"
+                        class="mb-3 flex flex-col gap-3 border-b border-slate-700/90 pb-3 xl:flex-row xl:items-center xl:justify-between"
                     >
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span
-                                class="rounded-lg bg-amber-300 px-3 py-2 text-sm font-black tracking-tight text-amber-950 shadow-sm dark:bg-amber-300 dark:text-amber-950"
-                            >
-                                {{ selectedTableName }}
-                            </span>
-                            <button
-                                type="button"
-                                class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-emerald-600 bg-emerald-600 text-white shadow-md transition hover:bg-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500"
-                                :disabled="draftStore.isOrderSubmitting"
-                                title="更新 / Rafraîchir"
-                                aria-label="更新"
-                                @click="onRefreshDetail"
-                            >
-                                <span class="text-lg leading-none" aria-hidden="true">↻</span>
-                            </button>
-                        </div>
-                        <div class="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
+                        <!-- 【左側】コンテキスト ＆ 注文アクション -->
+                        <div class="flex flex-wrap items-center gap-2 md:gap-3">
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="rounded-lg bg-amber-300 px-3 py-2 text-sm font-black tracking-tight text-amber-950 shadow-sm dark:bg-amber-300 dark:text-amber-950"
+                                >
+                                    {{ selectedTableName }}
+                                </span>
+                                <button
+                                    type="button"
+                                    class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-emerald-600 bg-emerald-600 text-white shadow-md transition hover:bg-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500 dark:hover:bg-emerald-500"
+                                    :disabled="draftStore.isOrderSubmitting"
+                                    title="更新 / Rafraîchir"
+                                    aria-label="更新"
+                                    @click="onRefreshDetail"
+                                >
+                                    <span class="text-lg leading-none" aria-hidden="true">↻</span>
+                                </button>
+                            </div>
+
+                            <div
+                                class="hidden h-8 w-px shrink-0 bg-slate-600 md:block dark:bg-slate-500"
+                                aria-hidden="true"
+                            />
+
                             <button
                                 v-if="sessionUi.uiMode === 'adding'"
                                 type="button"
-                                class="min-h-11 rounded-xl border border-slate-500 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 dark:text-slate-200"
+                                class="min-h-11 rounded-xl border border-slate-500 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-800"
                                 @click="sessionUi.exitToMonitoring()"
                             >
                                 Fermer le menu
                             </button>
                             <button
                                 type="button"
-                                class="min-h-11 min-w-[7.5rem] rounded-xl border-2 border-sky-500 bg-sky-400 px-4 py-2 text-sm font-black uppercase tracking-wide text-sky-950 shadow-md transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-40 dark:border-sky-400 dark:bg-sky-500 dark:text-sky-950 dark:hover:bg-sky-400"
+                                class="min-h-11 min-w-[7.5rem] shrink-0 rounded-xl border-2 border-sky-500 bg-sky-400 px-4 py-2 text-sm font-black uppercase tracking-wide text-sky-950 shadow-md transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-40 dark:border-sky-400 dark:bg-sky-500 dark:text-sky-950 dark:hover:bg-sky-400"
                                 :disabled="!canAddOrSubmit || draftStore.isOrderSubmitting"
                                 @click="onTapAdd"
                             >
@@ -613,42 +710,45 @@ onUnmounted(() => {
                             </button>
                             <button
                                 type="button"
-                                class="min-h-11 min-w-[8.5rem] rounded-xl border-2 border-indigo-800 bg-indigo-900 px-4 py-2 text-sm font-black uppercase tracking-wide text-white shadow-md transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-45 dark:border-indigo-600 dark:bg-indigo-950 dark:hover:bg-indigo-900"
+                                class="min-h-11 min-w-[8.5rem] shrink-0 rounded-xl border-2 border-indigo-800 bg-indigo-900 px-4 py-2 text-sm font-black uppercase tracking-wide text-white shadow-md transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-45 dark:border-indigo-600 dark:bg-indigo-950 dark:text-white dark:hover:bg-indigo-900"
                                 :disabled="sendKdsBusy || !sessionUi.hasUnackedPlacedOrders || draftStore.isOrderSubmitting"
                                 @click="onSendKds"
                             >
                                 REÇU STAFF
                             </button>
                         </div>
-                    </div>
 
-                    <div
-                        v-if="selectedTile"
-                        class="mb-2 grid shrink-0 grid-cols-3 gap-2 rounded-xl border border-slate-600/80 bg-slate-900/60 p-2 text-center text-[11px] sm:text-xs md:mb-3"
-                    >
-                        <div class="rounded-lg bg-slate-800/80 px-1 py-2 dark:bg-slate-800/90">
-                            <p class="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                Total
-                            </p>
-                            <p class="mt-0.5 font-bold tabular-nums text-white dark:text-white">
-                                {{ formatDT(Number(selectedTile.sessionTotalMinor ?? 0)) }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg bg-slate-800/80 px-1 py-2 dark:bg-slate-800/90">
-                            <p class="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                Commandes
-                            </p>
-                            <p class="mt-0.5 font-bold tabular-nums text-white dark:text-white">
-                                {{ selectedTile.relevantPosOrderCount ?? 0 }}
-                            </p>
-                        </div>
-                        <div class="rounded-lg bg-slate-800/80 px-1 py-2 dark:bg-slate-800/90">
-                            <p class="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                Statut
-                            </p>
-                            <p class="mt-0.5 truncate font-mono text-[10px] font-bold uppercase text-cyan-200 dark:text-cyan-200">
-                                {{ selectedTile.uiStatus ?? '—' }}
-                            </p>
+                        <!-- 【右側】Addition / Clôture | ハンバーガー -->
+                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                class="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-violet-700 bg-violet-900/90 px-3 py-2 text-sm font-black uppercase tracking-wide text-violet-50 shadow-md transition hover:bg-violet-800 dark:border-violet-500 dark:bg-violet-950 dark:text-violet-50 dark:hover:bg-violet-900"
+                                @click="openAdditionBridge"
+                            >
+                                <span aria-hidden="true">🖨️</span>
+                                <span class="hidden sm:inline">L'ADDITION</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-black uppercase tracking-wide text-white shadow-md transition hover:bg-emerald-600 dark:border-emerald-500 dark:bg-emerald-800 dark:text-white dark:hover:bg-emerald-700"
+                                @click="openClotureBridge"
+                            >
+                                <span aria-hidden="true">💰</span>
+                                <span class="hidden sm:inline">CLÔTURE</span>
+                            </button>
+
+                            <template v-if="debugEnabled && shopId > 0">
+                                <div
+                                    class="mx-1 h-8 w-px shrink-0 bg-slate-600 dark:bg-slate-500"
+                                    aria-hidden="true"
+                                />
+                                <div class="flex shrink-0 items-center justify-center">
+                                    <Pos2AppMenu
+                                        :shop-id="shopId"
+                                        @purged="onPos2StoragePurged"
+                                    />
+                                </div>
+                            </template>
                         </div>
                     </div>
 

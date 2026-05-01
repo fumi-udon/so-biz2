@@ -112,6 +112,17 @@ class ClotureModal extends Component
         $this->uiState = 'idle';
     }
 
+    /**
+     * テスト・デバッグ用: 預かり金（ミリウム）を直接セットし、釣りを同期する。
+     */
+    public function setTendered(int $tenderedMinor): void
+    {
+        $tendered = MenuItemMoney::snapMinorToHalfDt(max(0, $tenderedMinor));
+        $this->tenderedMinor = $tendered;
+        $this->tenderedDtInput = MenuItemMoney::minorToDtInputString($tendered);
+        $this->changeMinor = $tendered - $this->finalTotalMinor;
+    }
+
     public function confirm(): void
     {
         if ($this->uiState === 'in_flight' || $this->tableSessionId === null) {
@@ -127,7 +138,19 @@ class ClotureModal extends Component
         );
 
         try {
-            $actorUserId = (int) (auth()->id() ?? 0);
+            $actorUserId = $this->resolveSettlementActorUserId();
+            if ($actorUserId < 1) {
+                $this->uiState = 'failed';
+                Notification::make()
+                    ->title(__('pos.action_failed'))
+                    ->body(
+                        '会計を記録するユーザー ID が未設定です。環境変数 POS2_SETTLEMENT_ACTOR_USER_ID に users.id を設定し、POS2 から再ログインしてください。',
+                    )
+                    ->danger()
+                    ->send();
+
+                return;
+            }
             $this->debugSettleLog('confirm_enter', [
                 'trace_id' => $traceId,
                 'shop_id' => $this->shopId,
@@ -308,6 +331,20 @@ class ClotureModal extends Component
         $this->changeMinor = 0;
 
         return true;
+    }
+
+    private function resolveSettlementActorUserId(): int
+    {
+        $id = (int) (auth()->id() ?? 0);
+        if ($id >= 1) {
+            return $id;
+        }
+        $sessionActor = (int) (session('pos2.settlement_actor_user_id') ?? 0);
+        if ($sessionActor >= 1) {
+            return $sessionActor;
+        }
+
+        return (int) config('app.pos2_settlement_actor_user_id', 0);
     }
 
     // TEMP: POS_SETTLE_DEBUG

@@ -33,6 +33,17 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
          */
         hasUnackedPlacedOrders: (state) => state.sessionOrdersPayload?.has_unacked_placed === true,
 
+        /**
+         * GET .../orders の orders[].total_minor 合算（セッション注文ペイロードのみを SSOT とする）。
+         */
+        sessionTotalMinor() {
+            const orders = this.sessionOrdersPayload?.orders;
+            if (!Array.isArray(orders)) {
+                return 0;
+            }
+            return orders.reduce((s, o) => s + Number(o?.total_minor ?? 0), 0);
+        },
+
         tileForSelected(state) {
             const tid = state.selectedRestaurantTableId;
             if (tid == null) return null;

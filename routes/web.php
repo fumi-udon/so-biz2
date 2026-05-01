@@ -8,6 +8,7 @@ use App\Http\Controllers\KdsAuthController;
 use App\Http\Controllers\MyPageController;
 use App\Http\Controllers\NewsNoteController;
 use App\Http\Controllers\Pos2\Pos2AuthController;
+use App\Http\Controllers\Pos2\Pos2BridgeController;
 use App\Http\Controllers\Pos2\Pos2Controller;
 use App\Http\Controllers\Pos2\Pos2DevController;
 use App\Http\Controllers\Pos2\Pos2SessionController;
@@ -267,5 +268,10 @@ Route::prefix('pos2')->name('pos2.')->group(function () {
         Route::post('/api/tables/{table}/orders', [Pos2SessionController::class, 'submitDraftOrdersForTable'])->name('api.tables.orders.submit');
         /** 開発のみ: 当該ショップの卓セッション・注文を DB から削除（config app.pos2_debug） */
         Route::post('/api/dev/purge-floor-data', [Pos2DevController::class, 'purgeFloorData'])->name('api.dev.purge-floor-data');
+
+        /** Phase 5: 旧 Livewire（ReceiptPreview / ClotureModal）を別タブで開く薄いブリッジ */
+        Route::get('/bridge/sessions/{session}/addition', [Pos2BridgeController::class, 'addition'])->name('bridge.sessions.addition');
+        Route::get('/bridge/sessions/{session}/cloture', [Pos2BridgeController::class, 'cloture'])->name('bridge.sessions.cloture');
+        Route::get('/bridge/sessions/{session}/receipt', [Pos2BridgeController::class, 'receipt'])->name('bridge.sessions.receipt');
     });
 });
