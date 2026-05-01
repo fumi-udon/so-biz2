@@ -14,6 +14,7 @@ use App\Domains\Pos\Tables\TableCategory;
 use App\Enums\OrderLineStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PrintIntent;
+use App\Enums\TableSessionManagementSource;
 use App\Enums\TableSessionStatus;
 use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\Pos\SessionRevisionMismatchException;
@@ -1433,6 +1434,7 @@ class TableActionHost extends Component
                 sourceTableSessionId: (int) $this->activeTableSessionId,
                 destTableId: $destTableId,
                 expectedSessionRevision: $this->expectedSessionRevision,
+                caller: TableSessionManagementSource::Legacy,
             );
 
             $newTableName = (string) (RestaurantTable::query()

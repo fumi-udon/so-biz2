@@ -2,6 +2,7 @@
 
 namespace App\Domains\Pos\Tables;
 
+use App\Models\RestaurantTable;
 use InvalidArgumentException;
 
 enum TableCategory: string
@@ -27,14 +28,39 @@ enum TableCategory: string
 
     public static function tryResolveFromId(int $id): ?self
     {
+        // Phase 3: categoryカラムから解決（正式実装）
+        $cat = RestaurantTable::query()
+            ->whereKey($id)
+            ->value('category');
+
+        if (is_string($cat) && $cat !== '') {
+            return self::tryFrom($cat);
+        }
+
+        // フォールバック: categoryがnull・テストデータ等
         $s = self::canonicalSlot($id);
 
         return match (true) {
-            $s >= 10 && $s <= 39 => self::Customer,
+            $s >= 1 && $s <= 99 => self::Customer,
             $s >= 100 && $s <= 109 => self::Staff,
-            $s >= 200 && $s <= 219 => self::Takeaway,
+            $s >= 200 && $s <= 220 => self::Takeaway,
             default => null,
         };
+    }
+
+    /**
+     * RestaurantTable モデルから category カラムを優先して解決する。
+     * カラムが null または未ロードの場合は tryResolveFromId() にフォールバック。
+     * Phase 3 完了後に tryResolveFromId() は廃止予定。
+     */
+    public static function resolveFromModel(RestaurantTable $table): ?self
+    {
+        $cat = $table->category ?? null;
+        if (is_string($cat) && $cat !== '') {
+            return self::tryFrom($cat);
+        }
+
+        return self::tryResolveFromId((int) $table->id);
     }
 
     public static function resolveFromIdOrFail(int $id): self

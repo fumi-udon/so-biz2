@@ -3,6 +3,7 @@
 namespace App\Actions\Pos;
 
 use App\Domains\Pos\Tables\TableCategory;
+use App\Enums\TableSessionManagementSource;
 use App\Enums\TableSessionStatus;
 use App\Exceptions\Pos\SessionManagedByPos2Exception;
 use App\Exceptions\Pos\SessionRevisionMismatchException;
@@ -18,9 +19,10 @@ final class ChangeTableSessionAction
         int $shopId,
         int $sourceTableSessionId,
         int $destTableId,
-        int $expectedSessionRevision
+        int $expectedSessionRevision,
+        TableSessionManagementSource $caller = TableSessionManagementSource::Legacy,
     ): void {
-        DB::transaction(function () use ($shopId, $sourceTableSessionId, $destTableId, $expectedSessionRevision): void {
+        DB::transaction(function () use ($shopId, $sourceTableSessionId, $destTableId, $expectedSessionRevision, $caller): void {
             $sourceSession = TableSession::query()
                 ->where('shop_id', $shopId)
                 ->whereKey($sourceTableSessionId)
@@ -32,7 +34,7 @@ final class ChangeTableSessionAction
                 throw new RuntimeException(__('rad_table.active_session_not_found'));
             }
 
-            if ($sourceSession->isManagedByPos2()) {
+            if ($caller === TableSessionManagementSource::Legacy && $sourceSession->isManagedByPos2()) {
                 throw SessionManagedByPos2Exception::forSession((int) $sourceSession->id);
             }
 

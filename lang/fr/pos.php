@@ -26,6 +26,8 @@ return [
     'change_table_dest_occupied' => 'Cette table est déjà occupée.',
     'change_table_invalid_target' => 'La table de destination doit etre une table client.',
     'change_table_revision_conflict_syncing' => 'Mis à jour depuis un autre appareil. Synchronisation.',
+    'change_table_success' => 'Table deplacee.',
+    'change_table_modal_hint' => 'Touchez une table client libre pour deplacer la session.',
     'action_logout' => 'Déconnexion',
     'logout_confirm' => 'Se déconnecter de cette caisse ? Les modifications non enregistrées pourront être perdues.',
     'footer_utility_menu' => 'Plus d’actions',

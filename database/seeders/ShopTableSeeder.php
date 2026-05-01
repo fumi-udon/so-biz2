@@ -75,30 +75,41 @@ class ShopTableSeeder extends Seeder
      */
     public static function insertDefaultTablesForShop(int $shopId, string $clientQrPrefix): void
     {
+        $offset = ($shopId - 1) * 1000;
+
+        // Client: T01〜T99 → ID: offset+1 〜 offset+99
         for ($i = 1; $i <= 99; $i++) {
             RestaurantTable::create([
+                'id' => $offset + $i,
                 'shop_id' => $shopId,
                 'name' => sprintf('T%02d', $i),
+                'category' => 'customer',
                 'qr_token' => sprintf('%s_%02d', $clientQrPrefix, $i),
                 'sort_order' => $i,
                 'is_active' => true,
             ]);
         }
 
+        // Staff Meal: ST01〜ST10 → ID: offset+100 〜 offset+109
         for ($i = 1; $i <= 10; $i++) {
             RestaurantTable::create([
+                'id' => $offset + 100 + ($i - 1),
                 'shop_id' => $shopId,
                 'name' => sprintf('ST%02d', $i),
+                'category' => 'staff',
                 'qr_token' => sprintf('ST%02d', $i),
                 'sort_order' => 100 + $i,
                 'is_active' => true,
             ]);
         }
 
+        // Takeout: TK01〜TK20 → ID: offset+200 〜 offset+219
         for ($i = 1; $i <= 20; $i++) {
             RestaurantTable::create([
+                'id' => $offset + 200 + ($i - 1),
                 'shop_id' => $shopId,
                 'name' => sprintf('TK%02d', $i),
+                'category' => 'takeaway',
                 'qr_token' => sprintf('TK%02d', $i),
                 'sort_order' => 200 + $i,
                 'is_active' => true,

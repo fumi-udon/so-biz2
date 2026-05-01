@@ -4,6 +4,7 @@
  */
 
 import { defineStore } from 'pinia';
+import { buildPos2JsonHeaders } from '../utils/pos2Http';
 
 /** @typedef {'monitoring' | 'adding'} Pos2UiMode */
 
@@ -317,6 +318,38 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
             await this.fetchSessionOrders(sid);
             await this.fetchTableDashboard();
             return { ok: true };
+        },
+
+        /**
+         * 卓移動 POST /pos2/tables/move
+         * @param {number} destTableId restaurant_tables.id
+         * @returns {Promise<{ ok: true } | { ok: false, reason?: string, status?: number, body?: Record<string, unknown> }>}
+         */
+        async submitChangeTable(destTableId) {
+            const sid = this.activeTableSessionId;
+            if (sid == null || sid < 1) {
+                return { ok: false, reason: 'no_session' };
+            }
+            const res = await fetch('/pos2/tables/move', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: buildPos2JsonHeaders(),
+                body: JSON.stringify({
+                    source_table_session_id: sid,
+                    dest_table_id: Number(destTableId),
+                    expected_session_revision: this.sessionRevision,
+                }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (res.status === 409) {
+                await this.fetchSessionOrders(sid, { skipLoadingUi: true, silent: true });
+                await this.fetchTableDashboard({ silent: true });
+                return { ok: false, status: 409, body };
+            }
+            if (!res.ok) {
+                return { ok: false, status: res.status, body };
+            }
+            return { ok: true, body };
         },
     },
 });

@@ -15,9 +15,11 @@ class RestaurantTable extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'id',
         'shop_id',
         'name',
         'qr_token',
+        'category',
         'sort_order',
         'is_active',
     ];

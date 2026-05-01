@@ -23,6 +23,13 @@ final class Pos2Controller extends Controller
 
         return Inertia::render('Index', [
             'shop_id' => $this->resolveShopId($request),
+            'pos_ui' => [
+                'change_table_title' => __('pos.action_changer_table'),
+                'change_table_hint' => __('pos.change_table_modal_hint'),
+                'change_table_empty' => __('pos.change_table_no_available'),
+                'change_table_success' => __('pos.change_table_success'),
+                'change_table_cancel' => __('pos.close'),
+            ],
         ]);
     }
 

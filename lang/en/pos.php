@@ -26,6 +26,8 @@ return [
     'change_table_dest_occupied' => 'That table is already occupied.',
     'change_table_invalid_target' => 'Only customer tables can be selected as destination.',
     'change_table_revision_conflict_syncing' => 'Updated from another device. Syncing now.',
+    'change_table_success' => 'Table moved successfully.',
+    'change_table_modal_hint' => 'Tap an available customer table to move the session.',
     'action_logout' => 'Log out',
     'dev_reset_label' => 'Reset all order data (dev only)',
     'dev_reset_confirm' => 'Delete all POS order/session data in this environment?',

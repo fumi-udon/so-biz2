@@ -267,6 +267,7 @@ Route::prefix('pos2')->name('pos2.')->group(function () {
         Route::post('/api/sessions/{session}/recu-staff', [Pos2SessionController::class, 'recuStaff'])->name('api.sessions.recu-staff');
         // 空卓から注文: table_id を渡すとサーバーが getOrCreate してセッション確定後に 201 を返す
         Route::post('/api/tables/{table}/orders', [Pos2SessionController::class, 'submitDraftOrdersForTable'])->name('api.tables.orders.submit');
+        Route::post('/tables/move', [Pos2SessionController::class, 'moveTable'])->name('tables.move');
         /** 開発のみ: 当該ショップの卓セッション・注文を DB から削除（config app.pos2_debug） */
         Route::post('/api/dev/purge-floor-data', [Pos2DevController::class, 'purgeFloorData'])->name('api.dev.purge-floor-data');
 

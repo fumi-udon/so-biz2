@@ -26,6 +26,8 @@ return [
     'change_table_dest_occupied' => 'そのテーブルは既に使用中です。',
     'change_table_invalid_target' => '変更先は客席テーブルのみ選択できます。',
     'change_table_revision_conflict_syncing' => '他の端末で更新されました。同期します。',
+    'change_table_success' => '卓を移動しました。',
+    'change_table_modal_hint' => '移動先の空いている客席をタップしてください。',
     'action_logout' => 'ログアウト',
     'logout_confirm' => 'この端末からログアウトしますか？未保存の内容は失われることがあります。',
     'footer_utility_menu' => 'その他の操作',

@@ -14,6 +14,7 @@ import CategoryRail from '../components/CategoryRail.vue';
 import ProductGrid from '../components/ProductGrid.vue';
 import ConfigModal from '../components/ConfigModal.vue';
 import Pos2AppMenu from '../components/Pos2AppMenu.vue';
+import ChangeTableModal from '../components/ChangeTableModal.vue';
 import { buildCartLineSnapshot } from '../utils/cartLineBuilder';
 import { formatDT } from '../utils/currency';
 
@@ -27,6 +28,10 @@ const sessionUi = usePos2SessionUiStore();
 
 const shopId = computed(() => Number(page.props.shop_id ?? 0));
 const debugEnabled = computed(() => page.props?.auth?.debug === true);
+const posUi = computed(() => {
+    const raw = page.props.pos_ui;
+    return raw && typeof raw === 'object' ? raw : {};
+});
 const isTableSelected = computed(() => tableStore.hasSelection);
 
 const tilesByTableId = computed(() => {
@@ -407,6 +412,128 @@ async function onSendKds() {
 }
 
 // ---------------------------------------------------------------------------
+// 卓移動（Change table）
+// ---------------------------------------------------------------------------
+
+const changeTableModalOpen = ref(false);
+const changeTableBusy = ref(false);
+const snackbar = ref({ show: false, message: '' });
+let snackbarHideTimer = null;
+
+function showPos2Snackbar(message) {
+    snackbar.value = { show: true, message: String(message || '') };
+    if (snackbarHideTimer != null) {
+        clearTimeout(snackbarHideTimer);
+    }
+    snackbarHideTimer = setTimeout(() => {
+        snackbar.value = { show: false, message: '' };
+        snackbarHideTimer = null;
+    }, 3200);
+}
+
+const canPos2ChangeTable = computed(() =>
+    tableStore.hasSelection
+    && sessionUi.activeTableSessionId != null
+    && Number(sessionUi.activeTableSessionId) > 0,
+);
+
+const changeTableCandidates = computed(() => {
+    const currentId = tableStore.selectedTableId;
+    const tiles = sessionUi.dashboardTiles ?? [];
+    const out = [];
+    for (const t of tiles) {
+        const id = Number(t.restaurantTableId);
+        if (!Number.isFinite(id) || id < 1) {
+            continue;
+        }
+        if (currentId != null && id === Number(currentId)) {
+            continue;
+        }
+        if (String(t.category ?? '') !== 'customer') {
+            continue;
+        }
+        const asid = t.activeTableSessionId;
+        if (asid != null && Number(asid) > 0) {
+            continue;
+        }
+        const nameRaw = t.restaurantTableName;
+        const name = (nameRaw != null && String(nameRaw).trim() !== '')
+            ? String(nameRaw).trim()
+            : `T${id}`;
+        out.push({ id, name });
+    }
+    out.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    return out;
+});
+
+function openChangeTableModalFromMenu() {
+    changeTableModalOpen.value = true;
+}
+
+/**
+ * 卓移動成功後: ダッシュボード再取得 → 選択卓と Pinia セッション UI を先卓に同期 → 注文再取得。
+ * @param {number} destTableId
+ */
+async function applyAfterTableMove(destTableId) {
+    draftStore.shopId = shopId.value;
+    await sessionUi.fetchTableDashboard();
+    const traceId = debugEnabled.value ? debugStore.nextTraceId('table-move') : null;
+    tableStore.selectTable(destTableId, {
+        traceId,
+        debugEnabled: debugEnabled.value,
+        cartCount: draftStore.totalItemsCount,
+    });
+    const sid = sessionUi.activeTableSessionId;
+    sessionUi.syncSelectionFromTile(destTableId, sid);
+    if (sid != null && sid > 0) {
+        draftStore.tableSessionId = String(sid);
+        draftStore.pendingTableId = null;
+        draftStore.loadDraftFromStorage(shopId.value, sid, {
+            traceId,
+            debugEnabled: debugEnabled.value,
+        });
+        await sessionUi.fetchSessionOrders(sid);
+    }
+    if (debugEnabled.value) {
+        debugStore.setUiSnapshot(tableStore.selectedTableId, draftStore.totalItemsCount);
+    }
+}
+
+async function onConfirmChangeTable(destTableId) {
+    if (changeTableBusy.value) {
+        return;
+    }
+    changeTableBusy.value = true;
+    try {
+        const res = await sessionUi.submitChangeTable(Number(destTableId));
+        if (!res.ok) {
+            if (res.status === 409) {
+                const msg = typeof res.body?.message === 'string' && res.body.message.trim() !== ''
+                    ? res.body.message.trim()
+                    : '他端末で更新されました。画面を同期しました。\nConflit. Écran synchronisé.';
+                window.alert(msg);
+                changeTableModalOpen.value = false;
+                return;
+            }
+            const errMsg = typeof res.body?.message === 'string' && res.body.message.trim() !== ''
+                ? res.body.message.trim()
+                : '卓移動に失敗しました。\nÉchec du changement de table.';
+            window.alert(errMsg);
+            return;
+        }
+        changeTableModalOpen.value = false;
+        await applyAfterTableMove(Number(destTableId));
+        showPos2Snackbar(
+            typeof posUi.value.change_table_success === 'string' && posUi.value.change_table_success.trim() !== ''
+                ? posUi.value.change_table_success
+                : '卓を移動しました。',
+        );
+    } finally {
+        changeTableBusy.value = false;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ダッシュボード自動監視（QR 注文の F5 解消）— 15 秒ポーリング・非ブロッキング
 // ---------------------------------------------------------------------------
 
@@ -634,6 +761,10 @@ onUnmounted(() => {
         clearInterval(dashboardPollTimerId);
         dashboardPollTimerId = null;
     }
+    if (snackbarHideTimer != null) {
+        clearTimeout(snackbarHideTimer);
+        snackbarHideTimer = null;
+    }
 });
 </script>
 
@@ -771,7 +902,9 @@ onUnmounted(() => {
                                 <div class="flex shrink-0 items-center justify-center">
                                     <Pos2AppMenu
                                         :shop-id="shopId"
+                                        :can-change-table="canPos2ChangeTable"
                                         @purged="onPos2StoragePurged"
+                                        @open-change-table="openChangeTableModalFromMenu"
                                     />
                                 </div>
                             </template>
@@ -850,6 +983,31 @@ onUnmounted(() => {
             </section>
         </div>
     </main>
+
+    <ChangeTableModal
+        :open="changeTableModalOpen"
+        :candidates="changeTableCandidates"
+        :busy="changeTableBusy"
+        :title="posUi.change_table_title || '卓移動'"
+        :hint="posUi.change_table_hint || ''"
+        :empty-text="posUi.change_table_empty || ''"
+        :cancel-label="posUi.change_table_cancel || '閉じる'"
+        @close="changeTableModalOpen = false"
+        @confirm="onConfirmChangeTable"
+    />
+
+    <div
+        v-if="snackbar.show"
+        class="pointer-events-none fixed bottom-6 left-1/2 z-[60] w-[min(100%-2rem,24rem)] -translate-x-1/2 px-3"
+        role="status"
+        aria-live="polite"
+    >
+        <div
+            class="pointer-events-auto rounded-xl border border-emerald-600/80 bg-emerald-950 px-4 py-3 text-center text-sm font-semibold text-emerald-50 shadow-lg dark:border-emerald-500 dark:bg-emerald-950 dark:text-emerald-50"
+        >
+            {{ snackbar.message }}
+        </div>
+    </div>
 
     <ConfigModal
         :master-generated-at="masterStore.generatedAt ?? ''"

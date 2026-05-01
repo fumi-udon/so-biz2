@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Pos2;
 
 use App\Actions\Pos\AddPosOrderFromStaffAction;
+use App\Actions\Pos\ChangeTableSessionAction;
 use App\Actions\RadTable\RecuPlacedOrdersForSessionAction;
 use App\Data\Pos\TableTileAggregate;
 use App\Enums\OrderLineStatus;
 use App\Enums\OrderStatus;
 use App\Enums\TableSessionManagementSource;
 use App\Exceptions\Pos\SessionManagedByPos2Exception;
+use App\Exceptions\Pos\SessionRevisionMismatchException;
+use App\Exceptions\Pos\TableAlreadyOccupiedException;
 use App\Exceptions\RevisionConflictException;
 use App\Http\Controllers\Controller;
 use App\Models\GuestOrderIdempotency;
@@ -438,6 +441,87 @@ final class Pos2SessionController extends Controller
             'confirmed_batches' => $n,
             'session_revision' => (int) $session->session_revision,
             'table_session_id' => (int) $session->id,
+        ]);
+    }
+
+    /**
+     * 卓移動（セッションは同一のまま {@see ChangeTableSessionAction}）。
+     */
+    public function moveTable(Request $request): JsonResponse
+    {
+        $shopId = $this->resolveShopId($request);
+        if ($shopId < 1) {
+            return response()->json(['message' => 'Shop not configured'], 400);
+        }
+
+        $validated = $request->validate([
+            'source_table_session_id' => ['required', 'integer', 'min:1'],
+            'dest_table_id' => ['required', 'integer', 'min:1'],
+            'expected_session_revision' => ['required', 'integer', 'min:0'],
+        ]);
+
+        $sourceId = (int) $validated['source_table_session_id'];
+        $destId = (int) $validated['dest_table_id'];
+        $expectedRev = (int) $validated['expected_session_revision'];
+
+        try {
+            app(ChangeTableSessionAction::class)->execute(
+                $shopId,
+                $sourceId,
+                $destId,
+                $expectedRev,
+                TableSessionManagementSource::Pos2,
+            );
+        } catch (SessionRevisionMismatchException $e) {
+            return response()->json([
+                'message' => __('pos.change_table_revision_conflict_syncing'),
+                'code' => 'REVISION_CONFLICT',
+                'context' => [
+                    'session_id' => $e->sessionId,
+                    'current_revision' => $e->currentRevision,
+                    'client_sent_revision' => $e->clientSentRevision,
+                ],
+            ], 409);
+        } catch (TableAlreadyOccupiedException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => 'TABLE_OCCUPIED',
+            ], 409);
+        } catch (SessionManagedByPos2Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'code' => 'POS2_SESSION_EXCLUSIVE',
+            ], 403);
+        } catch (RuntimeException $e) {
+            $message = $e->getMessage();
+            $notFound = $message === (string) __('rad_table.active_session_not_found');
+
+            return response()->json(['message' => $message], $notFound ? 404 : 422);
+        } catch (Throwable $e) {
+            if (config('app.pos2_debug')) {
+                Log::channel('pos2')->warning('pos2.move_table.failed', [
+                    'shop_id' => $shopId,
+                    'source_session_id' => $sourceId,
+                    'dest_table_id' => $destId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            return response()->json(['message' => __('pos.action_failed')], 500);
+        }
+
+        app(TableDashboardQueryService::class)->forgetCachedDashboard($shopId);
+
+        $session = TableSession::query()
+            ->where('shop_id', $shopId)
+            ->whereKey($sourceId)
+            ->first();
+
+        return response()->json([
+            'message' => 'OK',
+            'table_session_id' => $sourceId,
+            'restaurant_table_id' => $session ? (int) $session->restaurant_table_id : $destId,
+            'session_revision' => $session ? (int) $session->session_revision : 0,
         ]);
     }
 
