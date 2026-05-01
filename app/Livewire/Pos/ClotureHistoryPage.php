@@ -23,7 +23,8 @@ class ClotureHistoryPage extends Component
 
     public function mount(): void
     {
-        $this->shopId = $this->resolveCurrentShopId();
+        $fromQuery = (int) request()->query('shop_id', 0);
+        $this->shopId = $fromQuery > 0 ? $fromQuery : $this->resolveCurrentShopId();
         $this->shopName = $this->shopId > 0
             ? (string) (Shop::query()->whereKey($this->shopId)->value('name') ?? '')
             : '';

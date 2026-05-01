@@ -41,6 +41,17 @@ function onBackdropClick() {
     close();
 }
 
+function openHistoryClotureInNewTab() {
+    const sid = Number(props.shopId);
+    if (!Number.isFinite(sid) || sid < 1) {
+        window.alert('shop_id が無効です。');
+        return;
+    }
+    const url = `/history_cloture?shop_id=${encodeURIComponent(String(sid))}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    close();
+}
+
 const masterStore = useMasterStore();
 
 /**
@@ -164,6 +175,25 @@ async function onDevCleanUp() {
                         >
                             先に <code class="rounded bg-slate-800 px-1 text-[10px] text-cyan-200">POST /pos2/api/dev/purge-floor-data</code> で当店の <strong class="text-slate-300">table_sessions</strong>（紐づく注文は CASCADE）を削除し、続けてマスタキャッシュ（<code class="rounded bg-slate-800 px-1 text-[10px] text-cyan-200">pos2_master_*</code>）と卓ドラフト（<code class="rounded bg-slate-800 px-1 text-[10px] text-cyan-200">pos_draft_*</code>）を削除します。要 <code class="text-[10px] text-cyan-200">POS2_DEBUG=true</code>。
                         </p>
+                        <button
+                            type="button"
+                            class="flex w-full items-center gap-3 rounded-xl border border-slate-600/80 bg-slate-900/80 px-4 py-3 text-left text-sm font-semibold text-slate-100 shadow-sm transition hover:border-slate-500 hover:bg-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-50 dark:hover:bg-slate-800"
+                            @click="openHistoryClotureInNewTab"
+                        >
+                            <svg
+                                class="h-5 w-5 shrink-0 text-slate-300 dark:text-slate-300"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.75"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
+                            </svg>
+                            <span class="leading-snug">History</span>
+                        </button>
                         <button
                             type="button"
                             class="flex w-full items-center gap-3 rounded-xl border border-cyan-700/70 bg-slate-900/80 px-4 py-3 text-left text-sm font-semibold text-cyan-100 shadow-sm transition hover:border-cyan-500 hover:bg-slate-800 dark:border-cyan-600/60 dark:bg-slate-900 dark:text-cyan-50 dark:hover:bg-slate-800"

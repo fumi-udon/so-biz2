@@ -150,7 +150,7 @@ function lineToppingsCsv(ln) {
                                     <span class="break-words">{{ lineProductLabel(ln) }}</span>
                                     <template v-if="lineStyleLabel(ln)">
                                         <span class="font-normal text-slate-300 dark:text-slate-300">
-                                            {{ lineStyleLabel(ln) }}
+                                            {{ ' ' + lineStyleLabel(ln) }}
                                         </span>
                                     </template>
                                 </span>

@@ -657,15 +657,6 @@ onUnmounted(() => {
                     :tiles-by-table-id="tilesByTableId"
                     @select="onSelectTable"
                 />
-                <button
-                    v-if="isTableSelected"
-                    type="button"
-                    class="mt-2 shrink-0 rounded-lg border border-slate-600 py-2 text-center text-xs font-medium text-slate-400 transition hover:border-slate-500 hover:bg-slate-800/80 hover:text-slate-200 dark:text-slate-400 dark:hover:text-slate-200"
-                    :disabled="draftStore.isOrderSubmitting"
-                    @click="backToTableGrid"
-                >
-                    選択を解除（卓のみ表示に戻す）
-                </button>
             </aside>
 
             <section class="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -788,7 +779,8 @@ onUnmounted(() => {
                     </div>
 
                     <div
-                        class="relative flex min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:gap-4"
+                        class="relative flex min-h-0 flex-1 flex-col gap-3"
+                        :class="sessionUi.uiMode === 'adding' ? '' : 'lg:flex-row lg:gap-4'"
                     >
                         <div
                             v-if="sessionUi.uiMode === 'monitoring'"

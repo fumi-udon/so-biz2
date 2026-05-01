@@ -216,7 +216,7 @@ Route::get('/printer-test', function () {
 })->name('printer-test');
 
 Route::get('/pos/receipt-preview', function (Request $request) {
-    abort_unless(Auth::check(), 403);
+    abort_unless(Auth::check() || $request->session()->get('pos2_authenticated') === true, 403);
 
     $shopId = max(0, (int) $request->query('shop_id', 0));
     $tableSessionId = max(0, (int) $request->query('table_session_id', 0));
@@ -234,8 +234,8 @@ Route::get('/pos/receipt-preview', function (Request $request) {
     ]);
 })->name('pos.receipt-preview.page');
 
-Route::get('/history_cloture', function () {
-    abort_unless(Auth::check(), 403);
+Route::get('/history_cloture', function (Request $request) {
+    abort_unless(Auth::check() || $request->session()->get('pos2_authenticated') === true, 403);
 
     return view('pos.history-cloture-page');
 })->name('pos.history-cloture.page');
