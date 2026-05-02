@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { tileSurfaceInnerClasses } from '../utils/tileUiClasses';
 import { formatDT } from '../utils/currency';
+import { isTakeoutTableName } from '../utils/tableNameKind';
 
 const props = defineProps({
     tables: {
@@ -34,6 +35,14 @@ const props = defineProps({
         default: 'standalone',
         validator: (v) => v === 'standalone' || v === 'split',
     },
+    /**
+     * 卓タイル1行目の表示名（テイクアウト客名など）。未指定時は table.name。
+     * @type {(table: { id: number|string, name?: string }) => string}
+     */
+    resolveTableDisplayName: {
+        type: Function,
+        default: null,
+    },
 });
 
 const emit = defineEmits(['select']);
@@ -49,7 +58,7 @@ function isStaffTable(table) {
 
 /** TK で始まる卓 — ST 判定後に使う（T 単独より先に TK を見る必要は名前上 TK が T で始まるため） */
 function isTakeoutTable(table) {
-    return tableNameNormalized(table).toUpperCase().startsWith('TK');
+    return isTakeoutTableName(table);
 }
 
 /** ST / TK 以外はすべて Client（T01 以外・手入力名もここにフォールバック） */
@@ -145,6 +154,19 @@ function sessionTotalLabel(tile) {
     if (!Number.isFinite(n) || n <= 0) return null;
     return formatDT(n);
 }
+
+function primaryLineForTable(table) {
+    if (typeof props.resolveTableDisplayName === 'function') {
+        try {
+            return props.resolveTableDisplayName(table);
+        } catch {
+            // fall through
+        }
+    }
+    return table?.name != null && String(table.name).trim() !== ''
+        ? String(table.name)
+        : `T${table?.id ?? ''}`;
+}
 </script>
 
 <template>
@@ -199,7 +221,7 @@ function sessionTotalLabel(tile) {
                         >
                             <div>
                                 <p :class="tileNameClass(sec.mini)">
-                                    {{ table.name }}
+                                    {{ primaryLineForTable(table) }}
                                 </p>
                                 <p
                                     v-if="tileFor(table.id)"

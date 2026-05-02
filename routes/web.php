@@ -215,6 +215,11 @@ Route::get('/printer-test', function () {
     return view('printer-test');
 })->name('printer-test');
 
+// 旧 POS ブックマーク互換: /pos → POS V2（認証済みスタッフのみ）
+Route::middleware('auth')->get('/pos', function () {
+    return redirect()->route('pos2.index');
+})->name('pos.redirect-to-v2');
+
 Route::get('/pos/receipt-preview', function (Request $request) {
     abort_unless(Auth::check() || $request->session()->get('pos2_authenticated') === true, 403);
 

@@ -6,6 +6,7 @@ namespace App\Filament\Pages;
 
 use App\Models\MenuCategory;
 use App\Models\Shop;
+use App\Support\KdsDictionaryDraftGenerator;
 use App\Support\KdsDictionarySetting;
 use App\Support\KdsFilterSetting;
 use Filament\Facades\Filament;
@@ -13,12 +14,14 @@ use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\View as FormView;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Js;
 
 final class ManageKdsFilterSettings extends Page
 {
@@ -38,6 +41,10 @@ final class ManageKdsFilterSettings extends Page
      * @var array<string, mixed>|null
      */
     public ?array $data = [];
+
+    public bool $dictionaryDraftModalOpen = false;
+
+    public string $dictionaryDraftText = '';
 
     public function mount(): void
     {
@@ -99,6 +106,7 @@ final class ManageKdsFilterSettings extends Page
                             ->label('変換ルール (1行に「元の名前:変換後の名前」)')
                             ->helperText('例: Extra Spicy:激辛 / Wakame:wkm')
                             ->rows(10),
+                        FormView::make('filament.forms.components.kds-dictionary-draft-helper'),
                     ]),
             ])
             ->statePath('data');
@@ -121,6 +129,46 @@ final class ManageKdsFilterSettings extends Page
             ->get()
             ->mapWithKeys(fn (MenuCategory $c): array => [$c->id => $c->name])
             ->all();
+    }
+
+    public function openDictionaryDraft(): void
+    {
+        $sid = (int) ($this->data['shop_id'] ?? 0);
+        if ($sid < 1) {
+            Notification::make()
+                ->title(__('filament.kds_filter.missing_shop'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $this->dictionaryDraftText = KdsDictionaryDraftGenerator::buildText($sid);
+        $this->dictionaryDraftModalOpen = true;
+
+        if ($this->dictionaryDraftText === '') {
+            Notification::make()
+                ->title('Style / Topping の登録が見つかりませんでした')
+                ->body('該当店舗のアクティブなメニュー項目を確認してください。')
+                ->warning()
+                ->send();
+        }
+    }
+
+    public function closeDictionaryDraft(): void
+    {
+        $this->dictionaryDraftModalOpen = false;
+    }
+
+    public function copyDictionaryDraftToClipboard(): void
+    {
+        $this->js(
+            'navigator.clipboard.writeText('.Js::from($this->dictionaryDraftText).')'
+        );
+        Notification::make()
+            ->title('クリップボードにコピーしました')
+            ->success()
+            ->send();
     }
 
     public function save(): void

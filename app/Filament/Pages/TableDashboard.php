@@ -4,8 +4,8 @@ namespace App\Filament\Pages;
 
 use App\Models\Shop;
 use App\Support\Pos\PosPrinterClientConfig;
-use Filament\Notifications\Notification;
 use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\MaxWidth;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +29,14 @@ class TableDashboard extends Page
     protected static ?string $navigationGroup = 'Menu & orders';
 
     protected static ?int $navigationSort = 16;
+
+    /**
+     * 旧 Livewire POS は POS V2 へ一本化のため、管理画面ナビからリンクを出さない。
+     */
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     public int $shopId = 0;
 

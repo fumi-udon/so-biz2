@@ -7,8 +7,11 @@ import { useDraftStore } from '../stores/useDraftStore';
 import { useTableStore } from '../stores/useTableStore';
 import { useMenuStore } from '../stores/useMenuStore';
 import { usePos2SessionUiStore } from '../stores/usePos2SessionUiStore';
+import { useTableLabelStore } from '../stores/useTableLabelStore';
+import { isTakeoutTableName } from '../utils/tableNameKind';
 import DebugPanel from '../components/DebugPanel.vue';
 import TableGrid from '../components/TableGrid.vue';
+import TakeoutCustomerLabelModal from '../components/TakeoutCustomerLabelModal.vue';
 import SessionRightColumn from '../components/SessionRightColumn.vue';
 import CategoryRail from '../components/CategoryRail.vue';
 import ProductGrid from '../components/ProductGrid.vue';
@@ -25,8 +28,13 @@ const draftStore = useDraftStore();
 const tableStore = useTableStore();
 const menuStore = useMenuStore();
 const sessionUi = usePos2SessionUiStore();
+const labelStore = useTableLabelStore();
 
 const shopId = computed(() => Number(page.props.shop_id ?? 0));
+
+labelStore.setShopId(shopId.value);
+labelStore.hydrateFromSessionStorage();
+
 const debugEnabled = computed(() => page.props?.auth?.debug === true);
 const posUi = computed(() => {
     const raw = page.props.pos_ui;
@@ -65,10 +73,75 @@ const displayedTables = computed(() => {
 });
 
 const selectedTableName = computed(() => {
+    void labelStore.tableLabels;
     const tid = tableStore.selectedTableId;
     if (tid == null) return '';
     const row = (masterStore.tables ?? []).find((t) => Number(t.id) === Number(tid));
-    return row?.name != null && String(row.name).trim() !== '' ? String(row.name) : `T${tid}`;
+    const base = row?.name != null && String(row.name).trim() !== '' ? String(row.name) : `T${tid}`;
+    if (!isTakeoutTableName(base)) {
+        return base;
+    }
+    const sid = sessionUi.activeTableSessionId;
+    if (sid == null || Number(sid) < 1) {
+        return base;
+    }
+    const lab = labelStore.getLabel(sid);
+    if (lab?.name) {
+        return `${base} / ${lab.name}`;
+    }
+    return base;
+});
+
+/** 卓タイル1行目（客名付き TK 表示）— labelStore.tableLabels を追跡 */
+const resolveTableDisplayNameFn = computed(() => {
+    void labelStore.tableLabels;
+    return (table) => {
+        const base = table?.name != null && String(table.name).trim() !== ''
+            ? String(table.name).trim()
+            : `T${table?.id ?? ''}`;
+        if (!isTakeoutTableName(base)) {
+            return base;
+        }
+        const tile = tilesByTableId.value[Number(table.id)];
+        const sid = tile?.activeTableSessionId != null && Number(tile.activeTableSessionId) > 0
+            ? Number(tile.activeTableSessionId)
+            : null;
+        if (sid == null) {
+            return base;
+        }
+        const lab = labelStore.getLabel(sid);
+        if (lab?.name) {
+            return `${base} / ${lab.name}`;
+        }
+        return base;
+    };
+});
+
+const takeoutLabelModalOpen = ref(false);
+
+const selectedTableIsTakeout = computed(() => {
+    const tid = tableStore.selectedTableId;
+    if (tid == null) return false;
+    const row = (masterStore.tables ?? []).find((t) => Number(t.id) === Number(tid));
+    return row ? isTakeoutTableName(row) : false;
+});
+
+const showTakeoutCustomerLabelFab = computed(() =>
+    selectedTableIsTakeout.value
+    && sessionUi.activeTableSessionId != null
+    && Number(sessionUi.activeTableSessionId) > 0,
+);
+
+const takeoutLabelModalInitial = computed(() => {
+    const sid = sessionUi.activeTableSessionId;
+    if (sid == null || Number(sid) < 1) {
+        return { name: '', tel: '' };
+    }
+    const lab = labelStore.getLabel(sid);
+    return {
+        name: lab?.name ?? '',
+        tel: lab?.tel ?? '',
+    };
 });
 
 const pos2BridgeOrigin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -81,6 +154,13 @@ function onPos2BridgeMessage(event) {
     if (!data || data.type !== 'pos2-bridge' || typeof data.action !== 'string') {
         return;
     }
+    if (data.action === 'pos-settlement-completed') {
+        const sidRaw = data.table_session_id;
+        if (sidRaw != null && Number(sidRaw) > 0) {
+            labelStore.clearLabel(Number(sidRaw));
+        }
+    }
+
     if (
         data.action === 'receipt-preview-printed'
         || data.action === 'close-receipt'
@@ -88,6 +168,24 @@ function onPos2BridgeMessage(event) {
     ) {
         void refreshAfterPos2Bridge();
     }
+}
+
+function openTakeoutLabelModal() {
+    takeoutLabelModalOpen.value = true;
+}
+
+function closeTakeoutLabelModal() {
+    takeoutLabelModalOpen.value = false;
+}
+
+function onTakeoutLabelSave(payload) {
+    const sid = sessionUi.activeTableSessionId;
+    if (sid == null || Number(sid) < 1) {
+        closeTakeoutLabelModal();
+        return;
+    }
+    labelStore.setLabel(sid, payload.name, payload.tel);
+    closeTakeoutLabelModal();
 }
 
 async function refreshAfterPos2Bridge() {
@@ -786,6 +884,7 @@ onUnmounted(() => {
                     :debug-enabled="debugEnabled"
                     :has-draft-for-table="hasDraftBadgeForTable"
                     :tiles-by-table-id="tilesByTableId"
+                    :resolve-table-display-name="resolveTableDisplayNameFn"
                     @select="onSelectTable"
                 />
             </aside>
@@ -1013,6 +1112,26 @@ onUnmounted(() => {
         :master-generated-at="masterStore.generatedAt ?? ''"
         @added="onCartAdded"
         @close="() => {}"
+    />
+
+    <button
+        v-if="showTakeoutCustomerLabelFab"
+        type="button"
+        class="fixed right-3 top-1/2 z-50 flex h-12 w-12 -translate-y-1/2 flex-col items-center justify-center rounded-2xl border-2 border-cyan-600 bg-cyan-700 text-cyan-50 shadow-lg transition hover:bg-cyan-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 dark:border-cyan-500 dark:bg-cyan-800 dark:text-cyan-50 dark:hover:bg-cyan-700 dark:focus-visible:ring-offset-slate-950"
+        title="客名登録"
+        aria-label="客名登録"
+        @click="openTakeoutLabelModal"
+    >
+        <span class="text-lg leading-none" aria-hidden="true">👤</span>
+        <span class="mt-0.5 text-[9px] font-bold leading-none">客名</span>
+    </button>
+
+    <TakeoutCustomerLabelModal
+        :open="takeoutLabelModalOpen"
+        :initial-name="takeoutLabelModalInitial.name"
+        :initial-tel="takeoutLabelModalInitial.tel"
+        @close="closeTakeoutLabelModal"
+        @save="onTakeoutLabelSave"
     />
 
     <DebugPanel

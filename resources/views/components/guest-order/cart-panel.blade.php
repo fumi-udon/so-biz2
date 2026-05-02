@@ -210,73 +210,7 @@
         ></button>
     </div>
 
-    {{-- Submit celebration: instant fanfare (HTTP continues in background) --}}
-    <div
-        x-show="$store.cart.submitCelebrationOpen"
-        x-transition:enter="transition ease-out duration-200"
-        x-transition:enter-start="opacity-0"
-        x-transition:enter-end="opacity-100"
-        x-transition:leave="transition ease-in duration-160"
-        x-transition:leave-start="opacity-100"
-        x-transition:leave-end="opacity-0"
-        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[1.5px] dark:bg-black/65"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="go-submit-celebration-title"
-        x-cloak
-    >
-        <div class="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-            <div class="go-submit-confetti-burst absolute inset-0">
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-                <span class="go-submit-confetti-bit"></span>
-            </div>
-        </div>
-
-        <div
-            class="go-animate-celebrate-pop relative z-10 w-full max-w-sm rounded-2xl border border-amber-200/90 bg-gradient-to-b from-white via-amber-50/80 to-white p-6 text-center shadow-[0_24px_80px_rgba(251,191,36,0.35)] dark:border-amber-700/50 dark:from-gray-800 dark:via-amber-950/40 dark:to-gray-900"
-            @click.stop
-        >
-            <span class="pointer-events-none absolute -left-1 -top-2 text-2xl go-animate-celebrate-sparkle" aria-hidden="true" style="animation-delay: 0s">✨</span>
-            <span class="pointer-events-none absolute -right-1 -top-1 text-xl go-animate-celebrate-sparkle" aria-hidden="true" style="animation-delay: 0.15s">🎉</span>
-            <span class="pointer-events-none absolute -bottom-1 left-2 text-lg go-animate-celebrate-sparkle" aria-hidden="true" style="animation-delay: 0.28s">✨</span>
-            <span class="pointer-events-none absolute -bottom-0.5 right-3 text-xl go-animate-celebrate-sparkle" aria-hidden="true" style="animation-delay: 0.4s">🎊</span>
-
-            <div class="relative mx-auto mb-4 flex h-24 w-24 items-center justify-center">
-                <span class="absolute inset-0 rounded-full bg-amber-400/35 animate-go-ping-soft" aria-hidden="true"></span>
-                <span class="absolute inset-2 rounded-full bg-[color:var(--go-primary)]/25 animate-go-ping-soft" style="animation-delay: 0.12s" aria-hidden="true"></span>
-                <div
-                    class="relative z-[1] flex h-[4.25rem] w-[4.25rem] items-center justify-center rounded-full bg-gradient-to-br from-amber-300 via-orange-400 to-rose-500 text-white shadow-lg ring-4 ring-white/80 dark:ring-gray-900/80"
-                    aria-hidden="true"
-                >
-                    <svg class="h-11 w-11 drop-shadow-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M20 6L9 17l-5-5" />
-                    </svg>
-                </div>
-            </div>
-
-            <h3
-                id="go-submit-celebration-title"
-                class="text-xl font-extrabold leading-tight tracking-tight text-gray-950 dark:text-white"
-                x-text="$store.cart.t('order_sent')"
-            ></h3>
-            <p
-                class="mt-2 text-sm font-medium leading-snug text-slate-700 dark:text-slate-200"
-                x-text="$store.cart.t('call_server')"
-            ></p>
+ 
 
             <button
                 type="button"
