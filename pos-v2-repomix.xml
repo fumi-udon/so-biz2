@@ -50,6 +50,7 @@ app/
         Pos2Controller.php
         Pos2DevController.php
         Pos2SessionController.php
+        TableSessionCustomerController.php
     Middleware/
       HandleInertiaRequests.php
       Pos2Authenticate.php
@@ -119,303 +120,6 @@ vite.config.js
 
 <files>
 This section contains the contents of the repository's files.
-
-<file path="resources/js/pos2/components/TakeoutCustomerLabelModal.vue">
-<script setup>
-import { computed, ref, watch } from 'vue';
-
-const props = defineProps({
-    open: {
-        type: Boolean,
-        default: false,
-    },
-    /** 初期・編集用 */
-    initialName: {
-        type: String,
-        default: '',
-    },
-    initialTel: {
-        type: String,
-        default: '',
-    },
-});
-
-const emit = defineEmits(['close', 'save']);
-
-const nameModel = ref('');
-const telModel = ref('');
-const nameError = ref('');
-
-watch(
-    () => props.open,
-    (v) => {
-        if (v) {
-            nameModel.value = String(props.initialName ?? '');
-            telModel.value = String(props.initialTel ?? '');
-            nameError.value = '';
-        }
-    },
-);
-
-const canSubmit = computed(() => String(nameModel.value ?? '').trim().length > 0);
-
-function onBackdropClick() {
-    emit('close');
-}
-
-function onSubmit() {
-    const n = String(nameModel.value ?? '').trim();
-    if (!n) {
-        nameError.value = 'お名前を入力してください';
-        return;
-    }
-    nameError.value = '';
-    emit('save', {
-        name: n,
-        tel: String(telModel.value ?? '').trim(),
-    });
-}
-</script>
-
-<template>
-    <Teleport to="body">
-        <div
-            v-if="open"
-            class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm dark:bg-slate-950/80"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="takeout-label-modal-title"
-            @click.self="onBackdropClick"
-        >
-            <div
-                class="w-full max-w-sm rounded-2xl border border-slate-600 bg-slate-900 p-5 text-slate-100 shadow-2xl dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100"
-                @click.stop
-            >
-                <h2
-                    id="takeout-label-modal-title"
-                    class="text-base font-bold text-slate-50 dark:text-white"
-                >
-                    客名登録
-                </h2>
-                <p class="mt-1 text-xs text-slate-400 dark:text-slate-400">
-                    テイクアウト卓の表示用（この端末の画面のみ）
-                </p>
-
-                <form
-                    class="mt-4 space-y-3"
-                    @submit.prevent="onSubmit"
-                >
-                    <div>
-                        <label
-                            for="takeout-label-name"
-                            class="mb-1 block text-xs font-semibold text-slate-300 dark:text-slate-300"
-                        >お名前 <span class="text-rose-400">*</span></label>
-                        <input
-                            id="takeout-label-name"
-                            v-model="nameModel"
-                            type="text"
-                            autocomplete="name"
-                            class="w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 dark:border-slate-500 dark:bg-slate-950 dark:text-slate-100"
-                            placeholder="例: 田中様"
-                        >
-                        <p
-                            v-if="nameError"
-                            class="mt-1 text-xs font-medium text-rose-400 dark:text-rose-400"
-                        >
-                            {{ nameError }}
-                        </p>
-                    </div>
-                    <div>
-                        <label
-                            for="takeout-label-tel"
-                            class="mb-1 block text-xs font-semibold text-slate-300 dark:text-slate-300"
-                        >TEL（任意）</label>
-                        <input
-                            id="takeout-label-tel"
-                            v-model="telModel"
-                            type="tel"
-                            autocomplete="tel"
-                            inputmode="tel"
-                            class="w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 dark:border-slate-500 dark:bg-slate-950 dark:text-slate-100"
-                            placeholder="090-1234-5678"
-                        >
-                    </div>
-
-                    <div class="flex justify-end gap-2 pt-2">
-                        <button
-                            type="button"
-                            class="rounded-xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-800"
-                            @click="emit('close')"
-                        >
-                            キャンセル
-                        </button>
-                        <button
-                            type="submit"
-                            class="rounded-xl border-2 border-cyan-600 bg-cyan-600 px-4 py-2 text-sm font-bold text-cyan-950 shadow-md hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-cyan-500 dark:bg-cyan-600 dark:text-cyan-950 dark:hover:bg-cyan-500"
-                            :disabled="!canSubmit"
-                        >
-                            登録
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </Teleport>
-</template>
-</file>
-
-<file path="resources/js/pos2/stores/useTableLabelStore.js">
-/**
- * テイクアウト卓の客名表示（フロントのみ・sessionStorage）。
- * キー: `${shopId}_${tableSessionId}` → { name, tel }
- */
-
-import { defineStore } from 'pinia';
-
-const STORAGE_KEY = 'pos2_table_labels_v1';
-
-function compositeKey(shopId, sessionId) {
-    const sid = Number(sessionId);
-    if (!Number.isFinite(sid) || sid < 1) {
-        return null;
-    }
-    const s = Number(shopId);
-    if (!Number.isFinite(s) || s < 1) {
-        return null;
-    }
-    return `${s}_${sid}`;
-}
-
-function readStorage() {
-    if (typeof sessionStorage === 'undefined') {
-        return {};
-    }
-    try {
-        const raw = sessionStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-            return {};
-        }
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-        return {};
-    }
-}
-
-function writeStorage(map) {
-    if (typeof sessionStorage === 'undefined') {
-        return;
-    }
-    try {
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-    } catch {
-        // 容量超過などは握りつぶし（本ロジックを止めない）
-    }
-}
-
-export const useTableLabelStore = defineStore('pos2TableLabels', {
-    state: () => ({
-        /** 現在の店舗 ID（composite キー用） */
-        shopId: 0,
-        /**
-         * @type {Record<string, { name: string, tel: string }>}
-         */
-        tableLabels: {},
-    }),
-
-    actions: {
-        /**
-         * ページ起動時: sessionStorage から復元。
-         */
-        hydrateFromSessionStorage() {
-            this.tableLabels = readStorage();
-        },
-
-        /**
-         * @param {number} shopId
-         */
-        setShopId(shopId) {
-            this.shopId = Number(shopId);
-        },
-
-        _persist() {
-            writeStorage(this.tableLabels);
-        },
-
-        /**
-         * @param {string|number} sessionId
-         * @param {string} name
-         * @param {string} [tel]
-         */
-        setLabel(sessionId, name, tel = '') {
-            const key = compositeKey(this.shopId, sessionId);
-            if (key == null) {
-                return;
-            }
-            const n = String(name ?? '').trim();
-            const t = String(tel ?? '').trim();
-            this.tableLabels = {
-                ...this.tableLabels,
-                [key]: { name: n, tel: t },
-            };
-            this._persist();
-        },
-
-        /**
-         * @param {string|number} sessionId
-         * @returns {{ name: string, tel: string } | null}
-         */
-        getLabel(sessionId) {
-            const key = compositeKey(this.shopId, sessionId);
-            if (key == null) {
-                return null;
-            }
-            const row = this.tableLabels[key];
-            if (!row || typeof row !== 'object') {
-                return null;
-            }
-            return {
-                name: String(row.name ?? '').trim(),
-                tel: String(row.tel ?? '').trim(),
-            };
-        },
-
-        /**
-         * @param {string|number} sessionId
-         */
-        clearLabel(sessionId) {
-            const key = compositeKey(this.shopId, sessionId);
-            if (key == null || !Object.prototype.hasOwnProperty.call(this.tableLabels, key)) {
-                return;
-            }
-            const next = { ...this.tableLabels };
-            delete next[key];
-            this.tableLabels = next;
-            this._persist();
-        },
-    },
-});
-</file>
-
-<file path="resources/js/pos2/utils/tableNameKind.js">
-/**
- * 卓名から種別判定（POS V2 グリッドと整合）。
- */
-
-export function tableNameNormalized(tableOrName) {
-    if (tableOrName == null) {
-        return '';
-    }
-    if (typeof tableOrName === 'object' && 'name' in tableOrName) {
-        return String(tableOrName.name ?? '').trim();
-    }
-    return String(tableOrName).trim();
-}
-
-export function isTakeoutTableName(tableOrName) {
-    return tableNameNormalized(tableOrName).toUpperCase().startsWith('TK');
-}
-</file>
 
 <file path="app/Http/Controllers/Pos2/Pos2BridgeController.php">
 <?php
@@ -541,6 +245,87 @@ final class Pos2DevController extends Controller
             'deleted_table_sessions'  => $deletedSessions,
             'shop_id'                 => $shopId,
         ]);
+    }
+
+    private function resolveShopId(Request $request): int
+    {
+        $candidate = (int) ($request->session()->get('pos2.active_shop_id')
+            ?? $request->session()->get('kds.active_shop_id')
+            ?? env('POS_DEFAULT_SHOP_ID', 0));
+
+        return max(0, $candidate);
+    }
+}
+</file>
+
+<file path="app/Http/Controllers/Pos2/TableSessionCustomerController.php">
+<?php
+
+namespace App\Http\Controllers\Pos2;
+
+use App\Domains\Pos\Tables\TableCategory;
+use App\Enums\TableSessionStatus;
+use App\Http\Controllers\Controller;
+use App\Models\RestaurantTable;
+use App\Models\TableSession;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+/**
+ * POS V2: テイクアウト卓セッションの客名・電話（DB 権威）。
+ */
+final class TableSessionCustomerController extends Controller
+{
+    public function update(Request $request, int $session): JsonResponse
+    {
+        $shopId = $this->resolveShopId($request);
+        if ($shopId < 1) {
+            return response()->json(['message' => 'Shop not configured'], 400);
+        }
+
+        $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:191'],
+            'tel' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        $sessionModel = TableSession::query()
+            ->where('shop_id', $shopId)
+            ->whereKey($session)
+            ->first();
+
+        if ($sessionModel === null) {
+            return response()->json(['message' => 'Session not found'], 404);
+        }
+
+        if ($sessionModel->status !== TableSessionStatus::Active) {
+            return response()->json(['message' => 'Session is not active'], 422);
+        }
+
+        $table = RestaurantTable::query()
+            ->where('shop_id', $shopId)
+            ->whereKey($sessionModel->restaurant_table_id)
+            ->first();
+
+        if ($table === null) {
+            return response()->json(['message' => 'Table not found'], 404);
+        }
+
+        if (TableCategory::resolveFromModel($table) !== TableCategory::Takeaway) {
+            return response()->json(['message' => 'Not a takeaway table session'], 422);
+        }
+
+        $nameRaw = $validated['name'] ?? null;
+        $telRaw = $validated['tel'] ?? null;
+
+        $name = is_string($nameRaw) ? trim($nameRaw) : '';
+        $tel = is_string($telRaw) ? trim($telRaw) : '';
+
+        $sessionModel->update([
+            'customer_name' => $name !== '' ? $name : null,
+            'customer_phone' => $tel !== '' ? $tel : null,
+        ]);
+
+        return response()->json(['ok' => true]);
     }
 
     private function resolveShopId(Request $request): int
@@ -1521,6 +1306,150 @@ const uiStatus = computed(() => String(props.tile?.uiStatus ?? 'free'));
             人数・滞在時間の詳細は次フェーズで API 拡張予定。
         </p>
     </section>
+</template>
+</file>
+
+<file path="resources/js/pos2/components/TakeoutCustomerLabelModal.vue">
+<script setup>
+import { computed, ref, watch } from 'vue';
+
+const props = defineProps({
+    open: {
+        type: Boolean,
+        default: false,
+    },
+    /** 初期・編集用 */
+    initialName: {
+        type: String,
+        default: '',
+    },
+    initialTel: {
+        type: String,
+        default: '',
+    },
+});
+
+const emit = defineEmits(['close', 'save']);
+
+const nameModel = ref('');
+const telModel = ref('');
+const nameError = ref('');
+
+watch(
+    () => props.open,
+    (v) => {
+        if (v) {
+            nameModel.value = String(props.initialName ?? '');
+            telModel.value = String(props.initialTel ?? '');
+            nameError.value = '';
+        }
+    },
+);
+
+const canSubmit = computed(() => String(nameModel.value ?? '').trim().length > 0);
+
+function onBackdropClick() {
+    emit('close');
+}
+
+function onSubmit() {
+    const n = String(nameModel.value ?? '').trim();
+    if (!n) {
+        nameError.value = 'お名前を入力してください';
+        return;
+    }
+    nameError.value = '';
+    emit('save', {
+        name: n,
+        tel: String(telModel.value ?? '').trim(),
+    });
+}
+</script>
+
+<template>
+    <Teleport to="body">
+        <div
+            v-if="open"
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm dark:bg-slate-950/80"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="takeout-label-modal-title"
+            @click.self="onBackdropClick"
+        >
+            <div
+                class="w-full max-w-sm rounded-2xl border border-slate-600 bg-slate-900 p-5 text-slate-100 shadow-2xl dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100"
+                @click.stop
+            >
+                <h2
+                    id="takeout-label-modal-title"
+                    class="text-base font-bold text-slate-50 dark:text-white"
+                >
+                    客名登録
+                </h2>
+                <p class="mt-1 text-xs text-slate-400 dark:text-slate-400">
+                    テイクアウト卓の表示用（この端末の画面のみ）
+                </p>
+
+                <form
+                    class="mt-4 space-y-3"
+                    @submit.prevent="onSubmit"
+                >
+                    <div>
+                        <label
+                            for="takeout-label-name"
+                            class="mb-1 block text-xs font-semibold text-slate-300 dark:text-slate-300"
+                        >お名前 <span class="text-rose-400">*</span></label>
+                        <input
+                            id="takeout-label-name"
+                            v-model="nameModel"
+                            type="text"
+                            autocomplete="name"
+                            class="w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 dark:border-slate-500 dark:bg-slate-950 dark:text-slate-100"
+                            placeholder="例: 田中様"
+                        >
+                        <p
+                            v-if="nameError"
+                            class="mt-1 text-xs font-medium text-rose-400 dark:text-rose-400"
+                        >
+                            {{ nameError }}
+                        </p>
+                    </div>
+                    <div>
+                        <label
+                            for="takeout-label-tel"
+                            class="mb-1 block text-xs font-semibold text-slate-300 dark:text-slate-300"
+                        >TEL（任意）</label>
+                        <input
+                            id="takeout-label-tel"
+                            v-model="telModel"
+                            type="tel"
+                            autocomplete="tel"
+                            inputmode="tel"
+                            class="w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 dark:border-slate-500 dark:bg-slate-950 dark:text-slate-100"
+                            placeholder="090-1234-5678"
+                        >
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button
+                            type="button"
+                            class="rounded-xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-800"
+                            @click="emit('close')"
+                        >
+                            キャンセル
+                        </button>
+                        <button
+                            type="submit"
+                            class="rounded-xl border-2 border-cyan-600 bg-cyan-600 px-4 py-2 text-sm font-bold text-cyan-950 shadow-md hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-cyan-500 dark:bg-cyan-600 dark:text-cyan-950 dark:hover:bg-cyan-500"
+                            :disabled="!canSubmit"
+                        >
+                            登録
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </Teleport>
 </template>
 </file>
 
@@ -3286,6 +3215,26 @@ export function runPos2ClientStoragePurge(shopId) {
 }
 </file>
 
+<file path="resources/js/pos2/utils/tableNameKind.js">
+/**
+ * 卓名から種別判定（POS V2 グリッドと整合）。
+ */
+
+export function tableNameNormalized(tableOrName) {
+    if (tableOrName == null) {
+        return '';
+    }
+    if (typeof tableOrName === 'object' && 'name' in tableOrName) {
+        return String(tableOrName.name ?? '').trim();
+    }
+    return String(tableOrName).trim();
+}
+
+export function isTakeoutTableName(tableOrName) {
+    return tableNameNormalized(tableOrName).toUpperCase().startsWith('TK');
+}
+</file>
+
 <file path="resources/js/pos2/utils/tileUiClasses.js">
 /**
  * 旧POS {@see App\Livewire\Pos\TableStatusGrid::tileSurfaceClasses} と同値の内側タイル面クラス（Tailwind）。
@@ -4854,6 +4803,185 @@ export const useMasterStore = defineStore('pos2Master', {
 });
 </file>
 
+<file path="resources/js/pos2/stores/useTableLabelStore.js">
+/**
+ * テイクアウト卓の客名表示（sessionStorage + Phase B: DB 同期）。
+ * キー: `${shopId}_${tableSessionId}` → { name, tel }
+ */
+
+import axios from 'axios';
+import { defineStore } from 'pinia';
+import { buildPos2JsonHeaders } from '../utils/pos2Http';
+
+const STORAGE_KEY = 'pos2_table_labels_v1';
+
+function compositeKey(shopId, sessionId) {
+    const sid = Number(sessionId);
+    if (!Number.isFinite(sid) || sid < 1) {
+        return null;
+    }
+    const s = Number(shopId);
+    if (!Number.isFinite(s) || s < 1) {
+        return null;
+    }
+    return `${s}_${sid}`;
+}
+
+function readStorage() {
+    if (typeof sessionStorage === 'undefined') {
+        return {};
+    }
+    try {
+        const raw = sessionStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+            return {};
+        }
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeStorage(map) {
+    if (typeof sessionStorage === 'undefined') {
+        return;
+    }
+    try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    } catch {
+        // 容量超過などは握りつぶし（本ロジックを止めない）
+    }
+}
+
+export const useTableLabelStore = defineStore('pos2TableLabels', {
+    state: () => ({
+        /** 現在の店舗 ID（composite キー用） */
+        shopId: 0,
+        /**
+         * @type {Record<string, { name: string, tel: string }>}
+         */
+        tableLabels: {},
+    }),
+
+    actions: {
+        /**
+         * ページ起動時: sessionStorage から復元。
+         */
+        hydrateFromSessionStorage() {
+            this.tableLabels = readStorage();
+        },
+
+        /**
+         * @param {number} shopId
+         */
+        setShopId(shopId) {
+            this.shopId = Number(shopId);
+        },
+
+        _persist() {
+            writeStorage(this.tableLabels);
+        },
+
+        /**
+         * @param {string|number} sessionId
+         * @param {string} name
+         * @param {string} [tel]
+         */
+        setLabel(sessionId, name, tel = '') {
+            const key = compositeKey(this.shopId, sessionId);
+            if (key == null) {
+                return;
+            }
+            const n = String(name ?? '').trim();
+            const t = String(tel ?? '').trim();
+            this.tableLabels = {
+                ...this.tableLabels,
+                [key]: { name: n, tel: t },
+            };
+            this._persist();
+            this._syncCustomerToServer(sessionId, n, t);
+        },
+
+        /**
+         * GET .../sessions/:id/orders の customer_* を Pinia + sessionStorage にミラー（API は呼ばない）。
+         * @param {string|number} sessionId
+         * @param {string|null|undefined} name
+         * @param {string|null|undefined} tel
+         */
+        setLabelFromServer(sessionId, name, tel) {
+            const key = compositeKey(this.shopId, sessionId);
+            if (key == null) {
+                return;
+            }
+            const n = name != null ? String(name).trim() : '';
+            const t = tel != null ? String(tel).trim() : '';
+            if (n === '' && t === '') {
+                if (Object.prototype.hasOwnProperty.call(this.tableLabels, key)) {
+                    const next = { ...this.tableLabels };
+                    delete next[key];
+                    this.tableLabels = next;
+                    this._persist();
+                }
+                return;
+            }
+            this.tableLabels = {
+                ...this.tableLabels,
+                [key]: { name: n, tel: t },
+            };
+            this._persist();
+        },
+
+        _syncCustomerToServer(sessionId, name, tel) {
+            const sid = Number(sessionId);
+            if (!Number.isFinite(sid) || sid < 1) {
+                return;
+            }
+            void axios
+                .post(
+                    `/pos2/api/sessions/${sid}/customer`,
+                    { name, tel },
+                    { headers: buildPos2JsonHeaders(), withCredentials: true },
+                )
+                .catch((err) => console.warn('customer save failed', err));
+        },
+
+        /**
+         * @param {string|number} sessionId
+         * @returns {{ name: string, tel: string } | null}
+         */
+        getLabel(sessionId) {
+            const key = compositeKey(this.shopId, sessionId);
+            if (key == null) {
+                return null;
+            }
+            const row = this.tableLabels[key];
+            if (!row || typeof row !== 'object') {
+                return null;
+            }
+            return {
+                name: String(row.name ?? '').trim(),
+                tel: String(row.tel ?? '').trim(),
+            };
+        },
+
+        /**
+         * @param {string|number} sessionId
+         */
+        clearLabel(sessionId) {
+            const key = compositeKey(this.shopId, sessionId);
+            if (key == null || !Object.prototype.hasOwnProperty.call(this.tableLabels, key)) {
+                return;
+            }
+            const next = { ...this.tableLabels };
+            delete next[key];
+            this.tableLabels = next;
+            this._persist();
+        },
+    },
+});
+</file>
+
 <file path="app/Http/Controllers/Pos2/Pos2Controller.php">
 <?php
 
@@ -5092,6 +5220,238 @@ final class Pos2Controller extends Controller
 }
 </file>
 
+<file path="bootstrap/app.php">
+<?php
+
+use App\Http\Middleware\AppendServerTiming;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\KdsAuthenticate;
+use App\Http\Middleware\Pos2Authenticate;
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        channels: __DIR__.'/../routes/channels.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        // OVH 等のリバースプロキシ配下で HTTPS / セッション / リダイレクトが正しく効くようにする
+        $middleware->trustProxies(at: '*');
+
+        $middleware->web(append: [
+            AppendServerTiming::class,
+            HandleInertiaRequests::class,
+        ]);
+
+        $middleware->alias([
+            'kds.auth' => KdsAuthenticate::class,
+            'pos2.auth' => Pos2Authenticate::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        //
+    })->create();
+</file>
+
+<file path="resources/js/pos2/components/SessionRightColumn.vue">
+<script setup>
+/**
+ * SYNAPSE 右ペイン: 確定注文一覧（テーブル・ゲスト・スタッフ送信の合算表示）。
+ */
+import { computed } from 'vue';
+import { formatDT } from '../utils/currency';
+
+const props = defineProps({
+    sessionOrdersPayload: {
+        type: Object,
+        default: null,
+    },
+    loadingConfirmed: {
+        type: Boolean,
+        default: false,
+    },
+    hasUnackedPlaced: {
+        type: Boolean,
+        default: false,
+    },
+    sendKdsBusy: {
+        type: Boolean,
+        default: false,
+    },
+    /** true のとき上部の Send To KDS ストリップを出さない（親ツールバーで REÇU する場合） */
+    hideKdsBanner: {
+        type: Boolean,
+        default: false,
+    },
+});
+
+const emit = defineEmits(['send-kds']);
+
+const flatLines = computed(() => {
+    const orders = props.sessionOrdersPayload?.orders;
+    if (!Array.isArray(orders)) return [];
+    const out = [];
+    for (const o of orders) {
+        const ob = o?.ordered_by ?? 'staff';
+        const lines = o?.lines;
+        if (!Array.isArray(lines)) continue;
+        for (const ln of lines) {
+            out.push({
+                ...ln,
+                order_id: o.id,
+                ordered_by: ln.ordered_by ?? ob,
+            });
+        }
+    }
+    return out;
+});
+
+/** 行背景: KDS 送信前は薄い赤系、送信後はニュートラル（§10 右ペイン） */
+function lineRowClass(isUnsent) {
+    return isUnsent
+        ? 'bg-rose-950/25 dark:bg-rose-950/30'
+        : 'bg-slate-950/40 dark:bg-slate-900/50';
+}
+
+/** KDS 前: 薄い赤ラベル（Recu 前の placed 行） */
+function kdsPhaseBadgeClass(isUnsent) {
+    return isUnsent
+        ? 'border border-rose-400/35 bg-rose-400/15 text-rose-100 dark:text-rose-50'
+        : 'border border-emerald-500/30 bg-emerald-500/12 text-emerald-100 dark:text-emerald-50';
+}
+
+function kdsPhaseLabel(isUnsent) {
+    return isUnsent ? 'KDS前' : 'KDS送信済';
+}
+
+function sourceBadgeClass(orderedBy) {
+    return orderedBy === 'guest'
+        ? 'bg-amber-500/20 text-amber-100 dark:text-amber-50'
+        : 'bg-cyan-500/20 text-cyan-100 dark:text-cyan-50';
+}
+
+/** 1 行目: 商品名（API の product_name / 従来 display_name） */
+function lineProductLabel(ln) {
+    const p = String(ln?.product_name ?? '').trim();
+    if (p !== '') {
+        return p;
+    }
+    return String(ln?.display_name ?? '').trim() || '—';
+}
+
+/** スタイル名（必須セレクト等）— 商品名の直後に続ける */
+function lineStyleLabel(ln) {
+    const s = ln?.style_name;
+    if (s == null) {
+        return '';
+    }
+    const t = String(s).trim();
+    return t === '' ? '' : t;
+}
+
+/** 2 行目: トッピング（カンマ区切り） */
+function lineToppingsCsv(ln) {
+    if (Array.isArray(ln?.topping_names) && ln.topping_names.length > 0) {
+        return ln.topping_names.map((x) => String(x).trim()).filter(Boolean).join(', ');
+    }
+    if (Array.isArray(ln?.topping_snapshots) && ln.topping_snapshots.length > 0) {
+        return ln.topping_snapshots
+            .map((t) => (t && t.name != null ? String(t.name).trim() : ''))
+            .filter(Boolean)
+            .join(', ');
+    }
+    return '';
+}
+</script>
+
+<template>
+    <div
+        class="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-950/70 text-slate-100"
+    >
+        <!-- Send to KDS（旧POS Recu と同一条件: PosOrder placed 存在）— 分割レイアウト時は親が REÇU ボタンを表示 -->
+        <div
+            v-if="hasUnackedPlaced && !hideKdsBanner"
+            class="shrink-0 border-b border-rose-900/50 bg-rose-950/40 px-3 py-2"
+        >
+            <button
+                type="button"
+                class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-rose-400 bg-rose-600 px-3 py-2.5 text-sm font-black text-white shadow-lg animate-pulse hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-300"
+                :disabled="sendKdsBusy"
+                @click="emit('send-kds')"
+            >
+                Send To KDS / Recu
+            </button>
+        </div>
+
+        <!-- セッション注文一覧（ゲスト・Add to Table 同一リスト。行ごとに KDS 前/送信済） -->
+        <div class="min-h-0 flex-1 overflow-y-auto">
+
+            <div v-if="loadingConfirmed" class="px-3 py-6 text-sm text-slate-500">
+                読み込み中…
+            </div>
+            <ul v-else-if="flatLines.length" class="divide-y divide-slate-800/90">
+                <li
+                    v-for="ln in flatLines"
+                    :key="`ln-${ln.id}`"
+                    class="px-2.5 py-1 text-[11px] leading-snug sm:px-3 sm:text-xs"
+                    :class="lineRowClass(!!ln.is_unsent)"
+                >
+                    <div class="flex items-start gap-2">
+                        <div class="min-w-0 flex-1">
+                            <div class="grid w-full min-w-0 grid-cols-[auto_1fr_auto] items-baseline gap-x-1.5 gap-y-0">
+                                <span class="shrink-0 tabular-nums font-semibold text-slate-200 dark:text-slate-200">
+                                    {{ Math.max(1, Number(ln.qty ?? 1)) }} x
+                                </span>
+                                <span class="min-w-0 font-medium leading-snug text-white dark:text-white">
+                                    <span class="break-words">{{ lineProductLabel(ln) }}</span>
+                                    <template v-if="lineStyleLabel(ln)">
+                                        <span class="font-normal text-slate-300 dark:text-slate-300">
+                                            {{ ' ' + lineStyleLabel(ln) }}
+                                        </span>
+                                    </template>
+                                </span>
+                                <span
+                                    class="shrink-0 whitespace-nowrap text-right text-[10px] font-medium tabular-nums text-slate-500 dark:text-slate-400"
+                                >
+                                    {{ formatDT(Number(ln.line_total_minor ?? 0)) }}
+                                </span>
+                                <span
+                                    v-if="lineToppingsCsv(ln)"
+                                    class="col-start-2 col-span-2 mt-0.5 min-w-0 break-words text-[10px] leading-snug text-slate-500 dark:text-slate-400"
+                                >
+                                    {{ lineToppingsCsv(ln) }}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex shrink-0 flex-col items-end gap-0.5 self-start pt-0.5">
+                            <span
+                                class="rounded px-1 py-px text-[9px] font-bold leading-none"
+                                :class="kdsPhaseBadgeClass(!!ln.is_unsent)"
+                            >
+                                {{ kdsPhaseLabel(!!ln.is_unsent) }}
+                            </span>
+                            <span
+                                class="rounded px-1 py-px text-[9px] font-semibold uppercase leading-none"
+                                :class="sourceBadgeClass(ln.ordered_by)"
+                            >
+                                {{ ln.ordered_by === 'guest' ? 'guest' : 'staff' }}
+                            </span>
+                        </div>
+                    </div>
+                </li>
+            </ul>
+            <p v-else class="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                この卓の注文行はまだありません
+            </p>
+        </div>
+    </div>
+</template>
+</file>
+
 <file path="app/Http/Controllers/Pos2/Pos2SessionController.php">
 <?php
 
@@ -5255,6 +5615,9 @@ final class Pos2SessionController extends Controller
             'restaurant_table_id' => (int) $session->restaurant_table_id,
             'session_revision' => (int) $session->session_revision,
             'has_unacked_placed' => $hasUnackedPlaced,
+            'customer_name' => $session->customer_name,
+            /** DB 列 customer_phone（API では tel 系として customer_tel も返す） */
+            'customer_tel' => $session->customer_phone,
             'orders' => $mappedOrders,
             'generated_at' => now()->toIso8601String(),
             'schema_version' => 1,
@@ -5651,238 +6014,6 @@ final class Pos2SessionController extends Controller
 }
 </file>
 
-<file path="bootstrap/app.php">
-<?php
-
-use App\Http\Middleware\AppendServerTiming;
-use App\Http\Middleware\HandleInertiaRequests;
-use App\Http\Middleware\KdsAuthenticate;
-use App\Http\Middleware\Pos2Authenticate;
-use Illuminate\Foundation\Application;
-use Illuminate\Foundation\Configuration\Exceptions;
-use Illuminate\Foundation\Configuration\Middleware;
-
-return Application::configure(basePath: dirname(__DIR__))
-    ->withRouting(
-        web: __DIR__.'/../routes/web.php',
-        commands: __DIR__.'/../routes/console.php',
-        channels: __DIR__.'/../routes/channels.php',
-        health: '/up',
-    )
-    ->withMiddleware(function (Middleware $middleware): void {
-        // OVH 等のリバースプロキシ配下で HTTPS / セッション / リダイレクトが正しく効くようにする
-        $middleware->trustProxies(at: '*');
-
-        $middleware->web(append: [
-            AppendServerTiming::class,
-            HandleInertiaRequests::class,
-        ]);
-
-        $middleware->alias([
-            'kds.auth' => KdsAuthenticate::class,
-            'pos2.auth' => Pos2Authenticate::class,
-        ]);
-    })
-    ->withExceptions(function (Exceptions $exceptions): void {
-        //
-    })->create();
-</file>
-
-<file path="resources/js/pos2/components/SessionRightColumn.vue">
-<script setup>
-/**
- * SYNAPSE 右ペイン: 確定注文一覧（テーブル・ゲスト・スタッフ送信の合算表示）。
- */
-import { computed } from 'vue';
-import { formatDT } from '../utils/currency';
-
-const props = defineProps({
-    sessionOrdersPayload: {
-        type: Object,
-        default: null,
-    },
-    loadingConfirmed: {
-        type: Boolean,
-        default: false,
-    },
-    hasUnackedPlaced: {
-        type: Boolean,
-        default: false,
-    },
-    sendKdsBusy: {
-        type: Boolean,
-        default: false,
-    },
-    /** true のとき上部の Send To KDS ストリップを出さない（親ツールバーで REÇU する場合） */
-    hideKdsBanner: {
-        type: Boolean,
-        default: false,
-    },
-});
-
-const emit = defineEmits(['send-kds']);
-
-const flatLines = computed(() => {
-    const orders = props.sessionOrdersPayload?.orders;
-    if (!Array.isArray(orders)) return [];
-    const out = [];
-    for (const o of orders) {
-        const ob = o?.ordered_by ?? 'staff';
-        const lines = o?.lines;
-        if (!Array.isArray(lines)) continue;
-        for (const ln of lines) {
-            out.push({
-                ...ln,
-                order_id: o.id,
-                ordered_by: ln.ordered_by ?? ob,
-            });
-        }
-    }
-    return out;
-});
-
-/** 行背景: KDS 送信前は薄い赤系、送信後はニュートラル（§10 右ペイン） */
-function lineRowClass(isUnsent) {
-    return isUnsent
-        ? 'bg-rose-950/25 dark:bg-rose-950/30'
-        : 'bg-slate-950/40 dark:bg-slate-900/50';
-}
-
-/** KDS 前: 薄い赤ラベル（Recu 前の placed 行） */
-function kdsPhaseBadgeClass(isUnsent) {
-    return isUnsent
-        ? 'border border-rose-400/35 bg-rose-400/15 text-rose-100 dark:text-rose-50'
-        : 'border border-emerald-500/30 bg-emerald-500/12 text-emerald-100 dark:text-emerald-50';
-}
-
-function kdsPhaseLabel(isUnsent) {
-    return isUnsent ? 'KDS前' : 'KDS送信済';
-}
-
-function sourceBadgeClass(orderedBy) {
-    return orderedBy === 'guest'
-        ? 'bg-amber-500/20 text-amber-100 dark:text-amber-50'
-        : 'bg-cyan-500/20 text-cyan-100 dark:text-cyan-50';
-}
-
-/** 1 行目: 商品名（API の product_name / 従来 display_name） */
-function lineProductLabel(ln) {
-    const p = String(ln?.product_name ?? '').trim();
-    if (p !== '') {
-        return p;
-    }
-    return String(ln?.display_name ?? '').trim() || '—';
-}
-
-/** スタイル名（必須セレクト等）— 商品名の直後に続ける */
-function lineStyleLabel(ln) {
-    const s = ln?.style_name;
-    if (s == null) {
-        return '';
-    }
-    const t = String(s).trim();
-    return t === '' ? '' : t;
-}
-
-/** 2 行目: トッピング（カンマ区切り） */
-function lineToppingsCsv(ln) {
-    if (Array.isArray(ln?.topping_names) && ln.topping_names.length > 0) {
-        return ln.topping_names.map((x) => String(x).trim()).filter(Boolean).join(', ');
-    }
-    if (Array.isArray(ln?.topping_snapshots) && ln.topping_snapshots.length > 0) {
-        return ln.topping_snapshots
-            .map((t) => (t && t.name != null ? String(t.name).trim() : ''))
-            .filter(Boolean)
-            .join(', ');
-    }
-    return '';
-}
-</script>
-
-<template>
-    <div
-        class="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-950/70 text-slate-100"
-    >
-        <!-- Send to KDS（旧POS Recu と同一条件: PosOrder placed 存在）— 分割レイアウト時は親が REÇU ボタンを表示 -->
-        <div
-            v-if="hasUnackedPlaced && !hideKdsBanner"
-            class="shrink-0 border-b border-rose-900/50 bg-rose-950/40 px-3 py-2"
-        >
-            <button
-                type="button"
-                class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-rose-400 bg-rose-600 px-3 py-2.5 text-sm font-black text-white shadow-lg animate-pulse hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-300"
-                :disabled="sendKdsBusy"
-                @click="emit('send-kds')"
-            >
-                Send To KDS / Recu
-            </button>
-        </div>
-
-        <!-- セッション注文一覧（ゲスト・Add to Table 同一リスト。行ごとに KDS 前/送信済） -->
-        <div class="min-h-0 flex-1 overflow-y-auto">
-
-            <div v-if="loadingConfirmed" class="px-3 py-6 text-sm text-slate-500">
-                読み込み中…
-            </div>
-            <ul v-else-if="flatLines.length" class="divide-y divide-slate-800/90">
-                <li
-                    v-for="ln in flatLines"
-                    :key="`ln-${ln.id}`"
-                    class="px-2.5 py-1 text-[11px] leading-snug sm:px-3 sm:text-xs"
-                    :class="lineRowClass(!!ln.is_unsent)"
-                >
-                    <div class="flex items-start gap-2">
-                        <div class="min-w-0 flex-1">
-                            <div class="grid w-full min-w-0 grid-cols-[auto_1fr_auto] items-baseline gap-x-1.5 gap-y-0">
-                                <span class="shrink-0 tabular-nums font-semibold text-slate-200 dark:text-slate-200">
-                                    {{ Math.max(1, Number(ln.qty ?? 1)) }} x
-                                </span>
-                                <span class="min-w-0 font-medium leading-snug text-white dark:text-white">
-                                    <span class="break-words">{{ lineProductLabel(ln) }}</span>
-                                    <template v-if="lineStyleLabel(ln)">
-                                        <span class="font-normal text-slate-300 dark:text-slate-300">
-                                            {{ ' ' + lineStyleLabel(ln) }}
-                                        </span>
-                                    </template>
-                                </span>
-                                <span
-                                    class="shrink-0 whitespace-nowrap text-right text-[10px] font-medium tabular-nums text-slate-500 dark:text-slate-400"
-                                >
-                                    {{ formatDT(Number(ln.line_total_minor ?? 0)) }}
-                                </span>
-                                <span
-                                    v-if="lineToppingsCsv(ln)"
-                                    class="col-start-2 col-span-2 mt-0.5 min-w-0 break-words text-[10px] leading-snug text-slate-500 dark:text-slate-400"
-                                >
-                                    {{ lineToppingsCsv(ln) }}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="flex shrink-0 flex-col items-end gap-0.5 self-start pt-0.5">
-                            <span
-                                class="rounded px-1 py-px text-[9px] font-bold leading-none"
-                                :class="kdsPhaseBadgeClass(!!ln.is_unsent)"
-                            >
-                                {{ kdsPhaseLabel(!!ln.is_unsent) }}
-                            </span>
-                            <span
-                                class="rounded px-1 py-px text-[9px] font-semibold uppercase leading-none"
-                                :class="sourceBadgeClass(ln.ordered_by)"
-                            >
-                                {{ ln.ordered_by === 'guest' ? 'guest' : 'staff' }}
-                            </span>
-                        </div>
-                    </div>
-                </li>
-            </ul>
-            <p v-else class="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                この卓の注文行はまだありません
-            </p>
-        </div>
-    </div>
-</template>
-</file>
-
 <file path="resources/js/pos2/components/TableGrid.vue">
 <script setup>
 import { computed } from 'vue';
@@ -6154,6 +6285,7 @@ function primaryLineForTable(table) {
 
 import { defineStore } from 'pinia';
 import { buildPos2JsonHeaders } from '../utils/pos2Http';
+import { useTableLabelStore } from './useTableLabelStore';
 
 /** @typedef {'monitoring' | 'adding'} Pos2UiMode */
 
@@ -6239,6 +6371,14 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
             this.sessionOrdersPayload = data;
             this.sessionRevision = Number(data.session_revision ?? 0);
             this.sessionOrdersLoadedAt = new Date().toISOString();
+
+            const tsid = Number(data.table_session_id ?? 0);
+            if (Number.isFinite(tsid) && tsid > 0) {
+                const labelStore = useTableLabelStore();
+                const cname = data.customer_name ?? null;
+                const ctel = data.customer_tel ?? data.customer_phone ?? null;
+                labelStore.setLabelFromServer(tsid, cname, ctel);
+            }
         },
 
         /**
@@ -6338,6 +6478,8 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
                 orders: baseOrders,
                 generated_at: new Date().toISOString(),
                 schema_version: Number(prev?.schema_version ?? 1) || 1,
+                customer_name: prev?.customer_name ?? null,
+                customer_tel: prev?.customer_tel ?? prev?.customer_phone ?? null,
             };
         },
 
@@ -8124,11 +8266,11 @@ use App\Http\Controllers\Pos2\Pos2BridgeController;
 use App\Http\Controllers\Pos2\Pos2Controller;
 use App\Http\Controllers\Pos2\Pos2DevController;
 use App\Http\Controllers\Pos2\Pos2SessionController;
+use App\Http\Controllers\Pos2\TableSessionCustomerController;
 use App\Http\Middleware\SetGuestLocale;
 use App\Livewire\ClientOrderForm;
 use App\Livewire\FrontendDailyClose;
 use App\Livewire\GuestOrder\MenuPage as GuestMenuPage;
-use App\Livewire\Kds\KdsDashboard;
 use App\Livewire\TimecardForm;
 use App\Models\Attendance;
 use App\Models\NewsNote;
@@ -8271,7 +8413,7 @@ Route::get('/kds/login', [KdsAuthController::class, 'showLoginForm'])->name('kds
 Route::post('/kds/login', [KdsAuthController::class, 'login'])->name('kds.login.submit');
 
 Route::middleware('kds.auth')->group(function () {
-    Route::get('/kds', KdsDashboard::class)->name('kds.dashboard');
+    Route::get('/kds', fn () => redirect()->route('kds2.index'))->name('kds.dashboard');
 });
 
 Route::get('/timecard', TimecardForm::class)->name('timecard.index');
@@ -8380,6 +8522,7 @@ Route::prefix('pos2')->name('pos2.')->group(function () {
         Route::post('/api/orders', [Pos2Controller::class, 'submitOrderStub'])->name('api.orders.stub');
         Route::get('/api/table-dashboard', [Pos2SessionController::class, 'tableDashboard'])->name('api.table-dashboard');
         Route::get('/api/sessions/{session}/orders', [Pos2SessionController::class, 'sessionOrders'])->name('api.sessions.orders');
+        Route::post('/api/sessions/{session}/customer', [TableSessionCustomerController::class, 'update'])->name('api.sessions.customer');
         Route::post('/api/sessions/{session}/orders', [Pos2SessionController::class, 'submitDraftOrders'])->name('api.sessions.orders.submit');
         Route::post('/api/sessions/{session}/recu-staff', [Pos2SessionController::class, 'recuStaff'])->name('api.sessions.recu-staff');
         // 空卓から注文: table_id を渡すとサーバーが getOrCreate してセッション確定後に 201 を返す

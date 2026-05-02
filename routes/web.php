@@ -17,7 +17,6 @@ use App\Http\Middleware\SetGuestLocale;
 use App\Livewire\ClientOrderForm;
 use App\Livewire\FrontendDailyClose;
 use App\Livewire\GuestOrder\MenuPage as GuestMenuPage;
-use App\Livewire\Kds\KdsDashboard;
 use App\Livewire\TimecardForm;
 use App\Models\Attendance;
 use App\Models\NewsNote;
@@ -160,7 +159,7 @@ Route::get('/kds/login', [KdsAuthController::class, 'showLoginForm'])->name('kds
 Route::post('/kds/login', [KdsAuthController::class, 'login'])->name('kds.login.submit');
 
 Route::middleware('kds.auth')->group(function () {
-    Route::get('/kds', KdsDashboard::class)->name('kds.dashboard');
+    Route::get('/kds', fn () => redirect()->route('kds2.index'))->name('kds.dashboard');
 });
 
 Route::get('/timecard', TimecardForm::class)->name('timecard.index');
@@ -272,6 +271,7 @@ Route::prefix('pos2')->name('pos2.')->group(function () {
         Route::post('/api/sessions/{session}/customer', [TableSessionCustomerController::class, 'update'])->name('api.sessions.customer');
         Route::post('/api/sessions/{session}/orders', [Pos2SessionController::class, 'submitDraftOrders'])->name('api.sessions.orders.submit');
         Route::post('/api/sessions/{session}/recu-staff', [Pos2SessionController::class, 'recuStaff'])->name('api.sessions.recu-staff');
+        Route::post('/api/sessions/{session}/order-lines/{orderLine}/delete', [Pos2SessionController::class, 'deleteOrderLine'])->name('api.sessions.order-lines.delete');
         // 空卓から注文: table_id を渡すとサーバーが getOrCreate してセッション確定後に 201 を返す
         Route::post('/api/tables/{table}/orders', [Pos2SessionController::class, 'submitDraftOrdersForTable'])->name('api.tables.orders.submit');
         Route::post('/tables/move', [Pos2SessionController::class, 'moveTable'])->name('tables.move');

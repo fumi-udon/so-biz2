@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { createDefaultTakeoutUi } from './takeoutCustomerLabelModalDefaults.js';
 
 const props = defineProps({
     open: {
@@ -15,9 +16,16 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    /** Inertia `pos_ui` 由来（欠損時は createDefaultTakeoutUi） */
+    takeoutUi: {
+        type: Object,
+        default: createDefaultTakeoutUi,
+    },
 });
 
 const emit = defineEmits(['close', 'save']);
+
+const ui = computed(() => ({ ...createDefaultTakeoutUi(), ...props.takeoutUi }));
 
 const nameModel = ref('');
 const telModel = ref('');
@@ -43,7 +51,7 @@ function onBackdropClick() {
 function onSubmit() {
     const n = String(nameModel.value ?? '').trim();
     if (!n) {
-        nameError.value = 'お名前を入力してください';
+        nameError.value = ui.value.nameRequired;
         return;
     }
     nameError.value = '';
@@ -72,10 +80,10 @@ function onSubmit() {
                     id="takeout-label-modal-title"
                     class="text-base font-bold text-slate-50 dark:text-white"
                 >
-                    客名登録
+                    {{ ui.title }}
                 </h2>
                 <p class="mt-1 text-xs text-slate-400 dark:text-slate-400">
-                    テイクアウト卓の表示用（この端末の画面のみ）
+                    {{ ui.hint }}
                 </p>
 
                 <form
@@ -86,14 +94,14 @@ function onSubmit() {
                         <label
                             for="takeout-label-name"
                             class="mb-1 block text-xs font-semibold text-slate-300 dark:text-slate-300"
-                        >お名前 <span class="text-rose-400">*</span></label>
+                        >{{ ui.fieldName }} <span class="text-rose-400">*</span></label>
                         <input
                             id="takeout-label-name"
                             v-model="nameModel"
                             type="text"
                             autocomplete="name"
                             class="w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 dark:border-slate-500 dark:bg-slate-950 dark:text-slate-100"
-                            placeholder="例: 田中様"
+                            :placeholder="ui.placeholderName"
                         >
                         <p
                             v-if="nameError"
@@ -106,7 +114,7 @@ function onSubmit() {
                         <label
                             for="takeout-label-tel"
                             class="mb-1 block text-xs font-semibold text-slate-300 dark:text-slate-300"
-                        >TEL（任意）</label>
+                        >{{ ui.fieldTel }}</label>
                         <input
                             id="takeout-label-tel"
                             v-model="telModel"
@@ -114,7 +122,7 @@ function onSubmit() {
                             autocomplete="tel"
                             inputmode="tel"
                             class="w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 dark:border-slate-500 dark:bg-slate-950 dark:text-slate-100"
-                            placeholder="090-1234-5678"
+                            :placeholder="ui.placeholderTel"
                         >
                     </div>
 
@@ -124,14 +132,14 @@ function onSubmit() {
                             class="rounded-xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-800"
                             @click="emit('close')"
                         >
-                            キャンセル
+                            {{ ui.cancel }}
                         </button>
                         <button
                             type="submit"
                             class="rounded-xl border-2 border-cyan-600 bg-cyan-600 px-4 py-2 text-sm font-bold text-cyan-950 shadow-md hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-cyan-500 dark:bg-cyan-600 dark:text-cyan-950 dark:hover:bg-cyan-500"
                             :disabled="!canSubmit"
                         >
-                            登録
+                            {{ ui.save }}
                         </button>
                     </div>
                 </form>

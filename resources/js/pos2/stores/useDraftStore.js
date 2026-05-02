@@ -13,6 +13,7 @@
  */
 
 import { defineStore } from 'pinia';
+import { toRaw } from 'vue';
 import axios from 'axios';
 import { assertCartLine } from '../utils/cartLineBuilder';
 import { generateUUID } from '../utils/uuid.js';
@@ -23,6 +24,23 @@ import { useMasterStore } from './useMasterStore';
 import { usePos2SessionUiStore } from './usePos2SessionUiStore';
 
 export const DRAFT_SCHEMA_VERSION = 2;
+
+/**
+ * Vue Proxy を剥がしてから structuredClone（失敗時は浅いコピーにフォールバック）。
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
+function cloneLinesSnapshot(value) {
+    try {
+        const raw = toRaw(value);
+        if (!Array.isArray(raw)) {
+            return [];
+        }
+        return structuredClone(raw);
+    } catch {
+        return Array.isArray(value) ? [...value] : [];
+    }
+}
 
 function draftKey(shopId, tableSessionId) {
     return `pos_draft_${shopId}_${tableSessionId}`;
@@ -473,23 +491,13 @@ export const useDraftStore = defineStore('pos2Draft', {
                 }
             }
 
-            let linesPlain;
-            try {
-                linesPlain = JSON.parse(JSON.stringify(linesInput));
-            } catch {
-                linesPlain = Array.isArray(linesInput) ? [...linesInput] : [];
-            }
+            const linesPlain = cloneLinesSnapshot(linesInput);
             if (!Array.isArray(linesPlain) || linesPlain.length === 0) {
                 pushOrderSubmitTrace(debugStore, dbg, 'order.submit.skipped', { reason: 'empty' });
                 return { ok: false, reason: 'empty' };
             }
 
-            let rollbackLines;
-            try {
-                rollbackLines = JSON.parse(JSON.stringify(this.lines || []));
-            } catch {
-                rollbackLines = Array.isArray(this.lines) ? [...this.lines] : [];
-            }
+            const rollbackLines = cloneLinesSnapshot(this.lines || []);
 
             const hasSession = this.tableSessionId != null && String(this.tableSessionId).trim() !== '';
             const hasTable = this.pendingTableId != null && Number(this.pendingTableId) > 0;
@@ -572,7 +580,7 @@ export const useDraftStore = defineStore('pos2Draft', {
 
             const started = typeof performance !== 'undefined' ? performance.now() : 0;
 
-            void this._runOptimisticSubmitBackground({
+            const bgCtx = {
                 clientSubmitId,
                 linesPlain,
                 rollbackLines,
@@ -583,9 +591,12 @@ export const useDraftStore = defineStore('pos2Draft', {
                 debugStore,
                 correlation,
                 started,
-            }).catch(() => {
-                this.isOrderSubmitting = false;
-            });
+            };
+            setTimeout(() => {
+                void this._runOptimisticSubmitBackground(bgCtx).catch(() => {
+                    this.isOrderSubmitting = false;
+                });
+            }, 0);
 
             return { ok: true, revalidateScheduled: true };
         },

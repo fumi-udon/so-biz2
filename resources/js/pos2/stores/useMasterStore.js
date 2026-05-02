@@ -22,6 +22,8 @@ function emptyState() {
         categories: [],
         menuItems: [],
         tables: [],
+        /** @type {Array<{ id: number, name: string, level?: number }>} bootstrap `pin_approvers` */
+        pinApprovers: [],
         clientTableLimit: 100,
         staffTableLimit: 100,
         takeoutTableLimit: 100,
@@ -82,6 +84,7 @@ export const useMasterStore = defineStore('pos2Master', {
                 this.categories = Array.isArray(data.categories) ? data.categories : [];
                 this.menuItems = Array.isArray(data.menuItems) ? data.menuItems : [];
                 this.tables = Array.isArray(data.tables) ? data.tables : [];
+                this.pinApprovers = Array.isArray(data.pin_approvers) ? data.pin_approvers : [];
                 this.clientTableLimit = normalizeTableDisplayLimit(
                     data.client_table_limit ?? data.clientTableLimit,
                 );
@@ -109,6 +112,7 @@ export const useMasterStore = defineStore('pos2Master', {
             this.categories = Array.isArray(payload.categories) ? payload.categories : [];
             this.menuItems = Array.isArray(payload.menuItems) ? payload.menuItems : [];
             this.tables = Array.isArray(payload.tables) ? payload.tables : [];
+            this.pinApprovers = Array.isArray(payload.pin_approvers) ? payload.pin_approvers : [];
             this.clientTableLimit = normalizeTableDisplayLimit(payload.client_table_limit);
             this.staffTableLimit = normalizeTableDisplayLimit(payload.staff_table_limit);
             this.takeoutTableLimit = normalizeTableDisplayLimit(payload.takeout_table_limit);
@@ -120,6 +124,7 @@ export const useMasterStore = defineStore('pos2Master', {
                 categories: this.categories,
                 menuItems: this.menuItems,
                 tables: this.tables,
+                pin_approvers: this.pinApprovers,
                 client_table_limit: this.clientTableLimit,
                 staff_table_limit: this.staffTableLimit,
                 takeout_table_limit: this.takeoutTableLimit,

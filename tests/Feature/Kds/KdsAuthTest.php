@@ -30,7 +30,7 @@ class KdsAuthTest extends TestCase
         $this->post(route('kds.login.submit'), [
             'pin' => '4242',
             '_token' => csrf_token(),
-        ])->assertRedirect(route('kds.dashboard'));
+        ])->assertRedirect(route('kds2.index'));
 
         $this->assertSame((int) $shop->id, session('kds.active_shop_id'));
     }

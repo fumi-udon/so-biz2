@@ -18,7 +18,7 @@ final class KdsAuthController extends Controller
                 ->where('is_active', true)
                 ->exists();
             if ($ok) {
-                return redirect()->route('kds.dashboard');
+                return redirect()->route('kds2.index');
             }
         }
 
@@ -55,6 +55,6 @@ final class KdsAuthController extends Controller
 
         $request->session()->put('kds.active_shop_id', $shopId);
 
-        return redirect()->intended(route('kds.dashboard'));
+        return redirect()->intended(route('kds2.index'));
     }
 }

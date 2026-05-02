@@ -18,8 +18,10 @@ import ProductGrid from '../components/ProductGrid.vue';
 import ConfigModal from '../components/ConfigModal.vue';
 import Pos2AppMenu from '../components/Pos2AppMenu.vue';
 import ChangeTableModal from '../components/ChangeTableModal.vue';
+import Pos2LineDeletePinModal from '../components/Pos2LineDeletePinModal.vue';
 import { buildCartLineSnapshot } from '../utils/cartLineBuilder';
 import { formatDT } from '../utils/currency';
+import { flattenSessionOrderLines } from '../utils/sessionOrdersFlatLines';
 
 const page = usePage();
 const debugStore = useDebugStore();
@@ -40,6 +42,57 @@ const posUi = computed(() => {
     const raw = page.props.pos_ui;
     return raw && typeof raw === 'object' ? raw : {};
 });
+
+/** Inertia `pos_ui` 由来の画面文言（欠損時は短い FR でフォールバック） */
+const pos2Screen = computed(() => {
+    const u = posUi.value;
+    const pick = (key, frFallback) =>
+        (typeof u[key] === 'string' && u[key].trim() !== '') ? u[key] : frFallback;
+    return {
+        pageTitle: pick('pos2_page_title', 'POS Caisse'),
+        emptyTitle: pick('pos2_empty_state_title', '👈 Touchez une table à gauche'),
+        emptyHint: pick('pos2_empty_state_hint', '📋 Ici : commandes, + ajouter, envoi cuisine.'),
+        refreshTitle: pick('pos2_refresh_title', '🔄 Actualiser'),
+        refreshAria: pick('pos2_refresh_aria', 'Actualiser les commandes'),
+        closeMenu: pick('pos2_close_menu_btn', '✕ Fermer le menu'),
+        addTitle: pick('pos2_add_title', '➕ Ajouter'),
+        addAria: pick('pos2_add_aria', 'Ajouter un plat ou une boisson'),
+        kdsLabel: pick('pos2_kds_label', '📤 Cuisine'),
+        orderSubmitting: pick('pos2_order_submitting', '⏳ Envoi en cours…'),
+        takeoutFabTitle: pick('pos2_takeout_fab_title', '👤 Nom du client'),
+        takeoutFabLabel: pick('pos2_takeout_fab_label', 'Nom'),
+        takeoutModal: {
+            title: pick('pos2_takeout_modal_title', '👤 Nom du client (à emporter)'),
+            hint: pick('pos2_takeout_modal_hint', '📱 Affichage sur cette tablette seulement.'),
+            fieldName: pick('pos2_takeout_field_name_label', 'Nom'),
+            fieldTel: pick('pos2_takeout_field_tel_label', '📞 Tél. (facultatif)'),
+            placeholderName: pick('pos2_takeout_placeholder_name', 'ex : Dupont'),
+            placeholderTel: pick('pos2_takeout_placeholder_tel', '06 12 34 56 78'),
+            nameRequired: pick('pos2_takeout_name_required_error', '⚠️ Indiquez un nom.'),
+            cancel: pick('pos2_takeout_btn_cancel', '✕ Annuler'),
+            save: pick('pos2_takeout_btn_save', '✓ OK'),
+        },
+        recuConflict: pick('pos2_recu_conflict_alert', '🔄 Un autre appareil a modifié les données.\nVérifiez l’écran.'),
+        recuFailed: pick('pos2_recu_failed_alert', '❌ Envoi cuisine impossible. Réessayez.'),
+        tableMoveConflict: pick('pos2_table_move_conflict_alert', '🔄 Conflit : l’écran est synchronisé.'),
+        tableMoveFailed: pick('pos2_table_move_failed_alert', '❌ Changement de table impossible.'),
+        changeTableTitle: pick('change_table_title', '🪑 Changer de table'),
+        changeTableCancel: pick('change_table_cancel', '✕ Fermer'),
+        lineDeletePin: {
+            title: pick('remove_line_auth_required_title', 'Validation responsable'),
+            hint: pick('remove_line_auth_input_required', 'Sélectionnez un approbateur et saisissez le PIN.'),
+            approverPlaceholder: pick('pos2_line_delete_approver_placeholder', '— Responsable —'),
+            approverLabel: pick('pos2_line_delete_approver_label', 'Responsable'),
+            pinLabel: pick('pos2_line_delete_pin_field_label', 'Code PIN'),
+            cancel: pick('change_table_cancel', '✕ Fermer'),
+            submit: pick('pos2_line_delete_pin_submit', 'Valider'),
+            emptyApprovers: pick('pos2_line_delete_pin_no_approvers', 'Aucun responsable (niveau 3+) disponible.'),
+            validationApprover: pick('pos2_line_delete_pin_err_approver', 'Choisissez un responsable.'),
+            validationPin: pick('pos2_line_delete_pin_err_pin', 'Saisissez le PIN.'),
+        },
+    };
+});
+
 const isTableSelected = computed(() => tableStore.hasSelection);
 
 const tilesByTableId = computed(() => {
@@ -144,6 +197,38 @@ const takeoutLabelModalInitial = computed(() => {
     };
 });
 
+/** 確定注文行（SessionRightColumn.flatLines と同一ソース） */
+const sessionOrderFlatLines = computed(() =>
+    flattenSessionOrderLines(sessionUi.sessionOrdersPayload),
+);
+
+/**
+ * ADDITION / CLÔTURE 右端チップ: 右ペインに1行でも出ているときだけ。
+ * 別セッションのペイロード残りは出さない（table_session_id でガード）。
+ */
+const showSettlementEdgeChips = computed(() => {
+    if (!tableStore.hasSelection) {
+        return false;
+    }
+    const sid = sessionUi.activeTableSessionId;
+    if (sid == null || Number(sid) < 1) {
+        return false;
+    }
+    const payload = sessionUi.sessionOrdersPayload;
+    const pSid = payload?.table_session_id;
+    if (pSid != null && Number(pSid) > 0 && Number(pSid) !== Number(sid)) {
+        return false;
+    }
+    return sessionOrderFlatLines.value.length > 0;
+});
+
+/** テイクアウト客名 FAB（画面中央縦）と縦位置が被らないようずらす */
+const settlementChipsYClass = computed(() =>
+    showTakeoutCustomerLabelFab.value
+        ? 'top-[38%] -translate-y-1/2'
+        : 'top-1/2 -translate-y-1/2',
+);
+
 const pos2BridgeOrigin = typeof window !== 'undefined' ? window.location.origin : '';
 
 function onPos2BridgeMessage(event) {
@@ -154,10 +239,17 @@ function onPos2BridgeMessage(event) {
     if (!data || data.type !== 'pos2-bridge' || typeof data.action !== 'string') {
         return;
     }
+    const sidRaw = data.table_session_id;
+    const intent = data.intent;
+
     if (data.action === 'pos-settlement-completed') {
-        const sidRaw = data.table_session_id;
         if (sidRaw != null && Number(sidRaw) > 0) {
             labelStore.clearLabel(Number(sidRaw));
+            sessionUi.optimisticClearSession(Number(sidRaw));
+        }
+    } else if (data.action === 'receipt-preview-printed') {
+        if (sidRaw != null && Number(sidRaw) > 0 && intent === 'addition') {
+            sessionUi.optimisticUpdateTileStatusBySessionId(Number(sidRaw), 'billed');
         }
     }
 
@@ -188,6 +280,26 @@ function onTakeoutLabelSave(payload) {
     closeTakeoutLabelModal();
 }
 
+/**
+ * 行削除 PIN モーダル: 承認者＋PIN 送信。先にチャレンジを閉じてから楽観削除を再試行する。
+ * @param {{ approverStaffId: number, approvalPin: string }} payload
+ */
+function onLineDeletePinSubmit(payload) {
+    const ch = sessionUi.lineDeletePinChallenge;
+    if (!ch) {
+        return;
+    }
+    const lineId = ch.lineId;
+    const sessionId = ch.sessionId;
+    sessionUi.dismissLineDeletePinChallenge();
+    void sessionUi.optimisticDeleteOrderLine(
+        lineId,
+        sessionId,
+        payload.approverStaffId,
+        payload.approvalPin,
+    );
+}
+
 async function refreshAfterPos2Bridge() {
     await sessionUi.fetchTableDashboard({ silent: true });
     const sid = sessionUi.activeTableSessionId;
@@ -201,17 +313,28 @@ async function refreshAfterPos2Bridge() {
 
 /** ブリッジを開く直前の超楽観ガード（通信なし） */
 function tryOpenSettlementBridge() {
+    const u = posUi.value;
+    const msgNoOrders = typeof u.bridge_settlement_guard_no_orders === 'string' && u.bridge_settlement_guard_no_orders.trim() !== ''
+        ? u.bridge_settlement_guard_no_orders
+        : "🧾 Total à 0 €\n\nAucune ligne sur l’addition. Ajoutez des articles avant d’ouvrir l’addition ou la clôture.";
+    const msgUnacked = typeof u.bridge_settlement_guard_unacked === 'string' && u.bridge_settlement_guard_unacked.trim() !== ''
+        ? u.bridge_settlement_guard_unacked
+        : "⏳ Commandes non envoyées à la cuisine\n\nDes commandes « placées » ne sont pas encore validées. Touchez d’abord « Reçu staff », puis réessayez.";
+    const msgNoSession = typeof u.bridge_settlement_guard_no_session === 'string' && u.bridge_settlement_guard_no_session.trim() !== ''
+        ? u.bridge_settlement_guard_no_session
+        : "⚠️ Session de table introuvable\n\nResélectionnez une table, puis réessayez.";
+
     if (Number(sessionUi.sessionTotalMinor) === 0) {
-        window.alert('オーダーデータがありません。');
+        window.alert(msgNoOrders);
         return false;
     }
     if (sessionUi.hasUnackedPlacedOrders) {
-        window.alert('未送信（未Recu）の注文があります。先にキッチンへ送信してください。');
+        window.alert(msgUnacked);
         return false;
     }
     const sid = sessionUi.activeTableSessionId;
     if (sid == null || Number(sid) < 1) {
-        window.alert('オーダーデータがありません。');
+        window.alert(msgNoSession);
         return false;
     }
     return true;
@@ -223,7 +346,8 @@ function openAdditionBridge() {
     }
     const sid = sessionUi.activeTableSessionId;
     const url = `${window.location.origin}/pos2/bridge/sessions/${Number(sid)}/addition`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, '_blank');
+    sessionUi.optimisticUpdateTileStatusBySessionId(Number(sid), 'billed');
 }
 
 function openClotureBridge() {
@@ -232,7 +356,7 @@ function openClotureBridge() {
     }
     const sid = sessionUi.activeTableSessionId;
     const url = `${window.location.origin}/pos2/bridge/sessions/${Number(sid)}/cloture`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, '_blank');
 }
 
 function hasDraftBadgeForTable(tableId) {
@@ -418,7 +542,7 @@ function itemNeedsConfigModal(masterItem) {
         || (Array.isArray(p.toppings) && p.toppings.length > 0);
 }
 
-async function onAddSimple(masterItem) {
+function onAddSimple(masterItem) {
     if (!canAddOrSubmit.value) return;
     if (draftStore.isOrderSubmitting) return;
     if (itemNeedsConfigModal(masterItem)) {
@@ -434,40 +558,45 @@ async function onAddSimple(masterItem) {
         masterGeneratedAt: masterStore.generatedAt ?? '',
     });
 
-    const result = await draftStore.submitLines([cartLine], debugEnabled.value);
+    draftStore.submitLines([cartLine], debugEnabled.value).then((result) => {
+        if (!result.ok) {
+            if (result.reason === 'empty' || result.reason === 'busy') {
+                return;
+            }
+            if (result.reason === 'no_session') {
+                window.alert(
+                    '卓またはセッションが無効です。テーブルを選び直してください。\n'
+                    + 'Table ou session invalide. Veuillez resélectionner une table.',
+                );
+                return;
+            }
+            if (result.status === 422 && typeof result.message === 'string' && result.message.trim() !== '') {
+                window.alert(
+                    `${result.message.trim()}\n\n---\n`
+                    + '上記を確認のうえ、必要なら再度お試しください。\n'
+                    + 'Vérifiez le message ci-dessus puis réessayez.',
+                );
+                return;
+            }
+            window.alert(
+                '通信エラーが発生しました。もう一度お試しください。\n'
+                + 'Erreur de communication. Veuillez réessayer.',
+            );
+            return;
+        }
 
-    if (!result.ok) {
-        if (result.reason === 'empty' || result.reason === 'busy') {
-            return;
+        sessionUi.exitToMonitoring();
+
+        if (debugEnabled.value) {
+            debugStore.setUiSnapshot(tableStore.selectedTableId, draftStore.totalItemsCount);
+            debugStore.refreshLocalStorageSize();
         }
-        if (result.reason === 'no_session') {
-            window.alert(
-                '卓またはセッションが無効です。テーブルを選び直してください。\n'
-                + 'Table ou session invalide. Veuillez resélectionner une table.',
-            );
-            return;
-        }
-        if (result.status === 422 && typeof result.message === 'string' && result.message.trim() !== '') {
-            window.alert(
-                `${result.message.trim()}\n\n---\n`
-                + '上記を確認のうえ、必要なら再度お試しください。\n'
-                + 'Vérifiez le message ci-dessus puis réessayez.',
-            );
-            return;
-        }
+    }).catch(() => {
         window.alert(
             '通信エラーが発生しました。もう一度お試しください。\n'
             + 'Erreur de communication. Veuillez réessayer.',
         );
-        return;
-    }
-
-    sessionUi.exitToMonitoring();
-
-    if (debugEnabled.value) {
-        debugStore.setUiSnapshot(tableStore.selectedTableId, draftStore.totalItemsCount);
-        debugStore.refreshLocalStorageSize();
-    }
+    });
 }
 
 function onCartAdded() {
@@ -500,12 +629,9 @@ async function onSendKds() {
         sendKdsBusy.value = false;
     }
     if (!res.ok && res.status === 409) {
-        window.alert(
-            '他端末で更新されました。画面を確認してください。\n'
-            + 'Conflit de révision. Vérifiez l\'écran.',
-        );
+        window.alert(pos2Screen.value.recuConflict);
     } else if (!res.ok) {
-        window.alert('Recu に失敗しました。もう一度お試しください。');
+        window.alert(pos2Screen.value.recuFailed);
     }
 }
 
@@ -608,14 +734,14 @@ async function onConfirmChangeTable(destTableId) {
             if (res.status === 409) {
                 const msg = typeof res.body?.message === 'string' && res.body.message.trim() !== ''
                     ? res.body.message.trim()
-                    : '他端末で更新されました。画面を同期しました。\nConflit. Écran synchronisé.';
+                    : pos2Screen.value.tableMoveConflict;
                 window.alert(msg);
                 changeTableModalOpen.value = false;
                 return;
             }
             const errMsg = typeof res.body?.message === 'string' && res.body.message.trim() !== ''
                 ? res.body.message.trim()
-                : '卓移動に失敗しました。\nÉchec du changement de table.';
+                : pos2Screen.value.tableMoveFailed;
             window.alert(errMsg);
             return;
         }
@@ -867,7 +993,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <Head title="POS V2" />
+    <Head :title="pos2Screen.pageTitle" />
 
     <main
         class="mx-auto flex min-h-[100dvh] w-full max-w-[1680px] flex-col bg-slate-950 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-slate-100 md:px-4 md:py-4"
@@ -895,37 +1021,29 @@ onUnmounted(() => {
                     class="flex min-h-[12rem] flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-600 bg-slate-900/50 px-4 py-10 text-center md:min-h-0"
                 >
                     <p class="text-sm font-semibold text-slate-300 dark:text-slate-200">
-                        左の卓をタップ
+                        {{ pos2Screen.emptyTitle }}
                     </p>
                     <p class="mt-2 max-w-sm text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                        注文一覧・Add・REÇU STAFF はここに表示されます。
+                        {{ pos2Screen.emptyHint }}
                     </p>
                 </div>
 
                 <template v-else>
-                    <!-- ツールバー（左=注文系 / 右=決済・システム系） -->
+                    <!-- ツールバー: 1行目=更新・閉じる・KITCHEN / 2行目=卓名ラベル・追加 -->
                     <div
-                        class="mb-3 flex flex-col gap-3 border-b border-slate-700/90 pb-3 xl:flex-row xl:items-center xl:justify-between"
+                        class="mb-3 flex flex-col gap-2 border-b border-slate-700/90 pb-3 md:gap-2.5"
                     >
-                        <!-- 【左側】コンテキスト ＆ 注文アクション -->
                         <div class="flex flex-wrap items-center gap-2 md:gap-3">
-                            <div class="flex items-center gap-2">
-                                <span
-                                    class="rounded-lg bg-amber-300 px-3 py-2 text-sm font-black tracking-tight text-amber-950 shadow-sm dark:bg-amber-300 dark:text-amber-950"
-                                >
-                                    {{ selectedTableName }}
-                                </span>
-                                <button
-                                    type="button"
-                                    class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-emerald-600 bg-emerald-600 text-white shadow-md transition hover:bg-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500 dark:hover:bg-emerald-500"
-                                    :disabled="draftStore.isOrderSubmitting"
-                                    title="更新 / Rafraîchir"
-                                    aria-label="更新"
-                                    @click="onRefreshDetail"
-                                >
-                                    <span class="text-lg leading-none" aria-hidden="true">↻</span>
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-emerald-600 bg-emerald-600 text-white shadow-md transition hover:bg-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500 dark:hover:bg-emerald-500"
+                                :disabled="draftStore.isOrderSubmitting"
+                                :title="pos2Screen.refreshTitle"
+                                :aria-label="pos2Screen.refreshAria"
+                                @click="onRefreshDetail"
+                            >
+                                <span class="text-lg leading-none" aria-hidden="true">↻</span>
+                            </button>
 
                             <div
                                 class="hidden h-8 w-px shrink-0 bg-slate-600 md:block dark:bg-slate-500"
@@ -938,14 +1056,41 @@ onUnmounted(() => {
                                 class="min-h-11 rounded-xl border border-slate-500 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-800"
                                 @click="sessionUi.exitToMonitoring()"
                             >
-                                Fermer le menu
+                                {{ pos2Screen.closeMenu }}
                             </button>
+                            <button
+                                type="button"
+                                class="min-h-11 min-w-[8.5rem] shrink-0 rounded-xl border-2 border-indigo-800 bg-indigo-900 px-4 py-2 text-sm font-black uppercase tracking-wide text-white shadow-md transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-45 dark:border-indigo-600 dark:bg-indigo-950 dark:text-white dark:hover:bg-indigo-900"
+                                :disabled="sendKdsBusy || !sessionUi.hasUnackedPlacedOrders || draftStore.isOrderSubmitting"
+                                @click="onSendKds"
+                            >
+                                {{ pos2Screen.kdsLabel }}
+                            </button>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2 md:gap-3">
+                            <div
+                                :key="String(tableStore.selectedTableId ?? '')"
+                                class="pos2-table-label-fx relative isolate inline-flex max-w-[min(100%,20rem)] shrink-0 overflow-hidden rounded-lg shadow-sm"
+                            >
+                                <span
+                                    class="relative z-[1] min-w-0 max-w-full truncate rounded-lg bg-amber-300 px-3 py-2 text-sm font-black tracking-tight text-amber-950 dark:bg-amber-300 dark:text-amber-950"
+                                >
+                                    {{ selectedTableName }}
+                                </span>
+                                <span
+                                    class="pointer-events-none absolute inset-0 z-[2] overflow-hidden rounded-lg"
+                                    aria-hidden="true"
+                                >
+                                    <span class="pos2-table-label-fx__beam" />
+                                </span>
+                            </div>
                             <button
                                 type="button"
                                 class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-sky-500 bg-sky-400 text-sky-950 shadow-md transition hover:bg-sky-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-sky-400 dark:bg-sky-500 dark:text-sky-950 dark:hover:bg-sky-400 dark:focus-visible:ring-offset-slate-950"
                                 :disabled="!canAddOrSubmit || draftStore.isOrderSubmitting"
-                                title="Add"
-                                aria-label="Add"
+                                :title="pos2Screen.addTitle"
+                                :aria-label="pos2Screen.addAria"
                                 @click="onTapAdd"
                             >
                                 <svg
@@ -964,91 +1109,27 @@ onUnmounted(() => {
                                     />
                                 </svg>
                             </button>
-                            <button
-                                type="button"
-                                class="min-h-11 min-w-[8.5rem] shrink-0 rounded-xl border-2 border-indigo-800 bg-indigo-900 px-4 py-2 text-sm font-black uppercase tracking-wide text-white shadow-md transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-45 dark:border-indigo-600 dark:bg-indigo-950 dark:text-white dark:hover:bg-indigo-900"
-                                :disabled="sendKdsBusy || !sessionUi.hasUnackedPlacedOrders || draftStore.isOrderSubmitting"
-                                @click="onSendKds"
-                            >
-                                KDS >>
-                            </button>
-                        </div>
-
-                        <!-- 【右側】Addition / Clôture | ハンバーガー -->
-                        <div class="flex shrink-0 flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                class="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-violet-700 bg-violet-900/90 px-3 py-2 text-sm font-black uppercase tracking-wide text-violet-50 shadow-md transition hover:bg-violet-800 dark:border-violet-500 dark:bg-violet-950 dark:text-violet-50 dark:hover:bg-violet-900"
-                                @click="openAdditionBridge"
-                            >
-                                <span aria-hidden="true">🖨️</span>
-                                <span class="hidden sm:inline">ADDITION</span>
-                            </button>
-                            <button
-                                type="button"
-                                class="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-black uppercase tracking-wide text-white shadow-md transition hover:bg-emerald-600 dark:border-emerald-500 dark:bg-emerald-800 dark:text-white dark:hover:bg-emerald-700"
-                                @click="openClotureBridge"
-                            >
-                                <span aria-hidden="true">💰</span>
-                                <span class="hidden sm:inline">CLÔTURE</span>
-                            </button>
-
-                            <template v-if="shopId > 0">
-                                <div
-                                    class="mx-1 h-8 w-px shrink-0 bg-slate-600 dark:bg-slate-500"
-                                    aria-hidden="true"
-                                />
-                                <div class="flex shrink-0 items-center justify-center">
-                                    <Pos2AppMenu
-                                        :shop-id="shopId"
-                                        :can-change-table="canPos2ChangeTable"
-                                        @purged="onPos2StoragePurged"
-                                        @open-change-table="openChangeTableModalFromMenu"
-                                    />
-                                </div>
-                            </template>
                         </div>
                     </div>
 
-                    <div
-                        class="relative flex min-h-0 flex-1 flex-col gap-3"
-                        :class="sessionUi.uiMode === 'adding' ? '' : 'lg:flex-row lg:gap-4'"
-                    >
+                    <div class="relative flex min-h-0 flex-1 flex-col">
                         <div
-                            v-if="sessionUi.uiMode === 'monitoring'"
-                            class="flex min-h-[240px] flex-1 flex-col lg:min-h-[320px]"
+                            class="pointer-events-none select-none absolute inset-0 z-[1] flex items-center justify-center overflow-hidden"
+                            aria-hidden="true"
                         >
-                            <SessionRightColumn
-                                class="min-h-0 flex-1"
-                                :session-orders-payload="sessionUi.sessionOrdersPayload"
-                                :loading-confirmed="sessionUi.sessionOrdersLoading"
-                                :has-unacked-placed="sessionUi.hasUnackedPlacedOrders"
-                                :send-kds-busy="sendKdsBusy"
-                                :hide-kds-banner="true"
-                                @send-kds="onSendKds"
-                            />
-                        </div>
-
-                        <template v-else>
-                            <div
-                                class="flex min-h-0 min-h-[220px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/70 p-3 lg:min-h-[320px]"
+                            <span
+                                class="max-w-[min(100%,42rem)] truncate px-3 text-center text-4xl font-black uppercase tracking-tight text-slate-200/[0.09] dark:text-white/[0.1] sm:text-5xl"
                             >
-                                <CategoryRail
-                                    :categories="masterStore.categories"
-                                    :active-category-id="menuStore.activeCategoryId"
-                                    class="mb-3 shrink-0"
-                                    @select="menuStore.selectCategory"
-                                />
-                                <div class="min-h-0 flex-1 overflow-y-auto">
-                                    <ProductGrid
-                                        :items="menuStore.visibleItems"
-                                        @open-modal="menuStore.openConfigModal"
-                                        @add-simple="onAddSimple"
-                                    />
-                                </div>
-                            </div>
+                                {{ selectedTableName }}
+                            </span>
+                        </div>
+                        <div
+                            class="relative z-[2] flex min-h-0 flex-1 flex-col gap-3"
+                            :class="sessionUi.uiMode === 'adding' ? '' : 'lg:flex-row lg:gap-4'"
+                        >
                             <div
-                                class="flex min-h-[min(40vh,22rem)] w-full shrink-0 flex-col lg:w-[min(100%,360px)] lg:max-w-md"
+                                v-if="sessionUi.uiMode === 'monitoring'"
+                                class="flex min-h-[240px] flex-1 flex-col lg:min-h-[320px]"
                             >
                                 <SessionRightColumn
                                     class="min-h-0 flex-1"
@@ -1060,7 +1141,40 @@ onUnmounted(() => {
                                     @send-kds="onSendKds"
                                 />
                             </div>
-                        </template>
+
+                            <template v-else>
+                                <div
+                                    class="flex min-h-0 min-h-[220px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900/70 p-3 lg:min-h-[320px]"
+                                >
+                                    <CategoryRail
+                                        :categories="masterStore.categories"
+                                        :active-category-id="menuStore.activeCategoryId"
+                                        class="mb-3 shrink-0"
+                                        @select="menuStore.selectCategory"
+                                    />
+                                    <div class="min-h-0 flex-1 overflow-y-auto">
+                                        <ProductGrid
+                                            :items="menuStore.visibleItems"
+                                            @open-modal="menuStore.openConfigModal"
+                                            @add-simple="onAddSimple"
+                                        />
+                                    </div>
+                                </div>
+                                <div
+                                    class="flex min-h-[min(40vh,22rem)] w-full shrink-0 flex-col lg:w-[min(100%,360px)] lg:max-w-md"
+                                >
+                                    <SessionRightColumn
+                                        class="min-h-0 flex-1"
+                                        :session-orders-payload="sessionUi.sessionOrdersPayload"
+                                        :loading-confirmed="sessionUi.sessionOrdersLoading"
+                                        :has-unacked-placed="sessionUi.hasUnackedPlacedOrders"
+                                        :send-kds-busy="sendKdsBusy"
+                                        :hide-kds-banner="true"
+                                        @send-kds="onSendKds"
+                                    />
+                                </div>
+                            </template>
+                        </div>
 
                         <div
                             v-if="draftStore.isOrderSubmitting"
@@ -1074,7 +1188,7 @@ onUnmounted(() => {
                                 aria-hidden="true"
                             />
                             <p class="mt-4 px-4 text-sm font-semibold text-cyan-100 dark:text-cyan-100">
-                                追加中... / Adding...
+                                {{ pos2Screen.orderSubmitting }}
                             </p>
                         </div>
                     </div>
@@ -1083,14 +1197,26 @@ onUnmounted(() => {
         </div>
     </main>
 
+    <div
+        v-if="shopId > 0 && isTableSelected"
+        class="fixed right-[max(0.75rem,env(safe-area-inset-right))] top-[max(0.75rem,env(safe-area-inset-top))] z-[55]"
+    >
+        <Pos2AppMenu
+            :shop-id="shopId"
+            :can-change-table="canPos2ChangeTable"
+            @purged="onPos2StoragePurged"
+            @open-change-table="openChangeTableModalFromMenu"
+        />
+    </div>
+
     <ChangeTableModal
         :open="changeTableModalOpen"
         :candidates="changeTableCandidates"
         :busy="changeTableBusy"
-        :title="posUi.change_table_title || '卓移動'"
+        :title="pos2Screen.changeTableTitle"
         :hint="posUi.change_table_hint || ''"
         :empty-text="posUi.change_table_empty || ''"
-        :cancel-label="posUi.change_table_cancel || '閉じる'"
+        :cancel-label="pos2Screen.changeTableCancel"
         @close="changeTableModalOpen = false"
         @confirm="onConfirmChangeTable"
     />
@@ -1114,22 +1240,57 @@ onUnmounted(() => {
         @close="() => {}"
     />
 
+    <div
+        v-if="showSettlementEdgeChips"
+        class="fixed right-0 z-[48] flex flex-col gap-1.5 shadow-lg"
+        :class="settlementChipsYClass"
+    >
+        <button
+            type="button"
+            class="flex h-14 w-14 items-center justify-center rounded-l-xl rounded-r-none border-y border-l-2 border-violet-600 bg-violet-900/95 text-xl text-violet-50 transition hover:bg-violet-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 dark:border-violet-500 dark:bg-violet-950 dark:text-violet-50 dark:hover:bg-violet-900"
+            title="ADDITION"
+            aria-label="ADDITION"
+            @click="openAdditionBridge"
+        >
+            <span aria-hidden="true">🖨️</span>
+        </button>
+        <button
+            type="button"
+            class="flex h-14 w-14 items-center justify-center rounded-l-xl rounded-r-none border-y border-l-2 border-emerald-600 bg-emerald-800 text-xl text-white transition hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 dark:border-emerald-500 dark:bg-emerald-900 dark:text-white dark:hover:bg-emerald-800"
+            title="CLÔTURE"
+            aria-label="CLÔTURE"
+            @click="openClotureBridge"
+        >
+            <span aria-hidden="true">💰</span>
+        </button>
+    </div>
+
     <button
         v-if="showTakeoutCustomerLabelFab"
         type="button"
         class="fixed right-3 top-1/2 z-50 flex h-12 w-12 -translate-y-1/2 flex-col items-center justify-center rounded-2xl border-2 border-cyan-600 bg-cyan-700 text-cyan-50 shadow-lg transition hover:bg-cyan-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 dark:border-cyan-500 dark:bg-cyan-800 dark:text-cyan-50 dark:hover:bg-cyan-700 dark:focus-visible:ring-offset-slate-950"
-        title="客名登録"
-        aria-label="客名登録"
+        :title="pos2Screen.takeoutFabTitle"
+        :aria-label="pos2Screen.takeoutFabTitle"
         @click="openTakeoutLabelModal"
     >
         <span class="text-lg leading-none" aria-hidden="true">👤</span>
-        <span class="mt-0.5 text-[9px] font-bold leading-none">客名</span>
+        <span class="mt-0.5 text-[9px] font-bold leading-none">{{ pos2Screen.takeoutFabLabel }}</span>
     </button>
+
+    <Pos2LineDeletePinModal
+        v-if="sessionUi.lineDeletePinChallenge"
+        :open="true"
+        :approvers="masterStore.pinApprovers"
+        :labels="pos2Screen.lineDeletePin"
+        @close="sessionUi.dismissLineDeletePinChallenge()"
+        @submit="onLineDeletePinSubmit"
+    />
 
     <TakeoutCustomerLabelModal
         :open="takeoutLabelModalOpen"
         :initial-name="takeoutLabelModalInitial.name"
         :initial-tel="takeoutLabelModalInitial.tel"
+        :takeout-ui="pos2Screen.takeoutModal"
         @close="closeTakeoutLabelModal"
         @save="onTakeoutLabelSave"
     />
@@ -1142,3 +1303,45 @@ onUnmounted(() => {
         :menu="menuStore"
     />
 </template>
+
+<style scoped>
+/* 卓切替時のみ :key で再マウント → GPU 向き transform / filter の1回再生のみ */
+.pos2-table-label-fx {
+    animation: pos2-table-label-blink 0.38s ease-out 1;
+}
+
+.pos2-table-label-fx__beam {
+    position: absolute;
+    top: -5%;
+    bottom: -5%;
+    left: 0;
+    width: 52%;
+    transform: translateX(-105%) skewX(-14deg);
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.42) 48%,
+        transparent 100%
+    );
+    animation: pos2-table-label-shine 0.58s ease-out 0.05s 1 both;
+}
+
+@keyframes pos2-table-label-shine {
+    to {
+        transform: translateX(240%) skewX(-14deg);
+    }
+}
+
+@keyframes pos2-table-label-blink {
+    0%,
+    100% {
+        opacity: 1;
+        filter: brightness(1);
+    }
+
+    38% {
+        opacity: 0.9;
+        filter: brightness(1.14);
+    }
+}
+</style>

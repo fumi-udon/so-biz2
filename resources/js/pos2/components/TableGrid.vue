@@ -179,7 +179,7 @@ function primaryLineForTable(table) {
             :class="layoutVariant === 'split' ? 'mb-3' : 'mb-4'"
         >
             <p class="text-[10px] font-semibold tracking-[0.25em] text-cyan-300 dark:text-cyan-200">
-                SÖYA POS2
+                BNSÖYA POS2
             </p>
         </header>
 

@@ -4,10 +4,14 @@
  */
 
 import { defineStore } from 'pinia';
+import { toRaw } from 'vue';
 import { buildPos2JsonHeaders } from '../utils/pos2Http';
 import { useTableLabelStore } from './useTableLabelStore';
 
 /** @typedef {'monitoring' | 'adding'} Pos2UiMode */
+
+/** SWR: セッション注文キャッシュの最大件数（超えたら LRU で削除） */
+const ORDERS_CACHE_MAX_KEYS = 20;
 
 export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
     state: () => ({
@@ -26,6 +30,23 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
         sessionOrdersLoadedAt: null,
         sessionOrdersError: null,
         sessionOrdersLoading: false,
+        /**
+         * SWR: `table_session_id` → 直近成功した GET …/orders のペイロード（メモリキャッシュ）。
+         * @type {Record<number, Record<string, unknown>>}
+         */
+        ordersCache: {},
+        /**
+         * `ordersCache` の LRU 順（古い方が先頭）。キーは正の整数 table_session_id。
+         * @type {number[]}
+         */
+        ordersCacheLruOrder: [],
+        /** 楽観的行削除の多重実行でバックアップを潰さない */
+        optimisticLineDeleteBusy: false,
+        /**
+         * 行削除で PIN 承認が必要になったとき `{ lineId, sessionId }`。モーダル表示用。
+         * @type {{ lineId: number, sessionId: number } | null}
+         */
+        lineDeletePinChallenge: null,
     }),
 
     getters: {
@@ -67,6 +88,10 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
             this.uiMode = 'monitoring';
         },
 
+        dismissLineDeletePinChallenge() {
+            this.lineDeletePinChallenge = null;
+        },
+
         /**
          * 卓選択時: タイルからセッション ID を同期し、モニタリングへリセット。
          * @param {number|null} restaurantTableId
@@ -78,9 +103,18 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
                 ? Number(activeSessionId)
                 : null;
             this.uiMode = 'monitoring';
-            this.sessionOrdersPayload = null;
             this.sessionOrdersError = null;
-            this.sessionRevision = 0;
+
+            const sid = this.activeTableSessionId;
+            if (sid != null && sid > 0 && this.ordersCache[sid]) {
+                const cached = this.ordersCache[sid];
+                this.sessionOrdersPayload = cached;
+                this.sessionRevision = Number(cached.session_revision ?? 0);
+                this._touchOrdersCacheKey(sid);
+            } else {
+                this.sessionOrdersPayload = null;
+                this.sessionRevision = 0;
+            }
         },
 
         applySessionOrdersJson(data) {
@@ -94,11 +128,75 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
 
             const tsid = Number(data.table_session_id ?? 0);
             if (Number.isFinite(tsid) && tsid > 0) {
+                this._putOrdersCache(tsid, data);
                 const labelStore = useTableLabelStore();
                 const cname = data.customer_name ?? null;
                 const ctel = data.customer_tel ?? data.customer_phone ?? null;
                 labelStore.setLabelFromServer(tsid, cname, ctel);
             }
+        },
+
+        /**
+         * LRU 上で該当セッションを「最近使った」にする。
+         * @param {number} sid
+         */
+        _touchOrdersCacheKey(sid) {
+            const k = Number(sid);
+            if (!Number.isFinite(k) || k < 1) {
+                return;
+            }
+            const prev = Array.isArray(this.ordersCacheLruOrder) ? this.ordersCacheLruOrder : [];
+            const next = prev.filter((x) => Number(x) !== k);
+            next.push(k);
+            this.ordersCacheLruOrder = next;
+        },
+
+        /**
+         * `ordersCache` に格納し、20 件超なら LRU で最古キーを削除する。
+         * @param {number} tsid
+         * @param {Record<string, unknown>} payload
+         */
+        _putOrdersCache(tsid, payload) {
+            const sid = Number(tsid);
+            if (!Number.isFinite(sid) || sid < 1) {
+                return;
+            }
+            this.ordersCache = {
+                ...this.ordersCache,
+                [sid]: payload,
+            };
+            this._touchOrdersCacheKey(sid);
+            while (this.ordersCacheLruOrder.length > ORDERS_CACHE_MAX_KEYS) {
+                const oldest = this.ordersCacheLruOrder.shift();
+                if (oldest == null) {
+                    break;
+                }
+                const o = Number(oldest);
+                if (Number.isFinite(o) && o > 0) {
+                    const next = { ...this.ordersCache };
+                    delete next[o];
+                    this.ordersCache = next;
+                }
+            }
+        },
+
+        /**
+         * `ordersCache` / LRU から 1 キーを除去。
+         * @param {number} sid
+         */
+        _removeOrdersCacheKey(sid) {
+            const k = Number(sid);
+            if (!Number.isFinite(k) || k < 1) {
+                return;
+            }
+            if (!Object.prototype.hasOwnProperty.call(this.ordersCache, k)) {
+                this.ordersCacheLruOrder = (this.ordersCacheLruOrder ?? []).filter((x) => Number(x) !== k);
+                return;
+            }
+            const next = { ...this.ordersCache };
+            delete next[k];
+            this.ordersCache = next;
+            this.ordersCacheLruOrder = (this.ordersCacheLruOrder ?? []).filter((x) => Number(x) !== k);
         },
 
         /**
@@ -187,7 +285,7 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
             baseOrders.push(newOrder);
 
             const tsid = Number(prev?.table_session_id ?? this.activeTableSessionId ?? 0);
-            const rtid = Number(prev?.restaurant_table_id ?? 0);
+            const rtid = Number(prev?.restaurant_table_id ?? this.selectedRestaurantTableId ?? 0);
 
             this.sessionOrdersPayload = {
                 ...(prev && typeof prev === 'object' ? prev : {}),
@@ -201,6 +299,20 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
                 customer_name: prev?.customer_name ?? null,
                 customer_tel: prev?.customer_tel ?? prev?.customer_phone ?? null,
             };
+
+            if (Number.isFinite(rtid) && rtid > 0) {
+                const tiles = this.dashboardTiles ?? [];
+                const idx = tiles.findIndex((t) => Number(t?.restaurantTableId) === rtid);
+                if (idx !== -1) {
+                    const nextTiles = [...tiles];
+                    nextTiles[idx] = {
+                        ...tiles[idx],
+                        uiStatus: 'pending',
+                        unackedPlacedLineExists: true,
+                    };
+                    this.dashboardTiles = nextTiles;
+                }
+            }
         },
 
         /**
@@ -221,6 +333,7 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
                 has_unacked_placed: hasUnacked,
                 generated_at: new Date().toISOString(),
             };
+            void this.fetchTableDashboard({ silent: true });
         },
 
         /**
@@ -300,6 +413,166 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
             }
         },
 
+        /**
+         * 確定オーダー行の楽観削除 → POST 削除 API。失敗時はスナップショットへロールバック。
+         * @param {number|string} lineId order_lines.id
+         * @param {number|string} currentSessionId table_sessions.id（ペイロードと一致必須）
+         * @param {number|string|null|undefined} [approverStaffId]
+         * @param {string|null|undefined} [approvalPin]
+         * @returns {Promise<boolean>} 検証失敗・API失敗・ネットワーク失敗で false（成功時 true）
+         */
+        async optimisticDeleteOrderLine(lineId, currentSessionId, approverStaffId = null, approvalPin = null) {
+            const curSid = Number(currentSessionId);
+            const payloadSid = Number(this.sessionOrdersPayload?.table_session_id ?? 0);
+            if (!Number.isFinite(curSid) || curSid < 1) {
+                return false;
+            }
+            if (payloadSid !== curSid) {
+                return false;
+            }
+            const payload = this.sessionOrdersPayload;
+            if (!payload || !Array.isArray(payload.orders)) {
+                return false;
+            }
+
+            const lineIdNum = Number(lineId);
+            if (!Number.isFinite(lineIdNum) || lineIdNum < 1) {
+                return false;
+            }
+
+            let lineFound = false;
+            for (const o of payload.orders) {
+                const lines = Array.isArray(o?.lines) ? o.lines : [];
+                for (const ln of lines) {
+                    if (Number(ln?.id) === lineIdNum) {
+                        lineFound = true;
+                        break;
+                    }
+                }
+                if (lineFound) break;
+            }
+            if (!lineFound) {
+                return false;
+            }
+
+            const rawPayload = toRaw(this.sessionOrdersPayload);
+            let rollbackPayload;
+            try {
+                rollbackPayload = structuredClone(rawPayload);
+            } catch {
+                try {
+                    rollbackPayload = JSON.parse(JSON.stringify(rawPayload));
+                } catch {
+                    return false;
+                }
+            }
+
+            if (this.optimisticLineDeleteBusy) {
+                return false;
+            }
+            this.optimisticLineDeleteBusy = true;
+
+            const applyOptimisticRemoval = () => {
+                const ordersIn = Array.isArray(this.sessionOrdersPayload?.orders)
+                    ? this.sessionOrdersPayload.orders
+                    : [];
+                const newOrders = [];
+                for (const o of ordersIn) {
+                    const lines = Array.isArray(o?.lines) ? o.lines : [];
+                    const newLines = lines.filter((ln) => Number(ln?.id) !== lineIdNum);
+                    if (newLines.length === 0) {
+                        continue;
+                    }
+                    const totalMinor = newLines.reduce((s, ln) => s + Number(ln?.line_total_minor ?? 0), 0);
+                    newOrders.push({
+                        ...o,
+                        lines: newLines,
+                        total_minor: totalMinor,
+                    });
+                }
+                const hasUnacked = this._recomputeHasUnackedPlaced(newOrders);
+                this.sessionOrdersPayload = {
+                    ...this.sessionOrdersPayload,
+                    orders: newOrders,
+                    has_unacked_placed: hasUnacked,
+                    generated_at: new Date().toISOString(),
+                };
+                this.sessionRevision = Number(this.sessionOrdersPayload.session_revision ?? 0);
+                this._putOrdersCache(curSid, this.sessionOrdersPayload);
+            };
+
+            const restoreRollback = () => {
+                this.sessionOrdersPayload = rollbackPayload;
+                this.sessionRevision = Number(rollbackPayload?.session_revision ?? 0);
+                const rbSid = Number(rollbackPayload?.table_session_id ?? curSid);
+                if (Number.isFinite(rbSid) && rbSid > 0) {
+                    this._putOrdersCache(rbSid, rollbackPayload);
+                }
+            };
+
+            try {
+                applyOptimisticRemoval();
+
+                const bodyObj = {};
+                if (approverStaffId != null && Number(approverStaffId) > 0) {
+                    bodyObj.approver_staff_id = Number(approverStaffId);
+                }
+                if (approvalPin != null && String(approvalPin).trim() !== '') {
+                    bodyObj.approval_pin = String(approvalPin);
+                }
+
+                const res = await fetch(
+                    `/pos2/api/sessions/${curSid}/order-lines/${lineIdNum}/delete`,
+                    {
+                        method: 'POST',
+                        headers: buildPos2JsonHeaders(),
+                        credentials: 'same-origin',
+                        body: JSON.stringify(bodyObj),
+                    },
+                );
+
+                const data = await res.json().catch(() => ({}));
+
+                if (res.ok && data && data.success === true) {
+                    const rev = Number(data.session_revision ?? 0);
+                    const tsid = Number(data.table_session_id ?? curSid);
+                    this.sessionRevision = rev;
+                    this.sessionOrdersPayload = {
+                        ...this.sessionOrdersPayload,
+                        session_revision: rev,
+                    };
+                    if (Number.isFinite(tsid) && tsid > 0) {
+                        this._putOrdersCache(tsid, this.sessionOrdersPayload);
+                    }
+                    return true;
+                }
+
+                restoreRollback();
+
+                if (res.status === 422 && data && data.pin_approval_required === true) {
+                    this.lineDeletePinChallenge = {
+                        lineId: lineIdNum,
+                        sessionId: curSid,
+                    };
+                    return false;
+                }
+
+                const msg = typeof data.error === 'string' && data.error.trim() !== ''
+                    ? data.error
+                    : (typeof data.message === 'string' && data.message.trim() !== ''
+                        ? data.message
+                        : '削除できませんでした');
+                window.alert(msg);
+                return false;
+            } catch (e) {
+                restoreRollback();
+                window.alert(e instanceof Error ? e.message : '削除できませんでした');
+                return false;
+            } finally {
+                this.optimisticLineDeleteBusy = false;
+            }
+        },
+
         async sendRecuStaff() {
             const sid = this.activeTableSessionId;
             if (sid == null || sid < 1) {
@@ -361,6 +634,68 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
                 return { ok: false, status: res.status, body };
             }
             return { ok: true, body };
+        },
+
+        /**
+         * Bridge / 楽観 UI: セッション ID に紐づくタイルの `uiStatus` だけを即時更新する。
+         * @param {number|string|null|undefined} sessionId
+         * @param {string} newStatus
+         */
+        optimisticUpdateTileStatusBySessionId(sessionId, newStatus) {
+            const sid = Number(sessionId);
+            if (!Number.isFinite(sid) || sid < 1) {
+                return;
+            }
+            const tiles = this.dashboardTiles ?? [];
+            const idx = tiles.findIndex((t) => Number(t?.activeTableSessionId) === sid);
+            if (idx === -1) {
+                return;
+            }
+            const tile = tiles[idx];
+            const nextTiles = [...tiles];
+            nextTiles[idx] = {
+                ...tile,
+                uiStatus: String(newStatus ?? ''),
+            };
+            this.dashboardTiles = nextTiles;
+        },
+
+        /**
+         * Bridge / 楽観 UI: 会計完了などで該当セッションの卓タイルを空卓相当にし、
+         * 選択中なら注文ペイロードもクリア。SWR キャッシュからも除去する。
+         * @param {number|string|null|undefined} sessionId
+         */
+        optimisticClearSession(sessionId) {
+            const sid = Number(sessionId);
+            if (!Number.isFinite(sid) || sid < 1) {
+                return;
+            }
+            const tiles = this.dashboardTiles ?? [];
+            const idx = tiles.findIndex((t) => Number(t?.activeTableSessionId) === sid);
+            if (idx !== -1) {
+                const tile = tiles[idx];
+                const nextTiles = [...tiles];
+                nextTiles[idx] = {
+                    ...tile,
+                    uiStatus: 'free',
+                    activeTableSessionId: null,
+                    sessionTotalMinor: 0,
+                    relevantPosOrderCount: 0,
+                    unackedPlacedPosOrderCount: 0,
+                    unackedPlacedLineExists: false,
+                };
+                this.dashboardTiles = nextTiles;
+            }
+
+            if (this.activeTableSessionId === sid) {
+                this.activeTableSessionId = null;
+                this.sessionOrdersPayload = null;
+                this.sessionRevision = 0;
+                this.sessionOrdersLoadedAt = null;
+                this.sessionOrdersError = null;
+            }
+
+            this._removeOrdersCacheKey(sid);
         },
     },
 });

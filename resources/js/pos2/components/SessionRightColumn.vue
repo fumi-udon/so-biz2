@@ -4,6 +4,8 @@
  */
 import { computed } from 'vue';
 import { formatDT } from '../utils/currency';
+import { flattenSessionOrderLines } from '../utils/sessionOrdersFlatLines';
+import { usePos2SessionUiStore } from '../stores/usePos2SessionUiStore';
 
 const props = defineProps({
     sessionOrdersPayload: {
@@ -31,24 +33,31 @@ const props = defineProps({
 
 const emit = defineEmits(['send-kds']);
 
-const flatLines = computed(() => {
-    const orders = props.sessionOrdersPayload?.orders;
-    if (!Array.isArray(orders)) return [];
-    const out = [];
-    for (const o of orders) {
-        const ob = o?.ordered_by ?? 'staff';
-        const lines = o?.lines;
-        if (!Array.isArray(lines)) continue;
-        for (const ln of lines) {
-            out.push({
-                ...ln,
-                order_id: o.id,
-                ordered_by: ln.ordered_by ?? ob,
-            });
-        }
+const sessionUi = usePos2SessionUiStore();
+
+const flatLines = computed(() => flattenSessionOrderLines(props.sessionOrdersPayload));
+
+/** 楽観仮行（opt:…）など DB id でない行は削除 UI を出さない */
+function isPersistedOrderLine(ln) {
+    const id = ln?.id;
+    if (typeof id === 'number' && Number.isFinite(id) && id > 0) {
+        return true;
     }
-    return out;
-});
+    if (typeof id === 'string' && /^\d+$/.test(id.trim())) {
+        return Number(id) > 0;
+    }
+    return false;
+}
+
+function onDeleteLine(ln) {
+    if (!isPersistedOrderLine(ln)) {
+        return;
+    }
+    if (!window.confirm('この商品を削除しますか？\nCancel / OK')) {
+        return;
+    }
+    void sessionUi.optimisticDeleteOrderLine(ln.id, sessionUi.activeTableSessionId);
+}
 
 /** 行背景: KDS 送信前は薄い赤系、送信後はニュートラル（§10 右ペイン） */
 function lineRowClass(isUnsent) {
@@ -167,6 +176,15 @@ function lineToppingsCsv(ln) {
                                 </span>
                             </div>
                         </div>
+                        <button
+                            v-if="isPersistedOrderLine(ln)"
+                            type="button"
+                            class="shrink-0 rounded-lg border border-slate-600 bg-slate-900/80 px-2 py-1 text-sm font-bold leading-none text-slate-300 hover:border-rose-500/80 hover:bg-rose-950/50 hover:text-rose-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 dark:border-slate-500 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-100 dark:focus-visible:ring-offset-slate-950"
+                            aria-label="この商品を削除"
+                            @click="onDeleteLine(ln)"
+                        >
+                            <span aria-hidden="true">✕</span>
+                        </button>
                         <div class="flex shrink-0 flex-col items-end gap-0.5 self-start pt-0.5">
                             <span
                                 class="rounded px-1 py-px text-[9px] font-bold leading-none"

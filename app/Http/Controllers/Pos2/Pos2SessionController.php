@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Pos2;
 
 use App\Actions\Pos\AddPosOrderFromStaffAction;
 use App\Actions\Pos\ChangeTableSessionAction;
+use App\Actions\Pos\DeleteOrderLineWithPolicyAction;
 use App\Actions\RadTable\RecuPlacedOrdersForSessionAction;
 use App\Data\Pos\TableTileAggregate;
 use App\Enums\OrderLineStatus;
@@ -15,6 +16,7 @@ use App\Exceptions\Pos\TableAlreadyOccupiedException;
 use App\Exceptions\RevisionConflictException;
 use App\Http\Controllers\Controller;
 use App\Models\GuestOrderIdempotency;
+use App\Models\OrderLine;
 use App\Models\PosOrder;
 use App\Models\RestaurantTable;
 use App\Models\TableSession;
@@ -22,6 +24,7 @@ use App\Services\Pos\TableDashboardQueryService;
 use App\Services\Pos\TableSessionLifecycleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -445,6 +448,152 @@ final class Pos2SessionController extends Controller
             'session_revision' => (int) $session->session_revision,
             'table_session_id' => (int) $session->id,
         ]);
+    }
+
+    /**
+     * 確定オーダー行の削除（旧 POS と同一ポリシー・同一監査ログ）。
+     * POST ボディで PIN 承認（{@see DeleteOrderLineWithPolicyAction}）。
+     */
+    public function deleteOrderLine(Request $request, int $session, int $orderLine): JsonResponse
+    {
+        $shopId = $this->resolveShopId($request);
+        if ($shopId < 1) {
+            return response()->json(['error' => 'Shop not configured'], 400);
+        }
+
+        $sessionId = $session;
+        $orderLineId = $orderLine;
+
+        $tableSession = TableSession::query()
+            ->where('shop_id', $shopId)
+            ->whereKey($sessionId)
+            ->first();
+
+        if ($tableSession === null) {
+            return response()->json(['error' => 'Session not found'], 404);
+        }
+
+        $request->validate([
+            'approver_staff_id' => ['nullable', 'integer', 'min:1'],
+            'approval_pin' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        $line = OrderLine::query()
+            ->whereKey($orderLineId)
+            ->with(['order' => static fn ($q) => $q->select(['id', 'shop_id', 'table_session_id'])])
+            ->first();
+
+        if ($line === null) {
+            $tableSession->refresh();
+
+            return response()->json($this->deleteOrderLineSuccessPayload($tableSession), 200);
+        }
+
+        $order = $line->order;
+        if ($order === null || (int) $order->shop_id !== $shopId) {
+            return response()->json(['error' => (string) __('pos.line_forbidden')], 422);
+        }
+
+        if ((int) $order->table_session_id !== $sessionId) {
+            return response()->json(['error' => (string) __('pos.line_forbidden')], 422);
+        }
+
+        $deleteAction = app(DeleteOrderLineWithPolicyAction::class);
+        $decision = $deleteAction->decide($shopId, $sessionId);
+        $mode = $decision['mode'];
+
+        $approverStaffId = $request->input('approver_staff_id');
+        $approverStaffId = is_numeric($approverStaffId) ? (int) $approverStaffId : null;
+        $approvalPinRaw = $request->input('approval_pin');
+        $approvalPin = is_string($approvalPinRaw) ? $approvalPinRaw : (is_numeric($approvalPinRaw) ? (string) $approvalPinRaw : null);
+
+        $actorUserId = (int) (Auth::id() ?? 0);
+
+        try {
+            if ($mode === DeleteOrderLineWithPolicyAction::MODE_OPEN) {
+                $deleteAction->execute($shopId, $sessionId, $orderLineId, $actorUserId, $mode, null, null);
+            } elseif ($mode === DeleteOrderLineWithPolicyAction::MODE_PIN) {
+                $deleteAction->execute($shopId, $sessionId, $orderLineId, $actorUserId, $mode, $approverStaffId, $approvalPin);
+            } else {
+                $deleteAction->execute($shopId, $sessionId, $orderLineId, $actorUserId, $mode, $approverStaffId, null);
+            }
+        } catch (RuntimeException $e) {
+            if ($e->getMessage() === (string) __('pos.line_not_found')) {
+                app(TableDashboardQueryService::class)->forgetCachedDashboard($shopId);
+                $tableSession->refresh();
+
+                return response()->json($this->deleteOrderLineSuccessPayload($tableSession), 200);
+            }
+
+            return $this->deleteOrderLineRuntimeExceptionResponse($e);
+        } catch (Throwable $e) {
+            if (config('app.pos2_debug')) {
+                Log::channel('pos2')->warning('pos2.delete_order_line.failed', [
+                    'session_id' => $sessionId,
+                    'order_line_id' => $orderLineId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            return response()->json(['error' => (string) __('pos.action_failed')], 500);
+        }
+
+        app(TableDashboardQueryService::class)->forgetCachedDashboard($shopId);
+
+        $tableSession->refresh();
+
+        return response()->json($this->deleteOrderLineSuccessPayload($tableSession), 200);
+    }
+
+    /**
+     * @return array{success: bool, session_revision: int, table_session_id: int}
+     */
+    private function deleteOrderLineSuccessPayload(TableSession $tableSession): array
+    {
+        return [
+            'success' => true,
+            'session_revision' => (int) $tableSession->session_revision,
+            'table_session_id' => (int) $tableSession->id,
+        ];
+    }
+
+    /**
+     * {@see DeleteOrderLineWithPolicyAction} 由来の RuntimeException を 422 で返す。
+     * PIN／承認者フローで再試行可能なエラーには pin_approval_required を付与する。
+     */
+    private function deleteOrderLineRuntimeExceptionResponse(RuntimeException $e): JsonResponse
+    {
+        $message = $e->getMessage();
+        $payload = ['error' => $message];
+
+        if ($this->deleteOrderLineExceptionIndicatesPinApprovalRequired($message)) {
+            $payload['pin_approval_required'] = true;
+        }
+
+        return response()->json($payload, 422);
+    }
+
+    private function deleteOrderLineExceptionIndicatesPinApprovalRequired(string $message): bool
+    {
+        $fromTranslations = [
+            (string) __('pos.remove_line_auth_input_required'),
+            (string) __('pos.remove_line_level3_required'),
+            (string) __('pos.remove_line_auth_required_body'),
+            (string) __('pos.discount_approver_not_found'),
+        ];
+
+        if (in_array($message, $fromTranslations, true)) {
+            return true;
+        }
+
+        // StaffPinAuthenticationService::verify() が返すユーザー向け文言（言語固定）
+        $fromPinService = [
+            'Code PIN incorrect.',
+            'Trop de tentatives PIN incorrectes. Veuillez patienter.',
+            'Aucun code PIN défini. Contactez un responsable.',
+        ];
+
+        return in_array($message, $fromPinService, true);
     }
 
     /**

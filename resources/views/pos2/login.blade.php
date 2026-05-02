@@ -23,7 +23,7 @@
     <main class="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-5 py-8">
         <section id="pin-card" class="rounded-3xl border border-slate-700/70 bg-slate-900/80 p-5 shadow-2xl shadow-black/30">
             <header class="mb-4">
-                <p class="text-xs font-medium tracking-[0.2em] text-slate-400">SÖYA POS2</p>
+                <p class="text-xs font-medium tracking-[0.2em] text-slate-400">BN SÖYA POS2</p>
                 <h1 class="mt-2 text-xl font-semibold text-slate-100">PINログイン</h1>
                 <p class="mt-1 text-sm text-slate-400">4桁入力で自動ログインします</p>
             </header>

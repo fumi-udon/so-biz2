@@ -4,6 +4,7 @@ namespace App\Livewire\Pos;
 
 use App\Actions\Pos\Print\DispatchPrintJobAction;
 use App\Actions\Pos\Print\DispatchPrintJobRequest;
+use App\Actions\RadTable\RecordAdditionPrintForSessionAction;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PrintIntent;
@@ -14,6 +15,7 @@ use App\Models\PosOrder;
 use App\Models\Shop;
 use App\Models\TableSession;
 use App\Models\TableSessionSettlement;
+use App\Services\Pos\TableDashboardQueryService;
 use App\Support\MenuItemMoney;
 use App\Support\Pos\EpsonReceiptXmlBuilder;
 use App\Support\Pos\Print\ReceiptPreviewData;
@@ -67,6 +69,38 @@ class ReceiptPreview extends Component
         $this->intent = $this->printIntent->value;
 
         $this->hydratePreviewData();
+
+        if ($this->printIntent === PrintIntent::Addition) {
+            $session = TableSession::query()
+                ->where('shop_id', $this->shopId)
+                ->whereKey($this->tableSessionId)
+                ->where('status', TableSessionStatus::Active)
+                ->first();
+
+            if ($session !== null && $session->last_addition_printed_at === null) {
+                try {
+                    app(RecordAdditionPrintForSessionAction::class)->execute(
+                        $this->shopId,
+                        $this->tableSessionId,
+                        $this->expectedSessionRevision,
+                    );
+                    app(TableDashboardQueryService::class)->forgetCachedDashboard($this->shopId);
+                    $newRev = TableSession::query()
+                        ->where('shop_id', $this->shopId)
+                        ->whereKey($this->tableSessionId)
+                        ->value('session_revision');
+                    if ($newRev !== null) {
+                        $this->expectedSessionRevision = (int) $newRev;
+                    }
+                } catch (RevisionConflictException $e) {
+                    Log::warning('receipt_preview.addition_print_record_skipped_revision_conflict', [
+                        'shop_id' => $this->shopId,
+                        'table_session_id' => $this->tableSessionId,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
     }
 
     /**
@@ -190,6 +224,17 @@ class ReceiptPreview extends Component
     public function closePreview(): void
     {
         $this->dispatch('close-receipt');
+
+        // POS V2 ブリッジ（window.open）: 別タブを閉じる。旧 POS 埋め込みは opener なしのため no-op。
+        $this->js(<<<'JS'
+(function () {
+  try {
+    if (window.opener != null) {
+      window.close();
+    }
+  } catch (e) {}
+})();
+JS);
     }
 
     #[Computed]

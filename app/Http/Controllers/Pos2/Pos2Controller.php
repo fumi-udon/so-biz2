@@ -7,6 +7,7 @@ use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\RestaurantTable;
 use App\Models\Setting;
+use App\Services\StaffDirectoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -29,6 +30,34 @@ final class Pos2Controller extends Controller
                 'change_table_empty' => __('pos.change_table_no_available'),
                 'change_table_success' => __('pos.change_table_success'),
                 'change_table_cancel' => __('pos.close'),
+                'bridge_settlement_guard_no_orders' => __('pos.bridge_settlement_guard_no_orders'),
+                'bridge_settlement_guard_unacked' => __('pos.bridge_settlement_guard_unacked'),
+                'bridge_settlement_guard_no_session' => __('pos.bridge_settlement_guard_no_session'),
+                'pos2_page_title' => __('pos.pos2_page_title'),
+                'pos2_empty_state_title' => __('pos.pos2_empty_state_title'),
+                'pos2_empty_state_hint' => __('pos.pos2_empty_state_hint'),
+                'pos2_refresh_title' => __('pos.pos2_refresh_title'),
+                'pos2_refresh_aria' => __('pos.pos2_refresh_aria'),
+                'pos2_close_menu_btn' => __('pos.pos2_close_menu_btn'),
+                'pos2_add_title' => __('pos.pos2_add_title'),
+                'pos2_add_aria' => __('pos.pos2_add_aria'),
+                'pos2_kds_label' => __('pos.pos2_kds_label'),
+                'pos2_order_submitting' => __('pos.pos2_order_submitting'),
+                'pos2_takeout_fab_title' => __('pos.pos2_takeout_fab_title'),
+                'pos2_takeout_fab_label' => __('pos.pos2_takeout_fab_label'),
+                'pos2_takeout_modal_title' => __('pos.pos2_takeout_modal_title'),
+                'pos2_takeout_modal_hint' => __('pos.pos2_takeout_modal_hint'),
+                'pos2_takeout_field_name_label' => __('pos.pos2_takeout_field_name_label'),
+                'pos2_takeout_field_tel_label' => __('pos.pos2_takeout_field_tel_label'),
+                'pos2_takeout_placeholder_name' => __('pos.pos2_takeout_placeholder_name'),
+                'pos2_takeout_placeholder_tel' => __('pos.pos2_takeout_placeholder_tel'),
+                'pos2_takeout_name_required_error' => __('pos.pos2_takeout_name_required_error'),
+                'pos2_takeout_btn_cancel' => __('pos.pos2_takeout_btn_cancel'),
+                'pos2_takeout_btn_save' => __('pos.pos2_takeout_btn_save'),
+                'pos2_recu_conflict_alert' => __('pos.pos2_recu_conflict_alert'),
+                'pos2_recu_failed_alert' => __('pos.pos2_recu_failed_alert'),
+                'pos2_table_move_conflict_alert' => __('pos.pos2_table_move_conflict_alert'),
+                'pos2_table_move_failed_alert' => __('pos.pos2_table_move_failed_alert'),
             ],
         ]);
     }
@@ -116,12 +145,15 @@ final class Pos2Controller extends Controller
         $staffTableLimit = $this->resolvePositiveTableDisplayLimit('pos_staff_table_display');
         $takeoutTableLimit = $this->resolvePositiveTableDisplayLimit('pos_takeout_table_display');
 
+        $pinApprovers = app(StaffDirectoryService::class)->approverOptions($shopId, 3);
+
         Log::channel('pos2')->info('bootstrap.served', [
             'shop_id' => $shopId,
             'schema_version' => self::MASTER_SCHEMA_VERSION,
             'categories' => count($categories),
             'menu_items' => count($menuItems),
             'tables' => count($tables),
+            'pin_approvers' => count($pinApprovers),
             'generated_at' => $generatedAt,
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
@@ -133,6 +165,7 @@ final class Pos2Controller extends Controller
             'categories' => $categories,
             'menuItems' => $menuItems,
             'tables' => $tables,
+            'pin_approvers' => $pinApprovers,
             'generated_at' => $generatedAt,
             'client_table_limit' => $clientTableLimit,
             'staff_table_limit' => $staffTableLimit,
