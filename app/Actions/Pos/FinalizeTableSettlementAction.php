@@ -207,6 +207,8 @@ final class FinalizeTableSettlementAction
                 'status' => TableSessionStatus::Closed,
                 'closed_at' => now(),
                 'session_revision' => (int) $session->session_revision + 1,
+                'customer_name' => null,
+                'customer_phone' => null,
             ])->save();
             $this->debugSettleLog('action_session_closed', [
                 'trace_id' => $traceId,
@@ -243,6 +245,8 @@ final class FinalizeTableSettlementAction
                 'status' => TableSessionStatus::Closed,
                 'closed_at' => $session->closed_at ?? now(),
                 'session_revision' => (int) $session->session_revision + 1,
+                'customer_name' => null,
+                'customer_phone' => null,
             ])->save();
             $this->debugSettleLog('action_repair_closed_session', [
                 'trace_id' => $traceId,
@@ -272,6 +276,8 @@ final class FinalizeTableSettlementAction
                     'status' => TableSessionStatus::Closed,
                     'closed_at' => $session->closed_at ?? now(),
                     'session_revision' => (int) $session->session_revision + 1,
+                    'customer_name' => null,
+                    'customer_phone' => null,
                 ])->save();
             }
 

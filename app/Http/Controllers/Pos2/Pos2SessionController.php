@@ -160,6 +160,9 @@ final class Pos2SessionController extends Controller
             'restaurant_table_id' => (int) $session->restaurant_table_id,
             'session_revision' => (int) $session->session_revision,
             'has_unacked_placed' => $hasUnackedPlaced,
+            'customer_name' => $session->customer_name,
+            /** DB 列 customer_phone（API では tel 系として customer_tel も返す） */
+            'customer_tel' => $session->customer_phone,
             'orders' => $mappedOrders,
             'generated_at' => now()->toIso8601String(),
             'schema_version' => 1,

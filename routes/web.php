@@ -12,6 +12,7 @@ use App\Http\Controllers\Pos2\Pos2BridgeController;
 use App\Http\Controllers\Pos2\Pos2Controller;
 use App\Http\Controllers\Pos2\Pos2DevController;
 use App\Http\Controllers\Pos2\Pos2SessionController;
+use App\Http\Controllers\Pos2\TableSessionCustomerController;
 use App\Http\Middleware\SetGuestLocale;
 use App\Livewire\ClientOrderForm;
 use App\Livewire\FrontendDailyClose;
@@ -268,6 +269,7 @@ Route::prefix('pos2')->name('pos2.')->group(function () {
         Route::post('/api/orders', [Pos2Controller::class, 'submitOrderStub'])->name('api.orders.stub');
         Route::get('/api/table-dashboard', [Pos2SessionController::class, 'tableDashboard'])->name('api.table-dashboard');
         Route::get('/api/sessions/{session}/orders', [Pos2SessionController::class, 'sessionOrders'])->name('api.sessions.orders');
+        Route::post('/api/sessions/{session}/customer', [TableSessionCustomerController::class, 'update'])->name('api.sessions.customer');
         Route::post('/api/sessions/{session}/orders', [Pos2SessionController::class, 'submitDraftOrders'])->name('api.sessions.orders.submit');
         Route::post('/api/sessions/{session}/recu-staff', [Pos2SessionController::class, 'recuStaff'])->name('api.sessions.recu-staff');
         // 空卓から注文: table_id を渡すとサーバーが getOrCreate してセッション確定後に 201 を返す

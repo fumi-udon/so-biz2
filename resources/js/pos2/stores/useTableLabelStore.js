@@ -1,9 +1,11 @@
 /**
- * テイクアウト卓の客名表示（フロントのみ・sessionStorage）。
+ * テイクアウト卓の客名表示（sessionStorage + Phase B: DB 同期）。
  * キー: `${shopId}_${tableSessionId}` → { name, tel }
  */
 
+import axios from 'axios';
 import { defineStore } from 'pinia';
+import { buildPos2JsonHeaders } from '../utils/pos2Http';
 
 const STORAGE_KEY = 'pos2_table_labels_v1';
 
@@ -92,6 +94,50 @@ export const useTableLabelStore = defineStore('pos2TableLabels', {
                 [key]: { name: n, tel: t },
             };
             this._persist();
+            this._syncCustomerToServer(sessionId, n, t);
+        },
+
+        /**
+         * GET .../sessions/:id/orders の customer_* を Pinia + sessionStorage にミラー（API は呼ばない）。
+         * @param {string|number} sessionId
+         * @param {string|null|undefined} name
+         * @param {string|null|undefined} tel
+         */
+        setLabelFromServer(sessionId, name, tel) {
+            const key = compositeKey(this.shopId, sessionId);
+            if (key == null) {
+                return;
+            }
+            const n = name != null ? String(name).trim() : '';
+            const t = tel != null ? String(tel).trim() : '';
+            if (n === '' && t === '') {
+                if (Object.prototype.hasOwnProperty.call(this.tableLabels, key)) {
+                    const next = { ...this.tableLabels };
+                    delete next[key];
+                    this.tableLabels = next;
+                    this._persist();
+                }
+                return;
+            }
+            this.tableLabels = {
+                ...this.tableLabels,
+                [key]: { name: n, tel: t },
+            };
+            this._persist();
+        },
+
+        _syncCustomerToServer(sessionId, name, tel) {
+            const sid = Number(sessionId);
+            if (!Number.isFinite(sid) || sid < 1) {
+                return;
+            }
+            void axios
+                .post(
+                    `/pos2/api/sessions/${sid}/customer`,
+                    { name, tel },
+                    { headers: buildPos2JsonHeaders(), withCredentials: true },
+                )
+                .catch((err) => console.warn('customer save failed', err));
         },
 
         /**

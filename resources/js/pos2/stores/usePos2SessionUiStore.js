@@ -5,6 +5,7 @@
 
 import { defineStore } from 'pinia';
 import { buildPos2JsonHeaders } from '../utils/pos2Http';
+import { useTableLabelStore } from './useTableLabelStore';
 
 /** @typedef {'monitoring' | 'adding'} Pos2UiMode */
 
@@ -90,6 +91,14 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
             this.sessionOrdersPayload = data;
             this.sessionRevision = Number(data.session_revision ?? 0);
             this.sessionOrdersLoadedAt = new Date().toISOString();
+
+            const tsid = Number(data.table_session_id ?? 0);
+            if (Number.isFinite(tsid) && tsid > 0) {
+                const labelStore = useTableLabelStore();
+                const cname = data.customer_name ?? null;
+                const ctel = data.customer_tel ?? data.customer_phone ?? null;
+                labelStore.setLabelFromServer(tsid, cname, ctel);
+            }
         },
 
         /**
@@ -189,6 +198,8 @@ export const usePos2SessionUiStore = defineStore('pos2SessionUi', {
                 orders: baseOrders,
                 generated_at: new Date().toISOString(),
                 schema_version: Number(prev?.schema_version ?? 1) || 1,
+                customer_name: prev?.customer_name ?? null,
+                customer_tel: prev?.customer_tel ?? prev?.customer_phone ?? null,
             };
         },
 

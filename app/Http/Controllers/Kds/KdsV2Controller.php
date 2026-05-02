@@ -46,7 +46,12 @@ final class KdsV2Controller extends Controller
                 ->filter(fn (OrderLine $l) => in_array($l->status, [OrderLineStatus::Confirmed, OrderLineStatus::Cooking], true))
                 ->count();
 
-            $tableName = $batchLines[0]->order?->tableSession?->restaurantTable?->name ?? '?';
+            $tableSession = $batchLines[0]->order?->tableSession;
+            $tableName = $tableSession?->restaurantTable?->name ?? '?';
+            $customerName = trim((string) ($tableSession?->customer_name ?? ''));
+            if ($customerName !== '') {
+                $tableName = $tableName.' / '.$customerName;
+            }
 
             $tickets = [];
             foreach ($batchLines as $line) {
